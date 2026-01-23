@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/winamp_background">
+
+    <!-- CloudAmp Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@color/winamp_header"
+        android:padding="8dp">
+        
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="CloudAmp"
+            android:textColor="@color/winamp_display_text"
+            android:textSize="24sp"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:letterSpacing="0.1"/>
+            
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="It really whips the llama's ass!"
+            android:textColor="@color/winamp_display_text"
+            android:textSize="10sp"
+            android:fontFamily="monospace"
+            android:alpha="0.7"/>
+    </LinearLayout>
+
+    <!-- Content Area -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+        
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="8dp">
+            
+            <!-- Artists Section -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="▶ ARTISTS"
+                android:textColor="@color/winamp_text"
+                android:textSize="14sp"
+                android:fontFamily="monospace"
+                android:textStyle="bold"
+                android:background="@color/winamp_section_header"
+                android:padding="4dp"
+                android:layout_marginBottom="4dp"/>
+            
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/artistRecyclerView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="100dp"
+                android:background="@color/winamp_list_background"/>
+            
+            <!-- Albums Section -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="▶ ALBUMS"
+                android:textColor="@color/winamp_text"
+                android:textSize="14sp"
+                android:fontFamily="monospace"
+                android:textStyle="bold"
+                android:background="@color/winamp_section_header"
+                android:padding="4dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="4dp"/>
+            
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/albumRecyclerView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="100dp"
+                android:background="@color/winamp_list_background"/>
+            
+            <!-- Tracks Section -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="▶ TRACKS"
+                android:textColor="@color/winamp_text"
+                android:textSize="14sp"
+                android:fontFamily="monospace"
+                android:textStyle="bold"
+                android:background="@color/winamp_section_header"
+                android:padding="4dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="4dp"/>
+            
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/trackRecyclerView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="150dp"
+                android:background="@color/winamp_list_background"/>
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

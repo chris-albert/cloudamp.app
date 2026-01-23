@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="@color/winamp_background">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Spotify Access Token"
+        android:textColor="@color/winamp_text"
+        android:textSize="16sp"
+        android:fontFamily="monospace"
+        android:textStyle="bold"
+        android:layout_marginBottom="8dp"/>
+    
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Get your token from:\nhttps://developer.spotify.com/console/get-search-item/"
+        android:textColor="@color/winamp_display_text"
+        android:textSize="12sp"
+        android:fontFamily="monospace"
+        android:layout_marginBottom="16dp"/>
+
+    <EditText
+        android:id="@+id/tokenEditText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Paste your Spotify access token here"
+        android:textColor="@color/winamp_text"
+        android:textColorHint="@color/winamp_display_text"
+        android:background="@color/winamp_list_background"
+        android:padding="12dp"
+        android:fontFamily="monospace"
+        android:inputType="text"
+        android:minLines="3"
+        android:gravity="top"
+        android:layout_marginBottom="16dp"/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+        
+        <Button
+            android:id="@+id/saveTokenButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="SAVE"
+            android:textColor="@color/winamp_text"
+            android:background="@color/winamp_button"
+            android:fontFamily="monospace"
+            android:layout_marginEnd="8dp"/>
+        
+        <Button
+            android:id="@+id/clearTokenButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="CLEAR"
+            android:textColor="@color/winamp_text"
+            android:background="@color/winamp_button"
+            android:fontFamily="monospace"/>
+    </LinearLayout>
+    
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="\nNote: You need Spotify Premium to control playback.\n\nFor Android Auto support, make sure this app has the necessary permissions."
+        android:textColor="@color/winamp_display_text"
+        android:textSize="12sp"
+        android:fontFamily="monospace"
+        android:layout_marginTop="24dp"/>
+</LinearLayout>
