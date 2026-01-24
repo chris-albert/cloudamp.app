@@ -19,30 +19,35 @@ import com.cloudamp.music.ui.TrackAdapter
 import kotlinx.coroutines.*
 
 class MainActivity : AppCompatActivity() {
-    
+
     private lateinit var spotifyClient: SpotifyApiClient
     private lateinit var playbackManager: PlaybackManager
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    
+
     private lateinit var artistRecyclerView: RecyclerView
     private lateinit var albumRecyclerView: RecyclerView
     private lateinit var trackRecyclerView: RecyclerView
-    
+
     private var currentArtists = listOf<Artist>()
     private var currentAlbums = listOf<Album>()
     private var currentTracks = listOf<Track>()
-    
+    private var hasLoadedContent = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        
+
         spotifyClient = SpotifyApiClient.getInstance(this)
         playbackManager = PlaybackManager(this, spotifyClient)
-        
+
         setupRecyclerViews()
+    }
+
+    override fun onResume() {
+        super.onResume()
         checkSpotifyToken()
     }
-    
+
     private fun setupRecyclerViews() {
         // Artists
         artistRecyclerView = findViewById(R.id.artistRecyclerView)
@@ -50,14 +55,14 @@ class MainActivity : AppCompatActivity() {
         artistRecyclerView.adapter = ArtistAdapter(currentArtists) { artist ->
             onArtistClick(artist)
         }
-        
+
         // Albums
         albumRecyclerView = findViewById(R.id.albumRecyclerView)
         albumRecyclerView.layoutManager = LinearLayoutManager(this)
         albumRecyclerView.adapter = AlbumAdapter(currentAlbums) { album ->
             onAlbumClick(album)
         }
-        
+
         // Tracks
         trackRecyclerView = findViewById(R.id.trackRecyclerView)
         trackRecyclerView.layoutManager = LinearLayoutManager(this)
@@ -65,15 +70,32 @@ class MainActivity : AppCompatActivity() {
             onTrackClick(track, position)
         }
     }
-    
+
     private fun checkSpotifyToken() {
         if (!spotifyClient.hasAccessToken()) {
+            // Clear any previously loaded content
+            if (hasLoadedContent) {
+                clearContent()
+                hasLoadedContent = false
+            }
             Toast.makeText(this, "Please set your Spotify token in Settings", Toast.LENGTH_LONG).show()
         } else {
-            loadDefaultArtists()
+            // Only load if we haven't loaded yet or if we just got a token
+            if (!hasLoadedContent) {
+                loadDefaultArtists()
+            }
         }
     }
-    
+
+    private fun clearContent() {
+        currentArtists = emptyList()
+        currentAlbums = emptyList()
+        currentTracks = emptyList()
+        (artistRecyclerView.adapter as ArtistAdapter).updateData(currentArtists)
+        (albumRecyclerView.adapter as AlbumAdapter).updateData(currentAlbums)
+        (trackRecyclerView.adapter as TrackAdapter).updateData(currentTracks)
+    }
+
     private fun loadDefaultArtists() {
         scope.launch {
             try {
@@ -82,6 +104,14 @@ class MainActivity : AppCompatActivity() {
                 if (response.isSuccessful) {
                     currentArtists = response.body()?.artists?.items ?: emptyList()
                     (artistRecyclerView.adapter as ArtistAdapter).updateData(currentArtists)
+                    hasLoadedContent = true
+                } else {
+                    val errorMsg = when (response.code()) {
+                        401 -> "Token expired. Please update it in Settings."
+                        403 -> "Token doesn't have required permissions."
+                        else -> "Error loading content (${response.code()})"
+                    }
+                    Toast.makeText(this@MainActivity, errorMsg, Toast.LENGTH_LONG).show()
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -89,7 +119,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-    
+
     private fun onArtistClick(artist: Artist) {
         scope.launch {
             try {
@@ -99,6 +129,8 @@ class MainActivity : AppCompatActivity() {
                     (albumRecyclerView.adapter as AlbumAdapter).updateData(currentAlbums)
                     currentTracks = emptyList()
                     (trackRecyclerView.adapter as TrackAdapter).updateData(currentTracks)
+                } else {
+                    handleApiError(response.code(), "albums")
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -106,7 +138,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-    
+
     private fun onAlbumClick(album: Album) {
         scope.launch {
             try {
@@ -114,6 +146,8 @@ class MainActivity : AppCompatActivity() {
                 if (response.isSuccessful) {
                     currentTracks = response.body()?.items ?: emptyList()
                     (trackRecyclerView.adapter as TrackAdapter).updateData(currentTracks)
+                } else {
+                    handleApiError(response.code(), "tracks")
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -121,18 +155,28 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-    
+
     private fun onTrackClick(track: Track, position: Int) {
         val trackUris = currentTracks.map { it.uri }
         playbackManager.playTracks(trackUris, position)
         Toast.makeText(this, "Playing: ${track.name}", Toast.LENGTH_SHORT).show()
     }
-    
+
+    private fun handleApiError(code: Int, contentType: String) {
+        val errorMsg = when (code) {
+            401 -> "Token expired. Please update it in Settings."
+            403 -> "Insufficient permissions."
+            404 -> "Content not found."
+            else -> "Error loading $contentType (code: $code)"
+        }
+        Toast.makeText(this, errorMsg, Toast.LENGTH_LONG).show()
+    }
+
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.main_menu, menu)
         return true
     }
-    
+
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             R.id.action_settings -> {
@@ -146,15 +190,15 @@ class MainActivity : AppCompatActivity() {
             else -> super.onOptionsItemSelected(item)
         }
     }
-    
+
     private fun performSearch() {
         val builder = android.app.AlertDialog.Builder(this)
         builder.setTitle("Search Music")
-        
+
         val input = android.widget.EditText(this)
         input.hint = "Enter artist, album, or track name"
         builder.setView(input)
-        
+
         builder.setPositiveButton("Search") { _, _ ->
             val query = input.text.toString()
             if (query.isNotEmpty()) {
@@ -164,7 +208,7 @@ class MainActivity : AppCompatActivity() {
         builder.setNegativeButton("Cancel") { dialog, _ -> dialog.cancel() }
         builder.show()
     }
-    
+
     private fun searchMusic(query: String) {
         scope.launch {
             try {
@@ -174,10 +218,12 @@ class MainActivity : AppCompatActivity() {
                     currentArtists = results?.artists?.items ?: emptyList()
                     currentAlbums = results?.albums?.items ?: emptyList()
                     currentTracks = results?.tracks?.items ?: emptyList()
-                    
+
                     (artistRecyclerView.adapter as ArtistAdapter).updateData(currentArtists)
                     (albumRecyclerView.adapter as AlbumAdapter).updateData(currentAlbums)
                     (trackRecyclerView.adapter as TrackAdapter).updateData(currentTracks)
+                } else {
+                    handleApiError(response.code(), "search results")
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -185,7 +231,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-    
+
     override fun onDestroy() {
         scope.cancel()
         super.onDestroy()
