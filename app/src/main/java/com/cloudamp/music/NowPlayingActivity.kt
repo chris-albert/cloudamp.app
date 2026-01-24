@@ -102,13 +102,13 @@ class NowPlayingActivity : AppCompatActivity() {
                     if (isPlaying) {
                         spotifyClient.api.pause()
                         isPlaying = false
-                        playPauseButton.setImageResource(android.R.drawable.ic_media_play)
+                        playPauseButton.setImageResource(R.drawable.ic_play)
                     } else {
                         currentTrack?.let { track ->
                             playbackManager.playTracks(listOf(track.uri), 0)
                         }
                         isPlaying = true
-                        playPauseButton.setImageResource(android.R.drawable.ic_media_pause)
+                        playPauseButton.setImageResource(R.drawable.ic_pause)
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -124,7 +124,7 @@ class NowPlayingActivity : AppCompatActivity() {
                     currentPosition = 0
                     seekBar.progress = 0
                     currentTimeTextView.text = "0:00"
-                    playPauseButton.setImageResource(android.R.drawable.ic_media_play)
+                    playPauseButton.setImageResource(R.drawable.ic_play)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
@@ -179,8 +179,8 @@ class NowPlayingActivity : AppCompatActivity() {
                         totalDuration = track.durationMs
 
                         playPauseButton.setImageResource(
-                            if (isPlaying) android.R.drawable.ic_media_pause
-                            else android.R.drawable.ic_media_play
+                            if (isPlaying) R.drawable.ic_pause
+                            else R.drawable.ic_play
                         )
                     }
                 }

@@ -172,45 +172,41 @@
                 android:id="@+id/previousButton"
                 android:layout_width="56dp"
                 android:layout_height="56dp"
-                android:src="android:drawable/ic_media_previous"
+                android:src="@drawable/ic_previous"
                 android:background="@color/winamp_button"
                 android:scaleType="fitCenter"
                 android:contentDescription="Previous"
-                android:layout_margin="4dp"
-                android:tint="@color/winamp_text"/>
+                android:layout_margin="4dp"/>
 
             <ImageButton
                 android:id="@+id/playPauseButton"
                 android:layout_width="64dp"
                 android:layout_height="64dp"
-                android:src="android:drawable/ic_media_play"
+                android:src="@drawable/ic_play"
                 android:background="@color/winamp_button"
                 android:scaleType="fitCenter"
                 android:contentDescription="Play/Pause"
-                android:layout_margin="4dp"
-                android:tint="@color/winamp_text"/>
+                android:layout_margin="4dp"/>
 
             <ImageButton
                 android:id="@+id/stopButton"
                 android:layout_width="56dp"
                 android:layout_height="56dp"
-                android:src="android:drawable/ic_delete"
+                android:src="@drawable/ic_stop"
                 android:background="@color/winamp_button"
                 android:scaleType="fitCenter"
                 android:contentDescription="Stop"
-                android:layout_margin="4dp"
-                android:tint="@color/winamp_text"/>
+                android:layout_margin="4dp"/>
 
             <ImageButton
                 android:id="@+id/nextButton"
                 android:layout_width="56dp"
                 android:layout_height="56dp"
-                android:src="android:drawable/ic_media_next"
+                android:src="@drawable/ic_next"
                 android:background="@color/winamp_button"
                 android:scaleType="fitCenter"
                 android:contentDescription="Next"
-                android:layout_margin="4dp"
-                android:tint="@color/winamp_text"/>
+                android:layout_margin="4dp"/>
         </LinearLayout>
 
         <!-- Additional Controls -->
@@ -226,23 +222,21 @@
                 android:id="@+id/shuffleButton"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:src="android:drawable/ic_menu_sort_alphabetically"
+                android:src="@drawable/ic_shuffle"
                 android:background="@color/winamp_button"
                 android:scaleType="fitCenter"
                 android:contentDescription="Shuffle"
-                android:layout_margin="8dp"
-                android:tint="@color/winamp_display_text"/>
+                android:layout_margin="8dp"/>
 
             <ImageButton
                 android:id="@+id/repeatButton"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:src="android:drawable/ic_menu_rotate"
+                android:src="@drawable/ic_repeat"
                 android:background="@color/winamp_button"
                 android:scaleType="fitCenter"
                 android:contentDescription="Repeat"
-                android:layout_margin="8dp"
-                android:tint="@color/winamp_display_text"/>
+                android:layout_margin="8dp"/>
         </LinearLayout>
 
     </LinearLayout>
