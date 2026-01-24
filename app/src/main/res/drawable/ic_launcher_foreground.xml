@@ -4,15 +4,72 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
+    <!-- Winamp EQ-style icon with vertical bars -->
     <group
-        android:translateX="27"
-        android:translateY="27">
-        <!-- Music note in Winamp green -->
+        android:translateX="54"
+        android:translateY="54">
+
+        <!-- Background -->
         <path
-            android:fillColor="#00FF00"
-            android:pathData="M40,10 L40,35 C38,34 36,33 34,33 C28,33 23,37 23,42 C23,47 28,51 34,51 C40,51 45,47 45,42 L45,15 L50,15 L50,10 Z"/>
+            android:fillColor="#000000"
+            android:pathData="M-40,-40 L40,-40 L40,40 L-40,40 Z"/>
+
+        <!-- EQ Bars (10 bars at different heights) -->
+        <!-- Bar 1 - Low -->
         <path
-            android:fillColor="#00FF00"
-            android:pathData="M30,15 C30,12 32,10 35,10 L35,5 C29,5 25,9 25,15 Z"/>
+            android:fillColor="#00ff00"
+            android:pathData="M-36,-10 L-31,-10 L-31,15 L-36,15 Z"/>
+
+        <!-- Bar 2 - Medium -->
+        <path
+            android:fillColor="#00ff00"
+            android:pathData="M-28,-20 L-23,-20 L-23,15 L-28,15 Z"/>
+
+        <!-- Bar 3 - High -->
+        <path
+            android:fillColor="#00ff00"
+            android:pathData="M-20,-30 L-15,-30 L-15,15 L-20,15 Z"/>
+
+        <!-- Bar 4 - Very High -->
+        <path
+            android:fillColor="#00ff00"
+            android:pathData="M-12,-35 L-7,-35 L-7,15 L-12,15 Z"/>
+
+        <!-- Bar 5 - Max -->
+        <path
+            android:fillColor="#00ff00"
+            android:pathData="M-4,-38 L1,-38 L1,15 L-4,15 Z"/>
+
+        <!-- Bar 6 - Max -->
+        <path
+            android:fillColor="#00ff00"
+            android:pathData="M4,-38 L9,-38 L9,15 L4,15 Z"/>
+
+        <!-- Bar 7 - Very High -->
+        <path
+            android:fillColor="#00ff00"
+            android:pathData="M12,-35 L17,-35 L17,15 L12,15 Z"/>
+
+        <!-- Bar 8 - High -->
+        <path
+            android:fillColor="#00ff00"
+            android:pathData="M20,-30 L25,-30 L25,15 L20,15 Z"/>
+
+        <!-- Bar 9 - Medium -->
+        <path
+            android:fillColor="#00ff00"
+            android:pathData="M28,-20 L33,-20 L33,15 L28,15 Z"/>
+
+        <!-- Bar 10 - Low -->
+        <path
+            android:fillColor="#00ff00"
+            android:pathData="M36,-10 L41,-10 L41,15 L36,15 Z"/>
+
+        <!-- Grid lines for EQ aesthetic -->
+        <path
+            android:strokeColor="#00cc00"
+            android:strokeWidth="0.5"
+            android:pathData="M-40,0 L40,0 M-40,-15 L40,-15 M-40,-30 L40,-30"/>
     </group>
 </vector>

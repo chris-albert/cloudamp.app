@@ -1,8 +1,11 @@
 package com.cloudamp.music.playback
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import android.widget.Toast
 import com.cloudamp.music.api.PlayRequest
 import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.models.Track
@@ -119,9 +122,15 @@ class PlaybackManager(
                 val request = PlayRequest(
                     uris = listOf(trackUri)
                 )
-                spotifyClient.api.play(request)
+                val response = spotifyClient.api.play(request)
+
+                // If API call fails, open Spotify app
+                if (!response.isSuccessful) {
+                    openSpotifyApp(trackUri)
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
+                openSpotifyApp(trackUri)
             }
         }
     }
@@ -131,14 +140,45 @@ class PlaybackManager(
             try {
                 setQueue(trackUris)
                 currentIndex = startIndex
-                
+
                 val request = PlayRequest(
                     uris = trackUris,
                     offset = com.cloudamp.music.api.PlayOffset(position = startIndex)
                 )
-                spotifyClient.api.play(request)
+                val response = spotifyClient.api.play(request)
+
+                // If API call fails (no active device or not premium), open Spotify app
+                if (!response.isSuccessful) {
+                    val errorCode = response.code()
+                    if (errorCode == 404 || errorCode == 403) {
+                        // No active device or forbidden - open Spotify app
+                        openSpotifyApp(trackUris.getOrNull(startIndex))
+                    }
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
+                // On error, try opening Spotify app
+                openSpotifyApp(trackUris.getOrNull(startIndex))
+            }
+        }
+    }
+
+    private fun openSpotifyApp(trackUri: String?) {
+        try {
+            trackUri?.let { uri ->
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                context.startActivity(intent)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // Show toast on main thread
+            CoroutineScope(Dispatchers.Main).launch {
+                Toast.makeText(
+                    context,
+                    "Please install Spotify app or connect a device",
+                    Toast.LENGTH_LONG
+                ).show()
             }
         }
     }

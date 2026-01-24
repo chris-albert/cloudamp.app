@@ -32,6 +32,16 @@ data class Track(
     @SerializedName("track_number") val trackNumber: Int? = null
 )
 
+// Simplified Track Model (used in album tracks, playlists, etc.)
+data class SimplifiedTrack(
+    val id: String,
+    val name: String,
+    val artists: List<Artist>,
+    val uri: String,
+    @SerializedName("duration_ms") val durationMs: Long,
+    @SerializedName("track_number") val trackNumber: Int? = null
+)
+
 // Image Model
 data class Image(
     val url: String,
@@ -66,7 +76,7 @@ data class ArtistAlbumsResponse(
 
 // Album Tracks Response
 data class AlbumTracksResponse(
-    val items: List<Track>,
+    val items: List<SimplifiedTrack>,
     val total: Int
 )
 

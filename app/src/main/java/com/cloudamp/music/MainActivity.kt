@@ -12,6 +12,7 @@ import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.models.Album
 import com.cloudamp.music.models.Artist
 import com.cloudamp.music.models.Track
+import com.cloudamp.music.models.SimplifiedTrack
 import com.cloudamp.music.playback.PlaybackManager
 import com.cloudamp.music.ui.ArtistAdapter
 import com.cloudamp.music.ui.AlbumAdapter
@@ -166,7 +167,18 @@ class MainActivity : AppCompatActivity() {
             try {
                 val response = spotifyClient.api.getAlbumTracks(album.id)
                 if (response.isSuccessful) {
-                    currentTracks = response.body()?.items ?: emptyList()
+                    // Convert SimplifiedTrack to Track by adding album info
+                    currentTracks = response.body()?.items?.map { simplifiedTrack ->
+                        Track(
+                            id = simplifiedTrack.id,
+                            name = simplifiedTrack.name,
+                            artists = simplifiedTrack.artists,
+                            album = album,
+                            uri = simplifiedTrack.uri,
+                            durationMs = simplifiedTrack.durationMs,
+                            trackNumber = simplifiedTrack.trackNumber
+                        )
+                    } ?: emptyList()
                     (trackRecyclerView.adapter as TrackAdapter).updateData(currentTracks)
                 } else {
                     handleApiError(response.code(), "tracks")
