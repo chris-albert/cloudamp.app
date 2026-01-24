@@ -1,0 +1,249 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/winamp_background"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="0dp">
+
+        <!-- Winamp Header Section -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/winamp_header"
+            android:orientation="vertical"
+            android:padding="8dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="WINAMP"
+                android:textColor="@color/winamp_text"
+                android:textSize="12sp"
+                android:fontFamily="monospace"
+                android:textStyle="bold"
+                android:gravity="center"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="It really whips the llama's ass!"
+                android:textColor="@color/winamp_display_text"
+                android:textSize="10sp"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:layout_marginTop="2dp"/>
+        </LinearLayout>
+
+        <!-- Display Section (Track Info + Time) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/winamp_display"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <TextView
+                android:id="@+id/trackTitleTextView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="No Track Playing"
+                android:textColor="@color/winamp_text"
+                android:textSize="18sp"
+                android:fontFamily="monospace"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="marquee"
+                android:marqueeRepeatLimit="marquee_forever"
+                android:scrollHorizontally="true"
+                android:focusable="true"
+                android:focusableInTouchMode="true"/>
+
+            <TextView
+                android:id="@+id/trackArtistTextView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="---"
+                android:textColor="@color/winamp_display_text"
+                android:textSize="14sp"
+                android:fontFamily="monospace"
+                android:layout_marginTop="4dp"
+                android:maxLines="1"
+                android:ellipsize="end"/>
+
+            <TextView
+                android:id="@+id/trackAlbumTextView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="---"
+                android:textColor="@color/winamp_display_text"
+                android:textSize="12sp"
+                android:fontFamily="monospace"
+                android:layout_marginTop="2dp"
+                android:maxLines="1"
+                android:ellipsize="end"/>
+
+            <!-- Time Display -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:layout_marginTop="8dp">
+
+                <TextView
+                    android:id="@+id/currentTimeTextView"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0:00"
+                    android:textColor="@color/winamp_text"
+                    android:textSize="24sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=" / "
+                    android:textColor="@color/winamp_display_text"
+                    android:textSize="20sp"
+                    android:fontFamily="monospace"/>
+
+                <TextView
+                    android:id="@+id/totalTimeTextView"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0:00"
+                    android:textColor="@color/winamp_display_text"
+                    android:textSize="20sp"
+                    android:fontFamily="monospace"/>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Album Artwork Section -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="300dp"
+            android:background="@color/winamp_list_background"
+            android:padding="16dp">
+
+            <ImageView
+                android:id="@+id/albumArtImageView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_album_placeholder"
+                android:contentDescription="Album Artwork"/>
+        </FrameLayout>
+
+        <!-- Progress Bar Section -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/winamp_background"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <SeekBar
+                android:id="@+id/seekBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:progressTint="@color/winamp_text"
+                android:thumbTint="@color/winamp_text"
+                android:progressBackgroundTint="@color/winamp_display_text"
+                android:max="100"/>
+        </LinearLayout>
+
+        <!-- Transport Controls Section -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/winamp_button_section"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:padding="16dp">
+
+            <ImageButton
+                android:id="@+id/previousButton"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:src="android:drawable/ic_media_previous"
+                android:background="@color/winamp_button"
+                android:scaleType="fitCenter"
+                android:contentDescription="Previous"
+                android:layout_margin="4dp"
+                android:tint="@color/winamp_text"/>
+
+            <ImageButton
+                android:id="@+id/playPauseButton"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:src="android:drawable/ic_media_play"
+                android:background="@color/winamp_button"
+                android:scaleType="fitCenter"
+                android:contentDescription="Play/Pause"
+                android:layout_margin="4dp"
+                android:tint="@color/winamp_text"/>
+
+            <ImageButton
+                android:id="@+id/stopButton"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:src="android:drawable/ic_delete"
+                android:background="@color/winamp_button"
+                android:scaleType="fitCenter"
+                android:contentDescription="Stop"
+                android:layout_margin="4dp"
+                android:tint="@color/winamp_text"/>
+
+            <ImageButton
+                android:id="@+id/nextButton"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:src="android:drawable/ic_media_next"
+                android:background="@color/winamp_button"
+                android:scaleType="fitCenter"
+                android:contentDescription="Next"
+                android:layout_margin="4dp"
+                android:tint="@color/winamp_text"/>
+        </LinearLayout>
+
+        <!-- Additional Controls -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/winamp_background"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:padding="8dp">
+
+            <ImageButton
+                android:id="@+id/shuffleButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="android:drawable/ic_menu_sort_alphabetically"
+                android:background="@color/winamp_button"
+                android:scaleType="fitCenter"
+                android:contentDescription="Shuffle"
+                android:layout_margin="8dp"
+                android:tint="@color/winamp_display_text"/>
+
+            <ImageButton
+                android:id="@+id/repeatButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="android:drawable/ic_menu_rotate"
+                android:background="@color/winamp_button"
+                android:scaleType="fitCenter"
+                android:contentDescription="Repeat"
+                android:layout_margin="8dp"
+                android:tint="@color/winamp_display_text"/>
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>

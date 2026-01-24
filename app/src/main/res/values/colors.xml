@@ -5,11 +5,13 @@
     <color name="winamp_header">#1a1a1a</color>
     <color name="winamp_section_header">#2a2a2a</color>
     <color name="winamp_list_background">#0a0a0a</color>
+    <color name="winamp_display">#0d0d0d</color>
+    <color name="winamp_button_section">#151515</color>
     <color name="winamp_text">#00ff00</color>
     <color name="winamp_display_text">#00cc00</color>
     <color name="winamp_button">#3a3a3a</color>
     <color name="winamp_button_pressed">#4a4a4a</color>
-    
+
     <!-- Standard Android colors -->
     <color name="purple_200">#00ff00</color>
     <color name="purple_500">#00cc00</color>
