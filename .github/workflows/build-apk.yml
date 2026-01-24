@@ -37,17 +37,36 @@ jobs:
     - name: Build Debug APK
       run: ./gradlew assembleDebug --stacktrace --no-daemon
 
+    - name: Get version info
+      id: version
+      run: |
+        VERSION_CODE=$(./gradlew -q printVersionCode | tail -1)
+        VERSION_NAME=$(./gradlew -q printVersionName | tail -1)
+        echo "code=$VERSION_CODE" >> $GITHUB_OUTPUT
+        echo "name=$VERSION_NAME" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION_NAME ($VERSION_CODE)"
+
+    - name: Rename APK with version
+      run: |
+        VERSION_CODE="${{ steps.version.outputs.code }}"
+        cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/CloudAmp-v${VERSION_CODE}.apk
+
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: cloudamp-debug-apk
-        path: app/build/outputs/apk/debug/app-debug.apk
+        name: CloudAmp-v${{ steps.version.outputs.code }}
+        path: app/build/outputs/apk/debug/CloudAmp-v${{ steps.version.outputs.code }}.apk
         retention-days: 30
 
     - name: Upload APK Summary
       run: |
         echo "### ✅ APK Built Successfully! 🎵" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Version:** ${{ steps.version.outputs.name }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Version Code:** ${{ steps.version.outputs.code }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
         echo "**Download your CloudAmp APK from the Artifacts section above.**" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        ls -lh app/build/outputs/apk/debug/app-debug.apk >> $GITHUB_STEP_SUMMARY
+        echo "This version can be installed over previous versions without uninstalling!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        ls -lh app/build/outputs/apk/debug/CloudAmp-v${{ steps.version.outputs.code }}.apk >> $GITHUB_STEP_SUMMARY
