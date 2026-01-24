@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:translateX="27"
+        android:translateY="27">
+        <!-- Music note in Winamp green -->
+        <path
+            android:fillColor="#00FF00"
+            android:pathData="M40,10 L40,35 C38,34 36,33 34,33 C28,33 23,37 23,42 C23,47 28,51 34,51 C40,51 45,47 45,42 L45,15 L50,15 L50,10 Z"/>
+        <path
+            android:fillColor="#00FF00"
+            android:pathData="M30,15 C30,12 32,10 35,10 L35,5 C29,5 25,9 25,15 Z"/>
+    </group>
+</vector>
