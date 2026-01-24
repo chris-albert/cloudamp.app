@@ -4,10 +4,11 @@ plugins {
 }
 
 def getVersionCode() {
-    // Use timestamp for auto-incrementing version code
-    // Format: YYMMDDHHMM (e.g., 2601241530 for Jan 24, 2026 at 15:30)
+    // Use compact timestamp for auto-incrementing version code
+    // Format: MMDDHHMM (e.g., 01241628 for Jan 24 at 16:28)
+    // Max value: 12311259 (fits within Integer.MAX_VALUE)
     def date = new Date()
-    def formattedDate = date.format('yyMMddHHmm')
+    def formattedDate = date.format('MMddHHmm')
     return formattedDate.toInteger()
 }
 
