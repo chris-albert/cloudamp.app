@@ -34,6 +34,8 @@ android {
             keyAlias 'cloudamp'
             keyPassword 'android'
         }
+        // Release signing will use GitHub Secrets when configured
+        // For now, release builds will use debug signing until you set up a proper release keystore
     }
 
     buildTypes {
@@ -43,6 +45,7 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // Use debug signing for now - replace with proper release keystore later
             signingConfig signingConfigs.debug
         }
     }
