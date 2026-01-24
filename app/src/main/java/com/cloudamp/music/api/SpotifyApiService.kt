@@ -6,6 +6,38 @@ import retrofit2.http.*
 
 interface SpotifyApiService {
 
+    // User Library
+    @GET("v1/me/tracks")
+    suspend fun getMySavedTracks(
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0
+    ): Response<SavedTracksResponse>
+
+    @GET("v1/me/albums")
+    suspend fun getMySavedAlbums(
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0
+    ): Response<SavedAlbumsResponse>
+
+    @GET("v1/me/playlists")
+    suspend fun getMyPlaylists(
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0
+    ): Response<PlaylistsResponse>
+
+    @GET("v1/me/top/artists")
+    suspend fun getMyTopArtists(
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0,
+        @Query("time_range") timeRange: String = "medium_term"
+    ): Response<Paging<Artist>>
+
+    @GET("v1/playlists/{playlist_id}/tracks")
+    suspend fun getPlaylistTracks(
+        @Path("playlist_id") playlistId: String,
+        @Query("limit") limit: Int = 50
+    ): Response<PlaylistTracksResponse>
+
     // Search
     @GET("v1/search")
     suspend fun search(
@@ -82,4 +114,59 @@ data class UserProfile(
     val id: String,
     val display_name: String?,
     val email: String?
+)
+
+// Library Response Models
+data class SavedTrack(
+    val added_at: String,
+    val track: Track
+)
+
+data class SavedTracksResponse(
+    val items: List<SavedTrack>,
+    val total: Int,
+    val limit: Int,
+    val offset: Int
+)
+
+data class SavedAlbum(
+    val added_at: String,
+    val album: Album
+)
+
+data class SavedAlbumsResponse(
+    val items: List<SavedAlbum>,
+    val total: Int,
+    val limit: Int,
+    val offset: Int
+)
+
+data class Playlist(
+    val id: String,
+    val name: String,
+    val description: String?,
+    val images: List<Image>?,
+    val uri: String,
+    val tracks: PlaylistTracksInfo
+)
+
+data class PlaylistTracksInfo(
+    val total: Int
+)
+
+data class PlaylistsResponse(
+    val items: List<Playlist>,
+    val total: Int,
+    val limit: Int,
+    val offset: Int
+)
+
+data class PlaylistTrack(
+    val added_at: String,
+    val track: Track?
+)
+
+data class PlaylistTracksResponse(
+    val items: List<PlaylistTrack>,
+    val total: Int
 )

@@ -78,11 +78,11 @@ class MainActivity : AppCompatActivity() {
                 clearContent()
                 hasLoadedContent = false
             }
-            Toast.makeText(this, "Please set your Spotify token in Settings", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Please set your Spotify credentials in Settings", Toast.LENGTH_LONG).show()
         } else {
             // Only load if we haven't loaded yet or if we just got a token
             if (!hasLoadedContent) {
-                loadDefaultArtists()
+                loadMyLibrary()
             }
         }
     }
@@ -96,26 +96,48 @@ class MainActivity : AppCompatActivity() {
         (trackRecyclerView.adapter as TrackAdapter).updateData(currentTracks)
     }
 
-    private fun loadDefaultArtists() {
+    private fun loadMyLibrary() {
         scope.launch {
             try {
-                // Search for some popular artists to get started
-                val response = spotifyClient.api.search("rock", "artist", limit = 20)
-                if (response.isSuccessful) {
-                    currentArtists = response.body()?.artists?.items ?: emptyList()
+                // Load user's top artists
+                val artistsResponse = spotifyClient.api.getMyTopArtists(limit = 50)
+                if (artistsResponse.isSuccessful) {
+                    currentArtists = artistsResponse.body()?.items ?: emptyList()
                     (artistRecyclerView.adapter as ArtistAdapter).updateData(currentArtists)
-                    hasLoadedContent = true
-                } else {
-                    val errorMsg = when (response.code()) {
-                        401 -> "Token expired. Please update it in Settings."
-                        403 -> "Token doesn't have required permissions."
-                        else -> "Error loading content (${response.code()})"
-                    }
-                    Toast.makeText(this@MainActivity, errorMsg, Toast.LENGTH_LONG).show()
+                }
+
+                // Load user's saved albums
+                val albumsResponse = spotifyClient.api.getMySavedAlbums(limit = 50)
+                if (albumsResponse.isSuccessful) {
+                    currentAlbums = albumsResponse.body()?.items?.map { it.album } ?: emptyList()
+                    (albumRecyclerView.adapter as AlbumAdapter).updateData(currentAlbums)
+                }
+
+                // Load user's saved tracks
+                val tracksResponse = spotifyClient.api.getMySavedTracks(limit = 50)
+                if (tracksResponse.isSuccessful) {
+                    currentTracks = tracksResponse.body()?.items?.map { it.track } ?: emptyList()
+                    (trackRecyclerView.adapter as TrackAdapter).updateData(currentTracks)
+                }
+
+                hasLoadedContent = true
+
+                // If user has no library content
+                if (currentArtists.isEmpty() && currentAlbums.isEmpty() && currentTracks.isEmpty()) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Your library is empty. Use Search to find music!",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                Toast.makeText(this@MainActivity, "Error loading artists: ${e.message}", Toast.LENGTH_SHORT).show()
+                val errorMsg = when {
+                    e.message?.contains("401") == true -> "Token expired. Please re-login in Settings."
+                    e.message?.contains("403") == true -> "Insufficient permissions. Please re-login in Settings."
+                    else -> "Error loading library: ${e.message}"
+                }
+                Toast.makeText(this@MainActivity, errorMsg, Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -164,8 +186,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleApiError(code: Int, contentType: String) {
         val errorMsg = when (code) {
-            401 -> "Token expired. Please update it in Settings."
-            403 -> "Insufficient permissions."
+            401 -> "Token expired. Please re-login in Settings."
+            403 -> "Insufficient permissions. Please re-login in Settings."
             404 -> "Content not found."
             else -> "Error loading $contentType (code: $code)"
         }
