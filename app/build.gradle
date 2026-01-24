@@ -11,6 +11,9 @@ def getVersionCode() {
     return formattedDate.toInteger()
 }
 
+def versionCodeValue = getVersionCode()
+def versionNameValue = "1.0." + versionCodeValue
+
 android {
     namespace 'com.cloudamp.music'
     compileSdk 34
@@ -19,8 +22,8 @@ android {
         applicationId "com.cloudamp.music"
         minSdk 26
         targetSdk 34
-        versionCode getVersionCode()
-        versionName "1.0." + getVersionCode()
+        versionCode versionCodeValue
+        versionName versionNameValue
     }
 
     buildTypes {
@@ -75,13 +78,13 @@ dependencies {
 // Task to print version code for CI/CD
 tasks.register('printVersionCode') {
     doLast {
-        println android.defaultConfig.versionCode
+        println versionCodeValue
     }
 }
 
 // Task to print version name for CI/CD
 tasks.register('printVersionName') {
     doLast {
-        println android.defaultConfig.versionName
+        println versionNameValue
     }
 }
