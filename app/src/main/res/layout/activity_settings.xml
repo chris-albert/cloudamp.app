@@ -1,98 +1,187 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="16dp"
     android:background="@color/winamp_background">
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Spotify Access Token"
-        android:textColor="@color/winamp_text"
-        android:textSize="16sp"
-        android:fontFamily="monospace"
-        android:textStyle="bold"
-        android:layout_marginBottom="8dp"/>
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Get your token from:\nhttps://developer.spotify.com/console/get-search-item/"
-        android:textColor="@color/winamp_display_text"
-        android:textSize="12sp"
-        android:fontFamily="monospace"
-        android:layout_marginBottom="16dp"/>
-
-    <EditText
-        android:id="@+id/tokenEditText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Paste your Spotify access token here"
-        android:textColor="@color/winamp_text"
-        android:textColorHint="@color/winamp_display_text"
-        android:background="@color/winamp_list_background"
-        android:padding="12dp"
-        android:fontFamily="monospace"
-        android:inputType="text"
-        android:minLines="3"
-        android:gravity="top"
-        android:layout_marginBottom="16dp"/>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal">
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- OAuth Section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="OAuth Login (Recommended)"
+            android:textColor="@color/winamp_text"
+            android:textSize="18sp"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="1. Get your Client ID and Secret from:\nhttps://developer.spotify.com/dashboard"
+            android:textColor="@color/winamp_display_text"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="12dp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="2. Add this Redirect URI to your app:\ncloudamp://callback"
+            android:textColor="@color/winamp_display_text"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="16dp"/>
+
+        <EditText
+            android:id="@+id/clientIdEditText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Client ID"
+            android:textColor="@color/winamp_text"
+            android:textColorHint="@color/winamp_display_text"
+            android:background="@color/winamp_list_background"
+            android:padding="12dp"
+            android:fontFamily="monospace"
+            android:inputType="text"
+            android:layout_marginBottom="8dp"/>
+
+        <EditText
+            android:id="@+id/clientSecretEditText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Client Secret"
+            android:textColor="@color/winamp_text"
+            android:textColorHint="@color/winamp_display_text"
+            android:background="@color/winamp_list_background"
+            android:padding="12dp"
+            android:fontFamily="monospace"
+            android:inputType="text"
+            android:layout_marginBottom="12dp"/>
 
         <Button
-            android:id="@+id/saveTokenButton"
-            android:layout_width="0dp"
+            android:id="@+id/saveCredentialsButton"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="SAVE"
+            android:text="SAVE CREDENTIALS"
             android:textColor="@color/winamp_text"
             android:background="@color/winamp_button"
             android:fontFamily="monospace"
-            android:layout_marginEnd="8dp"/>
+            android:layout_marginBottom="8dp"/>
 
         <Button
-            android:id="@+id/clearTokenButton"
-            android:layout_width="0dp"
+            android:id="@+id/loginWithSpotifyButton"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="CLEAR"
+            android:text="LOGIN WITH SPOTIFY"
             android:textColor="@color/winamp_text"
             android:background="@color/winamp_button"
-            android:fontFamily="monospace"/>
+            android:fontFamily="monospace"
+            android:enabled="false"
+            android:layout_marginBottom="24dp"/>
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="2dp"
+            android:background="@color/winamp_text"
+            android:layout_marginVertical="16dp"/>
+
+        <!-- Manual Token Section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Manual Token (Advanced)"
+            android:textColor="@color/winamp_text"
+            android:textSize="18sp"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Get a temporary token from:\nhttps://developer.spotify.com/console"
+            android:textColor="@color/winamp_display_text"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="16dp"/>
+
+        <EditText
+            android:id="@+id/tokenEditText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Paste access token here"
+            android:textColor="@color/winamp_text"
+            android:textColorHint="@color/winamp_display_text"
+            android:background="@color/winamp_list_background"
+            android:padding="12dp"
+            android:fontFamily="monospace"
+            android:inputType="text"
+            android:minLines="3"
+            android:gravity="top"
+            android:layout_marginBottom="16dp"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/saveTokenButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="SAVE"
+                android:textColor="@color/winamp_text"
+                android:background="@color/winamp_button"
+                android:fontFamily="monospace"
+                android:layout_marginEnd="8dp"/>
+
+            <Button
+                android:id="@+id/clearTokenButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="CLEAR ALL"
+                android:textColor="@color/winamp_text"
+                android:background="@color/winamp_button"
+                android:fontFamily="monospace"/>
+        </LinearLayout>
+
+        <!-- Validation Progress and Status -->
+        <ProgressBar
+            android:id="@+id/validationProgress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="16dp"
+            android:visibility="gone"
+            android:indeterminateTint="@color/winamp_text"/>
+
+        <TextView
+            android:id="@+id/validationStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:layout_marginTop="16dp"
+            android:gravity="center"
+            android:visibility="gone"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="\nNote: You need Spotify Premium to control playback.\n\nOAuth login provides automatic token refresh."
+            android:textColor="@color/winamp_display_text"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:layout_marginTop="24dp"/>
     </LinearLayout>
-
-    <!-- Validation Progress and Status -->
-    <ProgressBar
-        android:id="@+id/validationProgress"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal"
-        android:layout_marginTop="16dp"
-        android:visibility="gone"
-        android:indeterminateTint="@color/winamp_text"/>
-
-    <TextView
-        android:id="@+id/validationStatus"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textSize="14sp"
-        android:fontFamily="monospace"
-        android:layout_marginTop="16dp"
-        android:gravity="center"
-        android:visibility="gone"/>
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="\nNote: You need Spotify Premium to control playback.\n\nFor Android Auto support, make sure this app has the necessary permissions."
-        android:textColor="@color/winamp_display_text"
-        android:textSize="12sp"
-        android:fontFamily="monospace"
-        android:layout_marginTop="24dp"/>
-</LinearLayout>
+</ScrollView>
