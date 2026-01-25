@@ -8,7 +8,6 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.cloudamp.music.R
-import com.cloudamp.music.api.Playlist
 import com.cloudamp.music.models.Album
 import com.cloudamp.music.models.Artist
 import com.cloudamp.music.models.Track
@@ -37,20 +36,12 @@ sealed class LibraryItem {
         val track: Track,
         val parentAlbumId: String
     ) : LibraryItem()
-
-    data class PlaylistItem(
-        val playlist: Playlist,
-        var isExpanded: Boolean = false,
-        var tracks: List<Track> = emptyList(),
-        var isLoadingTracks: Boolean = false
-    ) : LibraryItem()
 }
 
 class ExpandableLibraryAdapter(
     private val onArtistClick: (Artist, Int) -> Unit,
     private val onAlbumClick: (Album, String, Int) -> Unit,
-    private val onTrackClick: (Track, List<Track>, Int) -> Unit,
-    private val onPlaylistClick: (Playlist, Int) -> Unit = { _, _ -> }
+    private val onTrackClick: (Track, List<Track>, Int) -> Unit
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private val items = mutableListOf<LibraryItem>()
@@ -60,7 +51,6 @@ class ExpandableLibraryAdapter(
         private const val TYPE_HEADER = 1
         private const val TYPE_ALBUM = 2
         private const val TYPE_TRACK = 3
-        private const val TYPE_PLAYLIST = 4
     }
 
     override fun getItemViewType(position: Int): Int {
@@ -69,7 +59,6 @@ class ExpandableLibraryAdapter(
             is LibraryItem.HeaderItem -> TYPE_HEADER
             is LibraryItem.AlbumItem -> TYPE_ALBUM
             is LibraryItem.TrackItem -> TYPE_TRACK
-            is LibraryItem.PlaylistItem -> TYPE_PLAYLIST
         }
     }
 
@@ -80,7 +69,6 @@ class ExpandableLibraryAdapter(
             TYPE_HEADER -> HeaderViewHolder(inflater.inflate(R.layout.item_section_header, parent, false))
             TYPE_ALBUM -> AlbumViewHolder(inflater.inflate(R.layout.item_album, parent, false))
             TYPE_TRACK -> TrackViewHolder(inflater.inflate(R.layout.item_track, parent, false))
-            TYPE_PLAYLIST -> PlaylistViewHolder(inflater.inflate(R.layout.item_playlist, parent, false))
             else -> throw IllegalArgumentException("Unknown view type: $viewType")
         }
     }
@@ -98,9 +86,6 @@ class ExpandableLibraryAdapter(
             }
             is LibraryItem.TrackItem -> {
                 (holder as TrackViewHolder).bind(item)
-            }
-            is LibraryItem.PlaylistItem -> {
-                (holder as PlaylistViewHolder).bind(item)
             }
         }
     }
@@ -187,60 +172,6 @@ class ExpandableLibraryAdapter(
             val itemsToAdd = mutableListOf<LibraryItem>()
             itemsToAdd.add(LibraryItem.HeaderItem("▶ TRACKS"))
             itemsToAdd.addAll(tracks.map { LibraryItem.TrackItem(it, item.album.id) })
-            items.addAll(position + 1, itemsToAdd)
-            notifyItemChanged(position)
-            notifyItemRangeInserted(position + 1, itemsToAdd.size)
-        }
-    }
-
-    fun setPlaylists(playlists: List<Playlist>) {
-        items.clear()
-        items.addAll(playlists.map { LibraryItem.PlaylistItem(it) })
-        notifyDataSetChanged()
-    }
-
-    fun addPlaylistsSection(playlists: List<Playlist>) {
-        if (playlists.isNotEmpty()) {
-            val insertPosition = items.size
-            items.add(LibraryItem.HeaderItem("▶ PLAYLISTS"))
-            items.addAll(playlists.map { LibraryItem.PlaylistItem(it) })
-            notifyItemRangeInserted(insertPosition, playlists.size + 1)
-        }
-    }
-
-    fun togglePlaylist(position: Int) {
-        val item = items[position] as? LibraryItem.PlaylistItem ?: return
-
-        if (item.isExpanded) {
-            // Collapse: remove header and tracks
-            val itemsToRemove = items.drop(position + 1).takeWhile {
-                it is LibraryItem.HeaderItem ||
-                it is LibraryItem.TrackItem
-            }.size
-            repeat(itemsToRemove) {
-                items.removeAt(position + 1)
-            }
-            item.isExpanded = false
-            notifyItemChanged(position)
-            notifyItemRangeRemoved(position + 1, itemsToRemove)
-        } else {
-            // Expand: trigger loading
-            item.isExpanded = true
-            notifyItemChanged(position)
-            onPlaylistClick(item.playlist, position)
-        }
-    }
-
-    fun setPlaylistTracks(position: Int, tracks: List<Track>) {
-        val item = items[position] as? LibraryItem.PlaylistItem ?: return
-        item.tracks = tracks
-        item.isLoadingTracks = false
-
-        if (item.isExpanded && tracks.isNotEmpty()) {
-            val itemsToAdd = mutableListOf<LibraryItem>()
-            itemsToAdd.add(LibraryItem.HeaderItem("▶ TRACKS"))
-            // Use playlist ID as the parent ID for track items
-            itemsToAdd.addAll(tracks.map { LibraryItem.TrackItem(it, item.playlist.id) })
             items.addAll(position + 1, itemsToAdd)
             notifyItemChanged(position)
             notifyItemRangeInserted(position + 1, itemsToAdd.size)
@@ -342,31 +273,6 @@ class ExpandableLibraryAdapter(
                 }
 
                 onTrackClick(item.track, albumTracks, trackPosition)
-            }
-        }
-    }
-
-    inner class PlaylistViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        private val nameTextView: TextView = itemView.findViewById(R.id.playlistNameTextView)
-        private val trackCountTextView: TextView = itemView.findViewById(R.id.playlistTrackCountTextView)
-        private val imageView: ImageView = itemView.findViewById(R.id.playlistImageView)
-        private val expandIcon: TextView = itemView.findViewById(R.id.expandIcon)
-
-        fun bind(item: LibraryItem.PlaylistItem) {
-            nameTextView.text = item.playlist.name
-            expandIcon.text = if (item.isExpanded) "▼" else "▶"
-
-            trackCountTextView.text = "${item.playlist.tracks.total} Track${if (item.playlist.tracks.total != 1) "s" else ""}"
-
-            item.playlist.images?.firstOrNull()?.url?.let { imageUrl ->
-                Glide.with(itemView.context)
-                    .load(imageUrl)
-                    .placeholder(R.drawable.ic_launcher_foreground)
-                    .into(imageView)
-            }
-
-            itemView.setOnClickListener {
-                togglePlaylist(bindingAdapterPosition)
             }
         }
     }
