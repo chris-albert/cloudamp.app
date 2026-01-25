@@ -57,7 +57,7 @@ class NowPlayingActivity : AppCompatActivity() {
         supportActionBar?.title = "NOW PLAYING"
 
         spotifyClient = SpotifyApiClient.getInstance(this)
-        playbackManager = PlaybackManager(this, spotifyClient)
+        playbackManager = PlaybackManager.getInstance(this)
 
         initializeViews()
         setupControls()
