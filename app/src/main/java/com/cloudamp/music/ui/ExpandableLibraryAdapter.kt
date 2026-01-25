@@ -128,9 +128,12 @@ class ExpandableLibraryAdapter(
         item.isLoadingAlbums = false
 
         if (item.isExpanded && albums.isNotEmpty()) {
+            // Sort albums by release date descending (newest first)
+            val sortedAlbums = albums.sortedByDescending { it.releaseDate ?: "" }
+
             val itemsToAdd = mutableListOf<LibraryItem>()
             itemsToAdd.add(LibraryItem.HeaderItem("▶ ALBUMS"))
-            itemsToAdd.addAll(albums.map { LibraryItem.AlbumItem(it, item.artist.id) })
+            itemsToAdd.addAll(sortedAlbums.map { LibraryItem.AlbumItem(it, item.artist.id) })
             items.addAll(position + 1, itemsToAdd)
             notifyItemChanged(position)
             notifyItemRangeInserted(position + 1, itemsToAdd.size)
@@ -208,6 +211,7 @@ class ExpandableLibraryAdapter(
     inner class AlbumViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val nameTextView: TextView = itemView.findViewById(R.id.albumNameTextView)
         private val artistTextView: TextView = itemView.findViewById(R.id.albumArtistTextView)
+        private val releaseDateTextView: TextView = itemView.findViewById(R.id.albumReleaseDateTextView)
         private val imageView: ImageView = itemView.findViewById(R.id.albumImageView)
         private val expandIcon: TextView = itemView.findViewById(R.id.expandIcon)
 
@@ -215,6 +219,11 @@ class ExpandableLibraryAdapter(
             nameTextView.text = item.album.name
             artistTextView.text = item.album.artists.joinToString(", ") { it.name }
             expandIcon.text = if (item.isExpanded) "▼" else "▶"
+
+            // Format release date (extract year from YYYY-MM-DD or YYYY format)
+            releaseDateTextView.text = item.album.releaseDate?.let { date ->
+                if (date.length >= 4) date.substring(0, 4) else date
+            } ?: ""
 
             item.album.images?.firstOrNull()?.url?.let { imageUrl ->
                 Glide.with(itemView.context)
