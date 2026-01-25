@@ -8,10 +8,13 @@ import android.widget.ImageView
 import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.models.Track
 import com.cloudamp.music.playback.PlaybackManager
+import com.cloudamp.music.ui.QueueAdapter
 import kotlinx.coroutines.*
 
 class NowPlayingActivity : AppCompatActivity() {
@@ -28,6 +31,8 @@ class NowPlayingActivity : AppCompatActivity() {
     private lateinit var totalTimeTextView: TextView
     private lateinit var seekBar: SeekBar
     private lateinit var queueInfoTextView: TextView
+    private lateinit var queueRecyclerView: RecyclerView
+    private lateinit var queueAdapter: QueueAdapter
 
     private lateinit var previousButton: ImageButton
     private lateinit var playPauseButton: ImageButton
@@ -76,6 +81,11 @@ class NowPlayingActivity : AppCompatActivity() {
         totalTimeTextView = findViewById(R.id.totalTimeTextView)
         seekBar = findViewById(R.id.seekBar)
         queueInfoTextView = findViewById(R.id.queueInfoTextView)
+        queueRecyclerView = findViewById(R.id.queueRecyclerView)
+
+        queueAdapter = QueueAdapter()
+        queueRecyclerView.layoutManager = LinearLayoutManager(this)
+        queueRecyclerView.adapter = queueAdapter
 
         previousButton = findViewById(R.id.previousButton)
         playPauseButton = findViewById(R.id.playPauseButton)
@@ -224,17 +234,12 @@ class NowPlayingActivity : AppCompatActivity() {
         val currentIndex = playbackManager.getCurrentIndex()
 
         if (queue.isEmpty()) {
-            queueInfoTextView.text = "PLAYLIST: No tracks queued"
+            queueInfoTextView.text = "PLAYLIST"
         } else {
-            val remainingTracks = queue.size - currentIndex - 1
-            val currentTrackName = queue.getOrNull(currentIndex)?.name ?: "Unknown"
-
-            if (remainingTracks > 0) {
-                queueInfoTextView.text = "PLAYLIST: $currentTrackName (+$remainingTracks more)"
-            } else {
-                queueInfoTextView.text = "PLAYLIST: $currentTrackName (last track)"
-            }
+            queueInfoTextView.text = "PLAYLIST (${queue.size} tracks)"
         }
+
+        queueAdapter.updateQueue(queue, currentIndex)
     }
 
     private fun formatTime(milliseconds: Long): String {
