@@ -17,11 +17,11 @@ class PlaybackManager(
 ) {
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    private var currentQueue = mutableListOf<String>() // Track URIs
+    private var currentQueue = mutableListOf<Track>() // Full Track objects
     private var currentIndex = 0
 
     // Expose queue for UI
-    fun getCurrentQueue(): List<String> = currentQueue.toList()
+    fun getCurrentQueue(): List<Track> = currentQueue.toList()
     fun getCurrentIndex(): Int = currentIndex
     
     val mediaSessionCallback = object : MediaSessionCompat.Callback() {
@@ -110,16 +110,12 @@ class PlaybackManager(
         }
     }
     
-    fun addToQueue(trackUri: String) {
-        currentQueue.add(trackUri)
-    }
-    
-    fun setQueue(trackUris: List<String>) {
+    fun setQueue(tracks: List<Track>) {
         currentQueue.clear()
-        currentQueue.addAll(trackUris)
+        currentQueue.addAll(tracks)
         currentIndex = 0
     }
-    
+
     fun playTrack(trackUri: String) {
         scope.launch {
             try {
@@ -138,13 +134,14 @@ class PlaybackManager(
             }
         }
     }
-    
-    fun playTracks(trackUris: List<String>, startIndex: Int = 0) {
+
+    fun playTracks(tracks: List<Track>, startIndex: Int = 0) {
         scope.launch {
             try {
-                setQueue(trackUris)
+                setQueue(tracks)
                 currentIndex = startIndex
 
+                val trackUris = tracks.map { it.uri }
                 val request = PlayRequest(
                     uris = trackUris,
                     offset = com.cloudamp.music.api.PlayOffset(position = startIndex)
@@ -156,13 +153,13 @@ class PlaybackManager(
                     val errorCode = response.code()
                     if (errorCode == 404 || errorCode == 403) {
                         // No active device or forbidden - open Spotify app
-                        openSpotifyApp(trackUris.getOrNull(startIndex))
+                        openSpotifyApp(tracks.getOrNull(startIndex)?.uri)
                     }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
                 // On error, try opening Spotify app
-                openSpotifyApp(trackUris.getOrNull(startIndex))
+                openSpotifyApp(tracks.getOrNull(startIndex)?.uri)
             }
         }
     }
@@ -189,8 +186,8 @@ class PlaybackManager(
     
     private suspend fun playTrackAtIndex(index: Int) {
         if (index in currentQueue.indices) {
-            val trackUri = currentQueue[index]
-            playTrack(trackUri)
+            val track = currentQueue[index]
+            playTrack(track.uri)
         }
     }
     

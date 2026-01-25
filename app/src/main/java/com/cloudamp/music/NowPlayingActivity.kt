@@ -27,6 +27,7 @@ class NowPlayingActivity : AppCompatActivity() {
     private lateinit var currentTimeTextView: TextView
     private lateinit var totalTimeTextView: TextView
     private lateinit var seekBar: SeekBar
+    private lateinit var queueInfoTextView: TextView
 
     private lateinit var previousButton: ImageButton
     private lateinit var playPauseButton: ImageButton
@@ -74,6 +75,7 @@ class NowPlayingActivity : AppCompatActivity() {
         currentTimeTextView = findViewById(R.id.currentTimeTextView)
         totalTimeTextView = findViewById(R.id.totalTimeTextView)
         seekBar = findViewById(R.id.seekBar)
+        queueInfoTextView = findViewById(R.id.queueInfoTextView)
 
         previousButton = findViewById(R.id.previousButton)
         playPauseButton = findViewById(R.id.playPauseButton)
@@ -105,7 +107,7 @@ class NowPlayingActivity : AppCompatActivity() {
                         playPauseButton.setImageResource(R.drawable.ic_play)
                     } else {
                         currentTrack?.let { track ->
-                            playbackManager.playTracks(listOf(track.uri), 0)
+                            playbackManager.playTracks(listOf(track), 0)
                         }
                         isPlaying = true
                         playPauseButton.setImageResource(R.drawable.ic_pause)
@@ -213,6 +215,25 @@ class NowPlayingActivity : AppCompatActivity() {
             currentPosition += 1000 // Increment by 1 second
             seekBar.progress = currentPosition.toInt()
             currentTimeTextView.text = formatTime(currentPosition)
+        }
+        updateQueueDisplay()
+    }
+
+    private fun updateQueueDisplay() {
+        val queue = playbackManager.getCurrentQueue()
+        val currentIndex = playbackManager.getCurrentIndex()
+
+        if (queue.isEmpty()) {
+            queueInfoTextView.text = "PLAYLIST: No tracks queued"
+        } else {
+            val remainingTracks = queue.size - currentIndex - 1
+            val currentTrackName = queue.getOrNull(currentIndex)?.name ?: "Unknown"
+
+            if (remainingTracks > 0) {
+                queueInfoTextView.text = "PLAYLIST: $currentTrackName (+$remainingTracks more)"
+            } else {
+                queueInfoTextView.text = "PLAYLIST: $currentTrackName (last track)"
+            }
         }
     }
 

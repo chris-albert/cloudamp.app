@@ -156,9 +156,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun playTrackWithQueue(track: Track, allTracks: List<Track>, trackPosition: Int) {
         // Queue all tracks from the clicked track onwards
-        val trackUris = allTracks.drop(trackPosition).map { it.uri }
-        playbackManager.playTracks(trackUris, 0)
-        Toast.makeText(this, "Playing: ${track.name} (+${trackUris.size - 1} in queue)", Toast.LENGTH_SHORT).show()
+        val tracksToPlay = allTracks.drop(trackPosition)
+        playbackManager.playTracks(tracksToPlay, 0)
+        Toast.makeText(this, "Playing: ${track.name} (+${tracksToPlay.size - 1} in queue)", Toast.LENGTH_SHORT).show()
     }
 
     private fun handleApiError(code: Int) {
