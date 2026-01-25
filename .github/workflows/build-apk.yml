@@ -1,0 +1,72 @@
+name: Build CloudAmp APK
+
+on:
+  push:
+    branches: [ "claude/import-previous-app-Oa4wc", "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:  # Allows manual trigger from GitHub UI
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v3
+      with:
+        gradle-version: 8.2.1
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    - name: Download Gradle Wrapper JAR
+      run: |
+        curl -L -o gradle/wrapper/gradle-wrapper.jar \
+          https://raw.githubusercontent.com/gradle/gradle/v8.2.1/gradle/wrapper/gradle-wrapper.jar
+
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug --stacktrace --no-daemon
+
+    - name: Get version info
+      id: version
+      run: |
+        VERSION_CODE=$(./gradlew -q printVersionCode | tail -1)
+        VERSION_NAME=$(./gradlew -q printVersionName | tail -1)
+        echo "code=$VERSION_CODE" >> $GITHUB_OUTPUT
+        echo "name=$VERSION_NAME" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION_NAME ($VERSION_CODE)"
+
+    - name: Rename APK with version
+      run: |
+        VERSION_CODE="${{ steps.version.outputs.code }}"
+        cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/CloudAmp-v${VERSION_CODE}.apk
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: CloudAmp-v${{ steps.version.outputs.code }}
+        path: app/build/outputs/apk/debug/CloudAmp-v${{ steps.version.outputs.code }}.apk
+        retention-days: 30
+
+    - name: Upload APK Summary
+      run: |
+        echo "### ✅ APK Built Successfully! 🎵" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Version:** ${{ steps.version.outputs.name }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Version Code:** ${{ steps.version.outputs.code }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Download your CloudAmp APK from the Artifacts section above.**" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "This version can be installed over previous versions without uninstalling!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        ls -lh app/build/outputs/apk/debug/CloudAmp-v${{ steps.version.outputs.code }}.apk >> $GITHUB_STEP_SUMMARY

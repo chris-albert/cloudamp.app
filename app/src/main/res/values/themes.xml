@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.CloudAmp" parent="Theme.AppCompat.DayNight.DarkActionBar">
+        <item name="colorPrimary">@color/winamp_header</item>
+        <item name="colorPrimaryDark">@color/black</item>
+        <item name="colorAccent">@color/winamp_text</item>
+        <item name="android:windowBackground">@color/winamp_background</item>
+        <item name="android:textColorPrimary">@color/winamp_text</item>
+        <item name="android:textColorSecondary">@color/winamp_display_text</item>
+        <item name="actionBarStyle">@style/CloudAmpActionBar</item>
+    </style>
+    
+    <style name="CloudAmpActionBar" parent="Widget.AppCompat.ActionBar">
+        <item name="background">@color/winamp_header</item>
+        <item name="titleTextStyle">@style/CloudAmpActionBarTitle</item>
+    </style>
+    
+    <style name="CloudAmpActionBarTitle" parent="TextAppearance.AppCompat.Widget.ActionBar.Title">
+        <item name="android:textColor">@color/winamp_text</item>
+        <item name="android:fontFamily">monospace</item>
+    </style>
+</resources>
