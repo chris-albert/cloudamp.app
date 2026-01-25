@@ -15,10 +15,14 @@ class PlaybackManager(
     private val context: Context,
     private val spotifyClient: SpotifyApiClient
 ) {
-    
+
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var currentQueue = mutableListOf<String>() // Track URIs
     private var currentIndex = 0
+
+    // Expose queue for UI
+    fun getCurrentQueue(): List<String> = currentQueue.toList()
+    fun getCurrentIndex(): Int = currentIndex
     
     val mediaSessionCallback = object : MediaSessionCompat.Callback() {
         

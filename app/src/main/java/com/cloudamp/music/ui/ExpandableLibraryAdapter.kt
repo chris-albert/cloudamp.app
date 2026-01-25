@@ -37,7 +37,7 @@ sealed class LibraryItem {
 class ExpandableLibraryAdapter(
     private val onArtistClick: (Artist, Int) -> Unit,
     private val onAlbumClick: (Album, String, Int) -> Unit,
-    private val onTrackClick: (Track) -> Unit
+    private val onTrackClick: (Track, List<Track>, Int) -> Unit
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private val items = mutableListOf<LibraryItem>()
@@ -219,7 +219,21 @@ class ExpandableLibraryAdapter(
             durationTextView.text = String.format("%d:%02d", minutes, seconds)
 
             itemView.setOnClickListener {
-                onTrackClick(item.track)
+                // Find all tracks from the same album
+                val albumTracks = mutableListOf<Track>()
+                var trackPosition = 0
+
+                for (i in items.indices) {
+                    val currentItem = items[i]
+                    if (currentItem is LibraryItem.TrackItem && currentItem.parentAlbumId == item.parentAlbumId) {
+                        albumTracks.add(currentItem.track)
+                        if (currentItem.track.id == item.track.id) {
+                            trackPosition = albumTracks.size - 1
+                        }
+                    }
+                }
+
+                onTrackClick(item.track, albumTracks, trackPosition)
             }
         }
     }

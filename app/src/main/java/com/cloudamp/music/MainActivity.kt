@@ -54,8 +54,8 @@ class MainActivity : AppCompatActivity() {
             onAlbumClick = { album, artistId, position ->
                 loadAlbumTracks(album, position)
             },
-            onTrackClick = { track ->
-                playTrack(track)
+            onTrackClick = { track, allTracks, trackPosition ->
+                playTrackWithQueue(track, allTracks, trackPosition)
             }
         )
 
@@ -79,29 +79,10 @@ class MainActivity : AppCompatActivity() {
     private fun loadMyLibrary() {
         scope.launch {
             try {
-                // Load user's saved albums
-                val albumsResponse = spotifyClient.api.getMySavedAlbums(limit = 50)
-                if (albumsResponse.isSuccessful) {
-                    val albums = albumsResponse.body()?.items?.map { it.album } ?: emptyList()
-
-                    // Group albums by artist
-                    val artistMap = mutableMapOf<String, MutableList<Album>>()
-                    albums.forEach { album ->
-                        album.artists.forEach { artist ->
-                            artistMap.getOrPut(artist.id) { mutableListOf() }.add(album)
-                        }
-                    }
-
-                    // Create artist list from albums
-                    val artists = artistMap.map { (artistId, albums) ->
-                        val firstArtist = albums.first().artists.first { it.id == artistId }
-                        Artist(
-                            id = artistId,
-                            name = firstArtist.name,
-                            images = firstArtist.images,
-                            uri = firstArtist.uri
-                        )
-                    }.sortedBy { it.name }
+                // Load user's top artists with images
+                val artistsResponse = spotifyClient.api.getMyTopArtists(limit = 50)
+                if (artistsResponse.isSuccessful) {
+                    val artists = artistsResponse.body()?.items?.sortedBy { it.name } ?: emptyList()
 
                     libraryAdapter.setArtists(artists)
                     hasLoadedContent = true
@@ -114,7 +95,7 @@ class MainActivity : AppCompatActivity() {
                         ).show()
                     }
                 } else {
-                    handleApiError(albumsResponse.code())
+                    handleApiError(artistsResponse.code())
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -173,9 +154,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun playTrack(track: Track) {
-        playbackManager.playTracks(listOf(track.uri), 0)
-        Toast.makeText(this, "Playing: ${track.name}", Toast.LENGTH_SHORT).show()
+    private fun playTrackWithQueue(track: Track, allTracks: List<Track>, trackPosition: Int) {
+        // Queue all tracks from the clicked track onwards
+        val trackUris = allTracks.drop(trackPosition).map { it.uri }
+        playbackManager.playTracks(trackUris, 0)
+        Toast.makeText(this, "Playing: ${track.name} (+${trackUris.size - 1} in queue)", Toast.LENGTH_SHORT).show()
     }
 
     private fun handleApiError(code: Int) {
