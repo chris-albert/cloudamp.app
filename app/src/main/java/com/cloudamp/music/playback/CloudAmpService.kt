@@ -11,6 +11,7 @@ import androidx.media.MediaBrowserServiceCompat
 import com.cloudamp.music.MainActivity
 import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.models.Track
+import com.cloudamp.music.models.SimplifiedTrack
 import kotlinx.coroutines.*
 
 class CloudAmpService : MediaBrowserServiceCompat() {
@@ -134,14 +135,19 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     
     private suspend fun loadAlbumTracks(albumId: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
         try {
-            val response = spotifyClient.api.getAlbumTracks(albumId)
-            if (response.isSuccessful) {
-                response.body()?.items?.forEach { track ->
+            // First fetch album info to get artwork
+            val albumResponse = spotifyClient.api.getAlbum(albumId)
+            val albumArtUrl = albumResponse.body()?.images?.firstOrNull()?.url
+
+            // Then fetch tracks
+            val tracksResponse = spotifyClient.api.getAlbumTracks(albumId)
+            if (tracksResponse.isSuccessful) {
+                tracksResponse.body()?.items?.forEach { track ->
                     items.add(createPlayableItem(
                         track.uri,
                         track.name,
                         track.artists.joinToString(", ") { it.name },
-                        track.album.images?.firstOrNull()?.url
+                        albumArtUrl
                     ))
                 }
             }
