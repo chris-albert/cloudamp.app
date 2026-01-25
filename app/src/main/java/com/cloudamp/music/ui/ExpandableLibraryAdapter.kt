@@ -212,6 +212,7 @@ class ExpandableLibraryAdapter(
         private val nameTextView: TextView = itemView.findViewById(R.id.albumNameTextView)
         private val artistTextView: TextView = itemView.findViewById(R.id.albumArtistTextView)
         private val releaseDateTextView: TextView = itemView.findViewById(R.id.albumReleaseDateTextView)
+        private val trackCountTextView: TextView = itemView.findViewById(R.id.albumTrackCountTextView)
         private val imageView: ImageView = itemView.findViewById(R.id.albumImageView)
         private val expandIcon: TextView = itemView.findViewById(R.id.expandIcon)
 
@@ -223,6 +224,11 @@ class ExpandableLibraryAdapter(
             // Format release date (extract year from YYYY-MM-DD or YYYY format)
             releaseDateTextView.text = item.album.releaseDate?.let { date ->
                 if (date.length >= 4) date.substring(0, 4) else date
+            } ?: ""
+
+            // Display track count
+            trackCountTextView.text = item.album.totalTracks?.let { count ->
+                "$count Track${if (count != 1) "s" else ""}"
             } ?: ""
 
             item.album.images?.firstOrNull()?.url?.let { imageUrl ->
