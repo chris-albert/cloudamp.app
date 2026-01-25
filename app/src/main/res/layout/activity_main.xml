@@ -34,11 +34,11 @@
             android:alpha="0.7"/>
     </LinearLayout>
 
-    <!-- My Library Header -->
+    <!-- Artists Header -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="▶ MY LIBRARY"
+        android:text="▶ ARTISTS"
         android:textColor="@color/winamp_text"
         android:textSize="14sp"
         android:fontFamily="monospace"
