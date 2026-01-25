@@ -14,9 +14,7 @@ import com.cloudamp.music.models.Artist
 import com.cloudamp.music.models.Track
 import com.cloudamp.music.models.SimplifiedTrack
 import com.cloudamp.music.playback.PlaybackManager
-import com.cloudamp.music.ui.ArtistAdapter
-import com.cloudamp.music.ui.AlbumAdapter
-import com.cloudamp.music.ui.TrackAdapter
+import com.cloudamp.music.ui.ExpandableLibraryAdapter
 import kotlinx.coroutines.*
 
 class MainActivity : AppCompatActivity() {
@@ -25,13 +23,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var playbackManager: PlaybackManager
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    private lateinit var artistRecyclerView: RecyclerView
-    private lateinit var albumRecyclerView: RecyclerView
-    private lateinit var trackRecyclerView: RecyclerView
+    private lateinit var libraryRecyclerView: RecyclerView
+    private lateinit var libraryAdapter: ExpandableLibraryAdapter
 
-    private var currentArtists = listOf<Artist>()
-    private var currentAlbums = listOf<Album>()
-    private var currentTracks = listOf<Track>()
     private var hasLoadedContent = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -41,7 +35,7 @@ class MainActivity : AppCompatActivity() {
         spotifyClient = SpotifyApiClient.getInstance(this)
         playbackManager = PlaybackManager(this, spotifyClient)
 
-        setupRecyclerViews()
+        setupRecyclerView()
     }
 
     override fun onResume() {
@@ -49,87 +43,78 @@ class MainActivity : AppCompatActivity() {
         checkSpotifyToken()
     }
 
-    private fun setupRecyclerViews() {
-        // Artists
-        artistRecyclerView = findViewById(R.id.artistRecyclerView)
-        artistRecyclerView.layoutManager = LinearLayoutManager(this)
-        artistRecyclerView.adapter = ArtistAdapter(currentArtists) { artist ->
-            onArtistClick(artist)
-        }
+    private fun setupRecyclerView() {
+        libraryRecyclerView = findViewById(R.id.libraryRecyclerView)
+        libraryRecyclerView.layoutManager = LinearLayoutManager(this)
 
-        // Albums
-        albumRecyclerView = findViewById(R.id.albumRecyclerView)
-        albumRecyclerView.layoutManager = LinearLayoutManager(this)
-        albumRecyclerView.adapter = AlbumAdapter(currentAlbums) { album ->
-            onAlbumClick(album)
-        }
+        libraryAdapter = ExpandableLibraryAdapter(
+            onArtistClick = { artist, position ->
+                loadArtistAlbums(artist, position)
+            },
+            onAlbumClick = { album, artistId, position ->
+                loadAlbumTracks(album, position)
+            },
+            onTrackClick = { track ->
+                playTrack(track)
+            }
+        )
 
-        // Tracks
-        trackRecyclerView = findViewById(R.id.trackRecyclerView)
-        trackRecyclerView.layoutManager = LinearLayoutManager(this)
-        trackRecyclerView.adapter = TrackAdapter(currentTracks) { track, position ->
-            onTrackClick(track, position)
-        }
+        libraryRecyclerView.adapter = libraryAdapter
     }
 
     private fun checkSpotifyToken() {
         if (!spotifyClient.hasAccessToken()) {
-            // Clear any previously loaded content
             if (hasLoadedContent) {
-                clearContent()
+                libraryAdapter.setArtists(emptyList())
                 hasLoadedContent = false
             }
             Toast.makeText(this, "Please set your Spotify credentials in Settings", Toast.LENGTH_LONG).show()
         } else {
-            // Only load if we haven't loaded yet or if we just got a token
             if (!hasLoadedContent) {
                 loadMyLibrary()
             }
         }
     }
 
-    private fun clearContent() {
-        currentArtists = emptyList()
-        currentAlbums = emptyList()
-        currentTracks = emptyList()
-        (artistRecyclerView.adapter as ArtistAdapter).updateData(currentArtists)
-        (albumRecyclerView.adapter as AlbumAdapter).updateData(currentAlbums)
-        (trackRecyclerView.adapter as TrackAdapter).updateData(currentTracks)
-    }
-
     private fun loadMyLibrary() {
         scope.launch {
             try {
-                // Load user's top artists
-                val artistsResponse = spotifyClient.api.getMyTopArtists(limit = 50)
-                if (artistsResponse.isSuccessful) {
-                    currentArtists = artistsResponse.body()?.items ?: emptyList()
-                    (artistRecyclerView.adapter as ArtistAdapter).updateData(currentArtists)
-                }
-
                 // Load user's saved albums
                 val albumsResponse = spotifyClient.api.getMySavedAlbums(limit = 50)
                 if (albumsResponse.isSuccessful) {
-                    currentAlbums = albumsResponse.body()?.items?.map { it.album } ?: emptyList()
-                    (albumRecyclerView.adapter as AlbumAdapter).updateData(currentAlbums)
-                }
+                    val albums = albumsResponse.body()?.items?.map { it.album } ?: emptyList()
 
-                // Load user's saved tracks
-                val tracksResponse = spotifyClient.api.getMySavedTracks(limit = 50)
-                if (tracksResponse.isSuccessful) {
-                    currentTracks = tracksResponse.body()?.items?.map { it.track } ?: emptyList()
-                    (trackRecyclerView.adapter as TrackAdapter).updateData(currentTracks)
-                }
+                    // Group albums by artist
+                    val artistMap = mutableMapOf<String, MutableList<Album>>()
+                    albums.forEach { album ->
+                        album.artists.forEach { artist ->
+                            artistMap.getOrPut(artist.id) { mutableListOf() }.add(album)
+                        }
+                    }
 
-                hasLoadedContent = true
+                    // Create artist list from albums
+                    val artists = artistMap.map { (artistId, albums) ->
+                        val firstArtist = albums.first().artists.first { it.id == artistId }
+                        Artist(
+                            id = artistId,
+                            name = firstArtist.name,
+                            images = firstArtist.images,
+                            uri = firstArtist.uri
+                        )
+                    }.sortedBy { it.name }
 
-                // If user has no library content
-                if (currentArtists.isEmpty() && currentAlbums.isEmpty() && currentTracks.isEmpty()) {
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Your library is empty. Use Search to find music!",
-                        Toast.LENGTH_LONG
-                    ).show()
+                    libraryAdapter.setArtists(artists)
+                    hasLoadedContent = true
+
+                    if (artists.isEmpty()) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Your library is empty. Use Search to find music!",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                } else {
+                    handleApiError(albumsResponse.code())
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -143,17 +128,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun onArtistClick(artist: Artist) {
+    private fun loadArtistAlbums(artist: Artist, position: Int) {
         scope.launch {
             try {
-                val response = spotifyClient.api.getArtistAlbums(artist.id)
+                val response = spotifyClient.api.getArtistAlbums(artist.id, limit = 50)
                 if (response.isSuccessful) {
-                    currentAlbums = response.body()?.items ?: emptyList()
-                    (albumRecyclerView.adapter as AlbumAdapter).updateData(currentAlbums)
-                    currentTracks = emptyList()
-                    (trackRecyclerView.adapter as TrackAdapter).updateData(currentTracks)
+                    val albums = response.body()?.items ?: emptyList()
+                    libraryAdapter.setArtistAlbums(position, albums)
                 } else {
-                    handleApiError(response.code(), "albums")
+                    handleApiError(response.code())
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -162,13 +145,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun onAlbumClick(album: Album) {
+    private fun loadAlbumTracks(album: Album, position: Int) {
         scope.launch {
             try {
                 val response = spotifyClient.api.getAlbumTracks(album.id)
                 if (response.isSuccessful) {
                     // Convert SimplifiedTrack to Track by adding album info
-                    currentTracks = response.body()?.items?.map { simplifiedTrack ->
+                    val tracks = response.body()?.items?.map { simplifiedTrack ->
                         Track(
                             id = simplifiedTrack.id,
                             name = simplifiedTrack.name,
@@ -179,9 +162,9 @@ class MainActivity : AppCompatActivity() {
                             trackNumber = simplifiedTrack.trackNumber
                         )
                     } ?: emptyList()
-                    (trackRecyclerView.adapter as TrackAdapter).updateData(currentTracks)
+                    libraryAdapter.setAlbumTracks(position, tracks)
                 } else {
-                    handleApiError(response.code(), "tracks")
+                    handleApiError(response.code())
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -190,18 +173,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun onTrackClick(track: Track, position: Int) {
-        val trackUris = currentTracks.map { it.uri }
-        playbackManager.playTracks(trackUris, position)
+    private fun playTrack(track: Track) {
+        playbackManager.playTracks(listOf(track.uri), 0)
         Toast.makeText(this, "Playing: ${track.name}", Toast.LENGTH_SHORT).show()
     }
 
-    private fun handleApiError(code: Int, contentType: String) {
+    private fun handleApiError(code: Int) {
         val errorMsg = when (code) {
             401 -> "Token expired. Please re-login in Settings."
             403 -> "Insufficient permissions. Please re-login in Settings."
             404 -> "Content not found."
-            else -> "Error loading $contentType (code: $code)"
+            else -> "Error loading content (code: $code)"
         }
         Toast.makeText(this, errorMsg, Toast.LENGTH_LONG).show()
     }
@@ -253,15 +235,15 @@ class MainActivity : AppCompatActivity() {
                 val response = spotifyClient.api.search(query, "artist,album,track")
                 if (response.isSuccessful) {
                     val results = response.body()
-                    currentArtists = results?.artists?.items ?: emptyList()
-                    currentAlbums = results?.albums?.items ?: emptyList()
-                    currentTracks = results?.tracks?.items ?: emptyList()
+                    val artists = results?.artists?.items ?: emptyList()
 
-                    (artistRecyclerView.adapter as ArtistAdapter).updateData(currentArtists)
-                    (albumRecyclerView.adapter as AlbumAdapter).updateData(currentAlbums)
-                    (trackRecyclerView.adapter as TrackAdapter).updateData(currentTracks)
+                    if (artists.isNotEmpty()) {
+                        libraryAdapter.setArtists(artists)
+                    } else {
+                        Toast.makeText(this@MainActivity, "No results found", Toast.LENGTH_SHORT).show()
+                    }
                 } else {
-                    handleApiError(response.code(), "search results")
+                    handleApiError(response.code())
                 }
             } catch (e: Exception) {
                 e.printStackTrace()

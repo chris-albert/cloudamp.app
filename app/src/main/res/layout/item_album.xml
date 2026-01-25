@@ -4,14 +4,26 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:padding="8dp"
-    android:background="@color/winamp_list_background"
+    android:paddingLeft="32dp"
+    android:background="@color/winamp_display"
     android:clickable="true"
     android:focusable="true">
 
+    <TextView
+        android:id="@+id/expandIcon"
+        android:layout_width="20dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_vertical"
+        android:text="▶"
+        android:textColor="@color/winamp_text"
+        android:textSize="12sp"
+        android:fontFamily="monospace"/>
+
     <ImageView
-        android:id="@+id/albumImage"
+        android:id="@+id/albumImageView"
         android:layout_width="60dp"
         android:layout_height="60dp"
+        android:layout_marginStart="8dp"
         android:scaleType="centerCrop"
         android:contentDescription="Album cover"/>
 
@@ -22,9 +34,9 @@
         android:orientation="vertical"
         android:layout_marginStart="12dp"
         android:layout_gravity="center_vertical">
-        
+
         <TextView
-            android:id="@+id/albumName"
+            android:id="@+id/albumNameTextView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textColor="@color/winamp_text"
@@ -33,9 +45,9 @@
             android:textStyle="bold"
             android:maxLines="1"
             android:ellipsize="end"/>
-        
+
         <TextView
-            android:id="@+id/albumArtist"
+            android:id="@+id/albumArtistTextView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textColor="@color/winamp_display_text"

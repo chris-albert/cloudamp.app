@@ -4,7 +4,8 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:padding="8dp"
-    android:background="@color/winamp_list_background"
+    android:paddingLeft="64dp"
+    android:background="@color/winamp_background"
     android:clickable="true"
     android:focusable="true">
 
@@ -25,9 +26,9 @@
         android:orientation="vertical"
         android:layout_marginStart="8dp"
         android:layout_gravity="center_vertical">
-        
+
         <TextView
-            android:id="@+id/trackName"
+            android:id="@+id/trackNameTextView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textColor="@color/winamp_text"
@@ -35,9 +36,9 @@
             android:fontFamily="monospace"
             android:maxLines="1"
             android:ellipsize="end"/>
-        
+
         <TextView
-            android:id="@+id/trackArtist"
+            android:id="@+id/trackArtistTextView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textColor="@color/winamp_display_text"
@@ -47,9 +48,9 @@
             android:ellipsize="end"
             android:layout_marginTop="2dp"/>
     </LinearLayout>
-    
+
     <TextView
-        android:id="@+id/trackDuration"
+        android:id="@+id/trackDurationTextView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center_vertical"
