@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:paddingLeft="8dp"
+    android:paddingRight="8dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp"
+    android:background="@color/winamp_display"
+    android:clickable="true"
+    android:focusable="true">
+
+    <TextView
+        android:id="@+id/expandIcon"
+        android:layout_width="20dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_vertical"
+        android:text="▶"
+        android:textColor="@color/winamp_text"
+        android:textSize="12sp"
+        android:fontFamily="monospace"/>
+
+    <ImageView
+        android:id="@+id/playlistImageView"
+        android:layout_width="60dp"
+        android:layout_height="60dp"
+        android:layout_marginStart="8dp"
+        android:scaleType="centerCrop"
+        android:contentDescription="Playlist cover"/>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:layout_marginStart="12dp"
+        android:layout_gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/playlistNameTextView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/winamp_text"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end"/>
+
+        <TextView
+            android:id="@+id/playlistTrackCountTextView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/winamp_display_text"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:layout_marginTop="2dp"/>
+    </LinearLayout>
+</LinearLayout>

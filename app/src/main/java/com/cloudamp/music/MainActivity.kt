@@ -8,6 +8,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.cloudamp.music.api.Playlist
 import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.models.Album
 import com.cloudamp.music.models.Artist
@@ -56,6 +57,9 @@ class MainActivity : AppCompatActivity() {
             },
             onTrackClick = { track, allTracks, trackPosition ->
                 playTrackWithQueue(track, allTracks, trackPosition)
+            },
+            onPlaylistClick = { playlist, position ->
+                loadPlaylistTracks(playlist, position)
             }
         )
 
@@ -79,23 +83,23 @@ class MainActivity : AppCompatActivity() {
     private fun loadMyLibrary() {
         scope.launch {
             try {
-                // Load user's top artists with images
-                val artistsResponse = spotifyClient.api.getMyTopArtists(limit = 50)
-                if (artistsResponse.isSuccessful) {
-                    val artists = artistsResponse.body()?.items?.sortedBy { it.name } ?: emptyList()
+                // Load user's playlists
+                val playlistsResponse = spotifyClient.api.getMyPlaylists(limit = 50)
+                if (playlistsResponse.isSuccessful) {
+                    val playlists = playlistsResponse.body()?.items ?: emptyList()
 
-                    libraryAdapter.setArtists(artists)
+                    libraryAdapter.setPlaylists(playlists)
                     hasLoadedContent = true
 
-                    if (artists.isEmpty()) {
+                    if (playlists.isEmpty()) {
                         Toast.makeText(
                             this@MainActivity,
-                            "Your library is empty. Use Search to find music!",
+                            "No playlists found. Create some playlists on Spotify!",
                             Toast.LENGTH_LONG
                         ).show()
                     }
                 } else {
-                    handleApiError(artistsResponse.code())
+                    handleApiError(playlistsResponse.code())
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -150,6 +154,24 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 e.printStackTrace()
                 Toast.makeText(this@MainActivity, "Error loading tracks: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun loadPlaylistTracks(playlist: Playlist, position: Int) {
+        scope.launch {
+            try {
+                val response = spotifyClient.api.getPlaylistTracks(playlist.id, limit = 100)
+                if (response.isSuccessful) {
+                    // Filter out null tracks (can happen with unavailable songs)
+                    val tracks = response.body()?.items?.mapNotNull { it.track } ?: emptyList()
+                    libraryAdapter.setPlaylistTracks(position, tracks)
+                } else {
+                    handleApiError(response.code())
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Toast.makeText(this@MainActivity, "Error loading playlist tracks: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
