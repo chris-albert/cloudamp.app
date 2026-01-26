@@ -11,10 +11,24 @@ import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.models.Track
 import kotlinx.coroutines.*
 
-class PlaybackManager(
+class PlaybackManager private constructor(
     private val context: Context,
     private val spotifyClient: SpotifyApiClient
 ) {
+
+    companion object {
+        @Volatile
+        private var instance: PlaybackManager? = null
+
+        fun getInstance(context: Context): PlaybackManager {
+            return instance ?: synchronized(this) {
+                instance ?: PlaybackManager(
+                    context.applicationContext,
+                    SpotifyApiClient.getInstance(context)
+                ).also { instance = it }
+            }
+        }
+    }
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var currentQueue = mutableListOf<Track>() // Full Track objects

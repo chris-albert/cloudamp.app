@@ -33,7 +33,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         super.onCreate()
         
         spotifyClient = SpotifyApiClient.getInstance(this)
-        playbackManager = PlaybackManager(this, spotifyClient)
+        playbackManager = PlaybackManager.getInstance(this)
         
         // Create MediaSession
         mediaSession = MediaSessionCompat(this, "CloudAmpService").apply {

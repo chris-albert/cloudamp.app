@@ -33,7 +33,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         spotifyClient = SpotifyApiClient.getInstance(this)
-        playbackManager = PlaybackManager(this, spotifyClient)
+        playbackManager = PlaybackManager.getInstance(this)
 
         setupRecyclerView()
     }
