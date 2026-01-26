@@ -38,7 +38,7 @@ data class SimplifiedTrack(
     val name: String,
     val artists: List<Artist>,
     val uri: String,
-    @SerializedName("duration_ms") val durationMs: Long,
+    @SerializedName("duration_ms") val durationMs: Int = 0,
     @SerializedName("track_number") val trackNumber: Int? = null
 )
 

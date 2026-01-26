@@ -515,7 +515,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                             track.uri,
                             track.name,
                             track.artists.joinToString(", ") { it.name },
-                            track.album.images?.firstOrNull()?.url
+                            track.album?.images?.firstOrNull()?.url
                         ))
                     }
 
