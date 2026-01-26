@@ -36,6 +36,10 @@ sealed class LibraryItem {
         val track: Track,
         val parentAlbumId: String
     ) : LibraryItem()
+
+    data class FooterItem(
+        val parentId: String
+    ) : LibraryItem()
 }
 
 class ExpandableLibraryAdapter(
@@ -51,6 +55,7 @@ class ExpandableLibraryAdapter(
         private const val TYPE_HEADER = 1
         private const val TYPE_ALBUM = 2
         private const val TYPE_TRACK = 3
+        private const val TYPE_FOOTER = 4
     }
 
     override fun getItemViewType(position: Int): Int {
@@ -59,6 +64,7 @@ class ExpandableLibraryAdapter(
             is LibraryItem.HeaderItem -> TYPE_HEADER
             is LibraryItem.AlbumItem -> TYPE_ALBUM
             is LibraryItem.TrackItem -> TYPE_TRACK
+            is LibraryItem.FooterItem -> TYPE_FOOTER
         }
     }
 
@@ -69,6 +75,7 @@ class ExpandableLibraryAdapter(
             TYPE_HEADER -> HeaderViewHolder(inflater.inflate(R.layout.item_section_header, parent, false))
             TYPE_ALBUM -> AlbumViewHolder(inflater.inflate(R.layout.item_album, parent, false))
             TYPE_TRACK -> TrackViewHolder(inflater.inflate(R.layout.item_track, parent, false))
+            TYPE_FOOTER -> FooterViewHolder(inflater.inflate(R.layout.item_section_footer, parent, false))
             else -> throw IllegalArgumentException("Unknown view type: $viewType")
         }
     }
@@ -87,6 +94,9 @@ class ExpandableLibraryAdapter(
             is LibraryItem.TrackItem -> {
                 (holder as TrackViewHolder).bind(item)
             }
+            is LibraryItem.FooterItem -> {
+                // Footer doesn't need binding - it's just a visual separator
+            }
         }
     }
 
@@ -102,11 +112,12 @@ class ExpandableLibraryAdapter(
         val item = items[position] as? LibraryItem.ArtistItem ?: return
 
         if (item.isExpanded) {
-            // Collapse: remove header, albums and their tracks
+            // Collapse: remove header, albums, their tracks, and footers
             val itemsToRemove = items.drop(position + 1).takeWhile {
                 it is LibraryItem.HeaderItem ||
                 it is LibraryItem.AlbumItem && it.parentArtistId == item.artist.id ||
-                it is LibraryItem.TrackItem
+                it is LibraryItem.TrackItem ||
+                it is LibraryItem.FooterItem
             }.size
             repeat(itemsToRemove) {
                 items.removeAt(position + 1)
@@ -134,6 +145,7 @@ class ExpandableLibraryAdapter(
             val itemsToAdd = mutableListOf<LibraryItem>()
             itemsToAdd.add(LibraryItem.HeaderItem("▶ ALBUMS"))
             itemsToAdd.addAll(sortedAlbums.map { LibraryItem.AlbumItem(it, item.artist.id) })
+            itemsToAdd.add(LibraryItem.FooterItem(item.artist.id))
             items.addAll(position + 1, itemsToAdd)
             notifyItemChanged(position)
             notifyItemRangeInserted(position + 1, itemsToAdd.size)
@@ -144,10 +156,11 @@ class ExpandableLibraryAdapter(
         val item = items[position] as? LibraryItem.AlbumItem ?: return
 
         if (item.isExpanded) {
-            // Collapse: remove header and tracks
+            // Collapse: remove header, tracks, and footer
             val itemsToRemove = items.drop(position + 1).takeWhile {
                 it is LibraryItem.HeaderItem ||
-                it is LibraryItem.TrackItem && it.parentAlbumId == item.album.id
+                it is LibraryItem.TrackItem && it.parentAlbumId == item.album.id ||
+                it is LibraryItem.FooterItem && it.parentId == item.album.id
             }.size
             repeat(itemsToRemove) {
                 items.removeAt(position + 1)
@@ -172,6 +185,7 @@ class ExpandableLibraryAdapter(
             val itemsToAdd = mutableListOf<LibraryItem>()
             itemsToAdd.add(LibraryItem.HeaderItem("▶ TRACKS"))
             itemsToAdd.addAll(tracks.map { LibraryItem.TrackItem(it, item.album.id) })
+            itemsToAdd.add(LibraryItem.FooterItem(item.album.id))
             items.addAll(position + 1, itemsToAdd)
             notifyItemChanged(position)
             notifyItemRangeInserted(position + 1, itemsToAdd.size)
@@ -276,4 +290,6 @@ class ExpandableLibraryAdapter(
             }
         }
     }
+
+    inner class FooterViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView)
 }
