@@ -4,13 +4,11 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.widget.ImageButton
-import android.widget.ImageView
 import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.bumptech.glide.Glide
 import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.models.Track
 import com.cloudamp.music.playback.PlaybackManager
@@ -23,7 +21,6 @@ class NowPlayingActivity : AppCompatActivity() {
     private lateinit var playbackManager: PlaybackManager
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    private lateinit var albumArtImageView: ImageView
     private lateinit var trackTitleTextView: TextView
     private lateinit var trackArtistTextView: TextView
     private lateinit var trackAlbumTextView: TextView
@@ -73,7 +70,6 @@ class NowPlayingActivity : AppCompatActivity() {
     }
 
     private fun initializeViews() {
-        albumArtImageView = findViewById(R.id.albumArtImageView)
         trackTitleTextView = findViewById(R.id.trackTitleTextView)
         trackArtistTextView = findViewById(R.id.trackArtistTextView)
         trackAlbumTextView = findViewById(R.id.trackAlbumTextView)
@@ -210,14 +206,6 @@ class NowPlayingActivity : AppCompatActivity() {
         totalDuration = track.durationMs
         totalTimeTextView.text = formatTime(totalDuration)
         seekBar.max = totalDuration.toInt()
-
-        // Load album art
-        track.album.images?.firstOrNull()?.url?.let { imageUrl ->
-            Glide.with(this)
-                .load(imageUrl)
-                .placeholder(R.drawable.ic_album_placeholder)
-                .into(albumArtImageView)
-        }
     }
 
     private fun updatePlaybackState() {
