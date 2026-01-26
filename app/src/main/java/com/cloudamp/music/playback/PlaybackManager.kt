@@ -3,6 +3,7 @@ package com.cloudamp.music.playback
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Bundle
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import android.widget.Toast
@@ -31,35 +32,47 @@ class PlaybackManager private constructor(
     }
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    private var currentQueue = mutableListOf<Track>() // Full Track objects
+    private var currentQueue = mutableListOf<Track>()
     private var currentIndex = 0
+    private var mediaSession: MediaSessionCompat? = null
+    private var service: CloudAmpService? = null
 
     // Expose queue for UI
     fun getCurrentQueue(): List<Track> = currentQueue.toList()
     fun getCurrentIndex(): Int = currentIndex
-    
+
+    fun setMediaSession(session: MediaSessionCompat) {
+        mediaSession = session
+    }
+
+    fun setService(cloudAmpService: CloudAmpService) {
+        service = cloudAmpService
+    }
+
     val mediaSessionCallback = object : MediaSessionCompat.Callback() {
-        
+
         override fun onPlay() {
             scope.launch {
                 try {
                     spotifyClient.api.play(PlayRequest())
+                    service?.updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
             }
         }
-        
+
         override fun onPause() {
             scope.launch {
                 try {
                     spotifyClient.api.pause()
+                    service?.updatePlaybackState(PlaybackStateCompat.STATE_PAUSED)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
             }
         }
-        
+
         override fun onSkipToNext() {
             scope.launch {
                 try {
@@ -69,12 +82,13 @@ class PlaybackManager private constructor(
                     } else {
                         spotifyClient.api.next()
                     }
+                    service?.updatePlaybackState(PlaybackStateCompat.STATE_SKIPPING_TO_NEXT)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
             }
         }
-        
+
         override fun onSkipToPrevious() {
             scope.launch {
                 try {
@@ -84,35 +98,62 @@ class PlaybackManager private constructor(
                     } else {
                         spotifyClient.api.previous()
                     }
+                    service?.updatePlaybackState(PlaybackStateCompat.STATE_SKIPPING_TO_PREVIOUS)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
             }
         }
-        
-        override fun onPlayFromMediaId(mediaId: String, extras: android.os.Bundle?) {
+
+        override fun onPlayFromMediaId(mediaId: String, extras: Bundle?) {
             scope.launch {
                 try {
                     // Check if it's a Spotify URI
                     if (mediaId.startsWith("spotify:track:")) {
                         playTrack(mediaId)
+                        service?.updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
             }
         }
-        
-        override fun onStop() {
+
+        override fun onPlayFromSearch(query: String?, extras: Bundle?) {
+            if (query.isNullOrBlank()) {
+                // Resume playback
+                onPlay()
+                return
+            }
+
             scope.launch {
                 try {
-                    spotifyClient.api.pause()
+                    // Search for the query and play the first result
+                    val response = spotifyClient.api.search(query, "track", limit = 1)
+                    if (response.isSuccessful) {
+                        val tracks = response.body()?.tracks?.items
+                        if (!tracks.isNullOrEmpty()) {
+                            val track = tracks.first()
+                            playTrackWithMetadata(track)
+                        }
+                    }
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
             }
         }
-        
+
+        override fun onStop() {
+            scope.launch {
+                try {
+                    spotifyClient.api.pause()
+                    service?.updatePlaybackState(PlaybackStateCompat.STATE_STOPPED)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+
         override fun onSeekTo(pos: Long) {
             scope.launch {
                 try {
@@ -122,8 +163,15 @@ class PlaybackManager private constructor(
                 }
             }
         }
+
+        override fun onCustomAction(action: String?, extras: Bundle?) {
+            when (action) {
+                "previous" -> onSkipToPrevious()
+                "next" -> onSkipToNext()
+            }
+        }
     }
-    
+
     fun setQueue(tracks: List<Track>) {
         currentQueue.clear()
         currentQueue.addAll(tracks)
@@ -138,6 +186,8 @@ class PlaybackManager private constructor(
                 )
                 val response = spotifyClient.api.play(request)
 
+                service?.updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
+
                 // If API call fails, open Spotify app
                 if (!response.isSuccessful) {
                     openSpotifyApp(trackUri)
@@ -145,6 +195,29 @@ class PlaybackManager private constructor(
             } catch (e: Exception) {
                 e.printStackTrace()
                 openSpotifyApp(trackUri)
+            }
+        }
+    }
+
+    private fun playTrackWithMetadata(track: Track) {
+        scope.launch {
+            try {
+                val request = PlayRequest(
+                    uris = listOf(track.uri)
+                )
+                val response = spotifyClient.api.play(request)
+
+                // Update metadata
+                service?.updateMetadata(track, track.album?.images?.firstOrNull()?.url)
+                service?.updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
+
+                // If API call fails, open Spotify app
+                if (!response.isSuccessful) {
+                    openSpotifyApp(track.uri)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                openSpotifyApp(track.uri)
             }
         }
     }
@@ -161,6 +234,13 @@ class PlaybackManager private constructor(
                     offset = com.cloudamp.music.api.PlayOffset(position = startIndex)
                 )
                 val response = spotifyClient.api.play(request)
+
+                // Update metadata for current track
+                if (startIndex in tracks.indices) {
+                    val currentTrack = tracks[startIndex]
+                    service?.updateMetadata(currentTrack, currentTrack.album?.images?.firstOrNull()?.url)
+                }
+                service?.updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
 
                 // If API call fails (no active device or not premium), open Spotify app
                 if (!response.isSuccessful) {
@@ -197,14 +277,14 @@ class PlaybackManager private constructor(
             }
         }
     }
-    
+
     private suspend fun playTrackAtIndex(index: Int) {
         if (index in currentQueue.indices) {
             val track = currentQueue[index]
-            playTrack(track.uri)
+            playTrackWithMetadata(track)
         }
     }
-    
+
     fun getCurrentPlayback(callback: (String?, Boolean) -> Unit) {
         scope.launch {
             try {
