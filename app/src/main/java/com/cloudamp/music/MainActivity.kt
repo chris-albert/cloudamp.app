@@ -4,11 +4,14 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
+import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.cloudamp.music.api.SpotifyApiClient
+import com.cloudamp.music.cache.LibraryCache
 import com.cloudamp.music.models.Album
 import com.cloudamp.music.models.Artist
 import com.cloudamp.music.models.Track
@@ -21,10 +24,12 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var spotifyClient: SpotifyApiClient
     private lateinit var playbackManager: PlaybackManager
+    private lateinit var libraryCache: LibraryCache
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private lateinit var libraryRecyclerView: RecyclerView
     private lateinit var libraryAdapter: ExpandableLibraryAdapter
+    private lateinit var loadingContainer: LinearLayout
 
     private var hasLoadedContent = false
 
@@ -34,17 +39,25 @@ class MainActivity : AppCompatActivity() {
 
         spotifyClient = SpotifyApiClient.getInstance(this)
         playbackManager = PlaybackManager.getInstance(this)
+        libraryCache = LibraryCache.getInstance(this)
 
         setupRecyclerView()
     }
 
     override fun onResume() {
         super.onResume()
+
+        // Register reload callback
+        SettingsActivity.onLibraryReloadRequested = {
+            reloadLibrary()
+        }
+
         checkSpotifyToken()
     }
 
     private fun setupRecyclerView() {
         libraryRecyclerView = findViewById(R.id.libraryRecyclerView)
+        loadingContainer = findViewById(R.id.loadingContainer)
         libraryRecyclerView.layoutManager = LinearLayoutManager(this)
 
         libraryAdapter = ExpandableLibraryAdapter(
@@ -76,14 +89,62 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun showLoading(show: Boolean) {
+        loadingContainer.visibility = if (show) View.VISIBLE else View.GONE
+    }
+
     private fun loadMyLibrary() {
+        // Try to load from cache first
+        if (libraryCache.hasCache()) {
+            val cachedArtists = libraryCache.getArtists()
+            val cachedSavedAlbumIds = libraryCache.getSavedAlbumIds()
+
+            if (cachedArtists != null && cachedArtists.isNotEmpty()) {
+                libraryAdapter.setSavedAlbumIds(cachedSavedAlbumIds)
+                libraryAdapter.setArtists(cachedArtists)
+                hasLoadedContent = true
+                return
+            }
+        }
+
+        // No cache, load from API
+        loadLibraryFromApi()
+    }
+
+    fun reloadLibrary() {
+        libraryCache.clearCache()
+        hasLoadedContent = false
+        libraryAdapter.setArtists(emptyList())
+        loadLibraryFromApi()
+    }
+
+    private fun loadLibraryFromApi() {
+        showLoading(true)
         scope.launch {
             try {
-                // Load user's top artists with images
-                val artistsResponse = spotifyClient.api.getMyTopArtists(limit = 50)
-                if (artistsResponse.isSuccessful) {
-                    val artists = artistsResponse.body()?.items?.sortedBy { it.name } ?: emptyList()
+                // Load saved albums and all top artists in parallel
+                val savedAlbumsDeferred = async(SupervisorJob()) {
+                    try {
+                        loadSavedAlbumIds()
+                    } catch (e: Exception) {
+                        emptySet()
+                    }
+                }
 
+                // Load all followed artists (paginated)
+                val allArtists = loadAllFollowedArtists()
+
+                if (allArtists != null) {
+                    val artists = allArtists.sortedBy { it.name }
+
+                    // Set saved album IDs for categorization (wait for it now)
+                    val savedAlbumIds = savedAlbumsDeferred.await()
+
+                    // Save to cache
+                    libraryCache.saveArtists(artists)
+                    libraryCache.saveSavedAlbumIds(savedAlbumIds)
+
+                    libraryAdapter.setSavedAlbumIds(savedAlbumIds)
                     libraryAdapter.setArtists(artists)
                     hasLoadedContent = true
 
@@ -94,8 +155,6 @@ class MainActivity : AppCompatActivity() {
                             Toast.LENGTH_LONG
                         ).show()
                     }
-                } else {
-                    handleApiError(artistsResponse.code())
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -105,8 +164,55 @@ class MainActivity : AppCompatActivity() {
                     else -> "Error loading library: ${e.message}"
                 }
                 Toast.makeText(this@MainActivity, errorMsg, Toast.LENGTH_LONG).show()
+            } finally {
+                showLoading(false)
             }
         }
+    }
+
+    private suspend fun loadAllFollowedArtists(): List<Artist>? {
+        val allArtists = mutableListOf<Artist>()
+        var after: String? = null
+
+        do {
+            val response = spotifyClient.api.getFollowedArtists(
+                limit = 50,
+                after = after
+            )
+            if (response.isSuccessful) {
+                val artistsPage = response.body()?.artists
+                val artists = artistsPage?.items ?: emptyList()
+                allArtists.addAll(artists)
+                after = artistsPage?.cursors?.after
+            } else {
+                handleApiError(response.code())
+                return if (allArtists.isNotEmpty()) allArtists else null
+            }
+        } while (after != null)
+
+        return allArtists
+    }
+
+    private suspend fun loadSavedAlbumIds(): Set<String> {
+        val savedIds = mutableSetOf<String>()
+        try {
+            var offset = 0
+            val limit = 50
+            do {
+                val response = spotifyClient.api.getMySavedAlbums(limit = limit, offset = offset)
+                if (response.isSuccessful) {
+                    val albums = response.body()?.items ?: emptyList()
+                    savedIds.addAll(albums.map { it.album.id })
+                    offset += limit
+                    if (albums.size < limit) break
+                } else {
+                    break
+                }
+            } while (true)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return savedIds
     }
 
     private fun loadArtistAlbums(artist: Artist, position: Int) {

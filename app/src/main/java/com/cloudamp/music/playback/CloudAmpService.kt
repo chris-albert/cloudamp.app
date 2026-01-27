@@ -24,6 +24,9 @@ import com.bumptech.glide.request.transition.Transition
 import com.cloudamp.music.MainActivity
 import com.cloudamp.music.R
 import com.cloudamp.music.api.SpotifyApiClient
+import com.cloudamp.music.cache.LibraryCache
+import com.cloudamp.music.models.Album
+import com.cloudamp.music.models.Artist
 import com.cloudamp.music.models.Track
 import kotlinx.coroutines.*
 
@@ -32,6 +35,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     private lateinit var mediaSession: MediaSessionCompat
     private lateinit var spotifyClient: SpotifyApiClient
     private lateinit var playbackManager: PlaybackManager
+    private lateinit var libraryCache: LibraryCache
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var currentAlbumArt: Bitmap? = null
     private var playbackPollingJob: Job? = null
@@ -57,6 +61,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
         spotifyClient = SpotifyApiClient.getInstance(this)
         playbackManager = PlaybackManager.getInstance(this)
+        libraryCache = LibraryCache.getInstance(this)
 
         // Create MediaSession
         mediaSession = MediaSessionCompat(this, "CloudAmpService").apply {
@@ -362,7 +367,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 ROOT_ID -> {
                     // Root menu - main categories
                     mediaItems.add(createBrowsableItem(TOP_TRACKS_ID, "Top Tracks", "Your most played tracks"))
-                    mediaItems.add(createBrowsableItem(TOP_ARTISTS_ID, "Top Artists", "Your favorite artists"))
+                    mediaItems.add(createBrowsableItem(TOP_ARTISTS_ID, "Artists", "Your followed artists"))
                     mediaItems.add(createBrowsableItem(SAVED_ALBUMS_ID, "Saved Albums", "Albums in your library"))
                 }
 
@@ -385,6 +390,19 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 else -> {
                     // Handle dynamic IDs
                     when {
+                        parentId.startsWith("section_letter_artist_") -> {
+                            // Show artists for this letter
+                            val letter = parentId.removePrefix("section_letter_artist_")
+                            loadArtistsForLetter(letter, mediaItems)
+                        }
+                        parentId.startsWith("section_letter_album_") -> {
+                            // Show albums for this letter
+                            val letter = parentId.removePrefix("section_letter_album_")
+                            loadAlbumsForLetter(letter, mediaItems)
+                        }
+                        parentId.startsWith("section_type_") -> {
+                            // Type headers don't navigate - return empty
+                        }
                         parentId.startsWith("artist_") -> {
                             val artistId = parentId.removePrefix("artist_")
                             loadArtistAlbums(artistId, mediaItems)
@@ -421,9 +439,42 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
     private suspend fun loadTopArtists(items: MutableList<MediaBrowserCompat.MediaItem>) {
         try {
-            val response = spotifyClient.api.getTopArtists(limit = 50)
-            if (response.isSuccessful) {
-                response.body()?.items?.forEach { artist ->
+            // Try to use cached artists first
+            val artists = libraryCache.getArtists()?.sortedBy { it.name }
+                ?: loadFollowedArtistsFromApi()?.sortedBy { it.name }
+                ?: emptyList()
+
+            // Group by first letter using group title hint (creates non-clickable headers)
+            for (artist in artists) {
+                val firstLetter = artist.name.firstOrNull()?.uppercaseChar() ?: '#'
+                val letter = if (firstLetter.isLetter()) firstLetter else '#'
+
+                items.add(createBrowsableItemWithGroup(
+                    "artist_${artist.id}",
+                    artist.name,
+                    "Artist",
+                    letter.toString(),
+                    artist.images?.firstOrNull()?.url
+                ))
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private suspend fun loadArtistsForLetter(letter: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
+        try {
+            val artists = libraryCache.getArtists()?.sortedBy { it.name }
+                ?: loadFollowedArtistsFromApi()?.sortedBy { it.name }
+                ?: emptyList()
+
+            val targetLetter = letter.firstOrNull()?.uppercaseChar() ?: '#'
+
+            for (artist in artists) {
+                val firstLetter = artist.name.firstOrNull()?.uppercaseChar() ?: '#'
+                val artistLetter = if (firstLetter.isLetter()) firstLetter else '#'
+
+                if (artistLetter == targetLetter) {
                     items.add(createBrowsableItem(
                         "artist_${artist.id}",
                         artist.name,
@@ -437,12 +488,17 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         }
     }
 
-    private suspend fun loadSavedAlbums(items: MutableList<MediaBrowserCompat.MediaItem>) {
+    private suspend fun loadAlbumsForLetter(letter: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
         try {
-            val response = spotifyClient.api.getSavedAlbums(limit = 50)
-            if (response.isSuccessful) {
-                response.body()?.items?.forEach { savedAlbum ->
-                    val album = savedAlbum.album
+            val allAlbums = loadAllSavedAlbumsFromApi()
+            val sortedAlbums = allAlbums.sortedBy { it.name }
+            val targetLetter = letter.firstOrNull()?.uppercaseChar() ?: '#'
+
+            for (album in sortedAlbums) {
+                val firstLetter = album.name.firstOrNull()?.uppercaseChar() ?: '#'
+                val albumLetter = if (firstLetter.isLetter()) firstLetter else '#'
+
+                if (albumLetter == targetLetter) {
                     items.add(createBrowsableItem(
                         "album_${album.id}",
                         album.name,
@@ -456,15 +512,136 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         }
     }
 
+    private suspend fun loadFollowedArtistsFromApi(): List<Artist>? {
+        val allArtists = mutableListOf<Artist>()
+        var after: String? = null
+
+        do {
+            val response = spotifyClient.api.getFollowedArtists(limit = 50, after = after)
+            if (response.isSuccessful) {
+                val artistsPage = response.body()?.artists
+                val artists = artistsPage?.items ?: emptyList()
+                allArtists.addAll(artists)
+                after = artistsPage?.cursors?.after
+            } else {
+                return if (allArtists.isNotEmpty()) allArtists else null
+            }
+        } while (after != null)
+
+        return allArtists
+    }
+
+    private suspend fun loadSavedAlbums(items: MutableList<MediaBrowserCompat.MediaItem>) {
+        try {
+            val allAlbums = loadAllSavedAlbumsFromApi()
+
+            // Sort by album name and group by first letter using group title hint
+            val sortedAlbums = allAlbums.sortedBy { it.name }
+
+            for (album in sortedAlbums) {
+                val firstLetter = album.name.firstOrNull()?.uppercaseChar() ?: '#'
+                val letter = if (firstLetter.isLetter()) firstLetter else '#'
+
+                items.add(createBrowsableItemWithGroup(
+                    "album_${album.id}",
+                    album.name,
+                    album.artists.joinToString(", ") { it.name },
+                    letter.toString(),
+                    album.images?.firstOrNull()?.url
+                ))
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private suspend fun loadAllSavedAlbumsFromApi(): List<Album> {
+        val allAlbums = mutableListOf<Album>()
+        var offset = 0
+        val limit = 50
+
+        do {
+            val response = spotifyClient.api.getSavedAlbums(limit = limit, offset = offset)
+            if (response.isSuccessful) {
+                val albums = response.body()?.items?.map { it.album } ?: emptyList()
+                allAlbums.addAll(albums)
+                offset += limit
+                if (albums.size < limit) break
+            } else {
+                break
+            }
+        } while (true)
+
+        return allAlbums
+    }
+
     private suspend fun loadArtistAlbums(artistId: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
         try {
             val response = spotifyClient.api.getArtistAlbums(artistId)
             if (response.isSuccessful) {
-                response.body()?.items?.forEach { album ->
-                    items.add(createBrowsableItem(
+                val albums = response.body()?.items ?: emptyList()
+
+                // Get saved album IDs for categorization
+                val savedAlbumIds = libraryCache.getSavedAlbumIds()
+
+                // Group albums into categories
+                val savedAlbums = mutableListOf<Album>()
+                val lps = mutableListOf<Album>()
+                val eps = mutableListOf<Album>()
+                val singles = mutableListOf<Album>()
+
+                for (album in albums) {
+                    when {
+                        savedAlbumIds.contains(album.id) -> savedAlbums.add(album)
+                        album.getAlbumCategory() == "single" -> singles.add(album)
+                        album.getAlbumCategory() == "ep" -> eps.add(album)
+                        else -> lps.add(album)
+                    }
+                }
+
+                // Sort each group by release date (newest first)
+                val sortByReleaseDate: (Album) -> String = { it.releaseDate ?: "" }
+
+                // Add Saved Albums section using group title hint
+                savedAlbums.sortedByDescending(sortByReleaseDate).forEach { album ->
+                    items.add(createBrowsableItemWithGroup(
                         "album_${album.id}",
                         album.name,
-                        album.artists.joinToString(", ") { it.name },
+                        album.releaseDate?.take(4) ?: "",
+                        "♥ SAVED",
+                        album.images?.firstOrNull()?.url
+                    ))
+                }
+
+                // Add LP's section
+                lps.sortedByDescending(sortByReleaseDate).forEach { album ->
+                    items.add(createBrowsableItemWithGroup(
+                        "album_${album.id}",
+                        album.name,
+                        album.releaseDate?.take(4) ?: "",
+                        "LP's",
+                        album.images?.firstOrNull()?.url
+                    ))
+                }
+
+                // Add EP's section
+                eps.sortedByDescending(sortByReleaseDate).forEach { album ->
+                    items.add(createBrowsableItemWithGroup(
+                        "album_${album.id}",
+                        album.name,
+                        album.releaseDate?.take(4) ?: "",
+                        "EP's",
+                        album.images?.firstOrNull()?.url
+                    ))
+                }
+
+                // Add Singles section
+                singles.sortedByDescending(sortByReleaseDate).forEach { album ->
+                    items.add(createBrowsableItemWithGroup(
+                        "album_${album.id}",
+                        album.name,
+                        album.releaseDate?.take(4) ?: "",
+                        "SINGLES",
                         album.images?.firstOrNull()?.url
                     ))
                 }
@@ -545,6 +722,30 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
             result.sendResult(mediaItems)
         }
+    }
+
+    private fun createBrowsableItemWithGroup(
+        id: String,
+        title: String,
+        subtitle: String,
+        groupTitle: String,
+        iconUri: String? = null
+    ): MediaBrowserCompat.MediaItem {
+        val extras = Bundle().apply {
+            putString("android.media.browse.CONTENT_STYLE_GROUP_TITLE_HINT", groupTitle)
+        }
+
+        val description = MediaDescriptionCompat.Builder()
+            .setMediaId(id)
+            .setTitle(title)
+            .setSubtitle(subtitle)
+            .setExtras(extras)
+            .apply {
+                iconUri?.let { setIconUri(android.net.Uri.parse(it)) }
+            }
+            .build()
+
+        return MediaBrowserCompat.MediaItem(description, MediaBrowserCompat.MediaItem.FLAG_BROWSABLE)
     }
 
     private fun createBrowsableItem(

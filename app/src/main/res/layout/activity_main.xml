@@ -1,29 +1,61 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
     android:background="@color/winamp_background">
 
-    <!-- Artists Header -->
-    <TextView
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="▶ ARTISTS"
-        android:textColor="@color/winamp_text"
-        android:textSize="14sp"
-        android:fontFamily="monospace"
-        android:textStyle="bold"
-        android:background="@color/winamp_section_header"
-        android:padding="8dp"/>
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
-    <!-- Single RecyclerView for Accordion-style Library -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/libraryRecyclerView"
+        <!-- Artists Header -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="▶ ARTISTS"
+            android:textColor="@color/winamp_text"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:background="@color/winamp_section_header"
+            android:padding="8dp"/>
+
+        <!-- Single RecyclerView for Accordion-style Library -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/libraryRecyclerView"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="@color/winamp_background"/>
+
+    </LinearLayout>
+
+    <!-- Loading Overlay -->
+    <LinearLayout
+        android:id="@+id/loadingContainer"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:background="@color/winamp_background"/>
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:background="@color/winamp_background"
+        android:visibility="gone">
 
-</LinearLayout>
+        <ProgressBar
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:indeterminate="true"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Loading library..."
+            android:textColor="@color/winamp_text"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:layout_marginTop="16dp"/>
+
+    </LinearLayout>
+
+</FrameLayout>
