@@ -390,18 +390,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 else -> {
                     // Handle dynamic IDs
                     when {
-                        parentId.startsWith("section_letter_artist_") -> {
-                            val letter = parentId.removePrefix("section_letter_artist_")
-                            loadArtistsForLetter(letter, mediaItems)
-                        }
-                        parentId.startsWith("section_letter_album_") -> {
-                            val letter = parentId.removePrefix("section_letter_album_")
-                            loadAlbumsForLetter(letter, mediaItems)
-                        }
-                        parentId.startsWith("section_type_") -> {
-                            // Album type sections within an artist - just return empty
-                            // The albums are already shown inline
-                        }
                         parentId.startsWith("artist_") -> {
                             val artistId = parentId.removePrefix("artist_")
                             loadArtistAlbums(artistId, mediaItems)
@@ -460,32 +448,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     "Artist",
                     artist.images?.firstOrNull()?.url
                 ))
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private suspend fun loadArtistsForLetter(letter: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
-        try {
-            val artists = libraryCache.getArtists()?.sortedBy { it.name }
-                ?: loadFollowedArtistsFromApi()?.sortedBy { it.name }
-                ?: emptyList()
-
-            val targetLetter = letter.firstOrNull()?.uppercaseChar() ?: '#'
-
-            for (artist in artists) {
-                val firstLetter = artist.name.firstOrNull()?.uppercaseChar() ?: '#'
-                val artistLetter = if (firstLetter.isLetter()) firstLetter else '#'
-
-                if (artistLetter == targetLetter) {
-                    items.add(createBrowsableItem(
-                        "artist_${artist.id}",
-                        artist.name,
-                        "Artist",
-                        artist.images?.firstOrNull()?.url
-                    ))
-                }
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -558,30 +520,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         } while (true)
 
         return allAlbums
-    }
-
-    private suspend fun loadAlbumsForLetter(letter: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
-        try {
-            val allAlbums = loadAllSavedAlbumsFromApi()
-            val sortedAlbums = allAlbums.sortedBy { it.name }
-            val targetLetter = letter.firstOrNull()?.uppercaseChar() ?: '#'
-
-            for (album in sortedAlbums) {
-                val firstLetter = album.name.firstOrNull()?.uppercaseChar() ?: '#'
-                val albumLetter = if (firstLetter.isLetter()) firstLetter else '#'
-
-                if (albumLetter == targetLetter) {
-                    items.add(createBrowsableItem(
-                        "album_${album.id}",
-                        album.name,
-                        album.artists.joinToString(", ") { it.name },
-                        album.images?.firstOrNull()?.url
-                    ))
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
     }
 
     private suspend fun loadArtistAlbums(artistId: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
@@ -744,20 +682,21 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     private fun createLetterSectionHeader(letter: String, type: String): MediaBrowserCompat.MediaItem {
         val description = MediaDescriptionCompat.Builder()
             .setMediaId("section_letter_${type}_$letter")
-            .setTitle("── $letter ──")
-            .setSubtitle("View all")
+            .setTitle(letter)
             .build()
 
-        return MediaBrowserCompat.MediaItem(description, MediaBrowserCompat.MediaItem.FLAG_BROWSABLE)
+        // Use 0 flags to make it non-clickable
+        return MediaBrowserCompat.MediaItem(description, 0)
     }
 
     private fun createTypeSectionHeader(title: String): MediaBrowserCompat.MediaItem {
         val description = MediaDescriptionCompat.Builder()
             .setMediaId("section_type_$title")
-            .setTitle("── $title ──")
+            .setTitle(title)
             .build()
 
-        return MediaBrowserCompat.MediaItem(description, MediaBrowserCompat.MediaItem.FLAG_BROWSABLE)
+        // Use 0 flags to make it non-clickable
+        return MediaBrowserCompat.MediaItem(description, 0)
     }
 
     private fun createBrowsableItem(
