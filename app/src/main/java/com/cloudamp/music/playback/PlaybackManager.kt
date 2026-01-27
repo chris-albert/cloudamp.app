@@ -110,7 +110,13 @@ class PlaybackManager private constructor(
                 try {
                     // Check if it's a Spotify URI
                     if (mediaId.startsWith("spotify:track:")) {
-                        playTrack(mediaId)
+                        // Check if we have album context to queue the whole album
+                        val albumId = extras?.getString("album_id")
+                        if (albumId != null) {
+                            playAlbumFromTrack(albumId, mediaId)
+                        } else {
+                            playTrack(mediaId)
+                        }
                         service?.updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
                     }
                 } catch (e: Exception) {
@@ -176,6 +182,39 @@ class PlaybackManager private constructor(
         currentQueue.clear()
         currentQueue.addAll(tracks)
         currentIndex = 0
+    }
+
+    private suspend fun playAlbumFromTrack(albumId: String, trackUri: String) {
+        try {
+            // Fetch album details and tracks
+            val albumResponse = spotifyClient.api.getAlbum(albumId)
+            val album = albumResponse.body() ?: return playTrack(trackUri)
+
+            val tracksResponse = spotifyClient.api.getAlbumTracks(albumId)
+            val albumTracks = tracksResponse.body()?.items ?: return playTrack(trackUri)
+
+            // Convert to Track objects with album info
+            val tracks = albumTracks.map { track ->
+                Track(
+                    id = track.id,
+                    name = track.name,
+                    uri = track.uri,
+                    artists = track.artists,
+                    album = album,
+                    durationMs = track.durationMs
+                )
+            }
+
+            // Find the position of the clicked track
+            val startIndex = tracks.indexOfFirst { it.uri == trackUri }.takeIf { it >= 0 } ?: 0
+
+            // Play all tracks starting from the selected one
+            playTracks(tracks, startIndex)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // Fallback to single track playback
+            playTrack(trackUri)
+        }
     }
 
     fun playTrack(trackUri: String) {
