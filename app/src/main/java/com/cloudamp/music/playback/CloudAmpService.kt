@@ -390,19 +390,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 else -> {
                     // Handle dynamic IDs
                     when {
-                        parentId.startsWith("section_letter_artist_") -> {
-                            // Show artists for this letter
-                            val letter = parentId.removePrefix("section_letter_artist_")
-                            loadArtistsForLetter(letter, mediaItems)
-                        }
-                        parentId.startsWith("section_letter_album_") -> {
-                            // Show albums for this letter
-                            val letter = parentId.removePrefix("section_letter_album_")
-                            loadAlbumsForLetter(letter, mediaItems)
-                        }
-                        parentId.startsWith("section_type_") -> {
-                            // Type headers don't navigate - return empty
-                        }
                         parentId.startsWith("artist_") -> {
                             val artistId = parentId.removePrefix("artist_")
                             loadArtistAlbums(artistId, mediaItems)
@@ -456,56 +443,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     letter.toString(),
                     artist.images?.firstOrNull()?.url
                 ))
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private suspend fun loadArtistsForLetter(letter: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
-        try {
-            val artists = libraryCache.getArtists()?.sortedBy { it.name }
-                ?: loadFollowedArtistsFromApi()?.sortedBy { it.name }
-                ?: emptyList()
-
-            val targetLetter = letter.firstOrNull()?.uppercaseChar() ?: '#'
-
-            for (artist in artists) {
-                val firstLetter = artist.name.firstOrNull()?.uppercaseChar() ?: '#'
-                val artistLetter = if (firstLetter.isLetter()) firstLetter else '#'
-
-                if (artistLetter == targetLetter) {
-                    items.add(createBrowsableItem(
-                        "artist_${artist.id}",
-                        artist.name,
-                        "Artist",
-                        artist.images?.firstOrNull()?.url
-                    ))
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private suspend fun loadAlbumsForLetter(letter: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
-        try {
-            val allAlbums = loadAllSavedAlbumsFromApi()
-            val sortedAlbums = allAlbums.sortedBy { it.name }
-            val targetLetter = letter.firstOrNull()?.uppercaseChar() ?: '#'
-
-            for (album in sortedAlbums) {
-                val firstLetter = album.name.firstOrNull()?.uppercaseChar() ?: '#'
-                val albumLetter = if (firstLetter.isLetter()) firstLetter else '#'
-
-                if (albumLetter == targetLetter) {
-                    items.add(createBrowsableItem(
-                        "album_${album.id}",
-                        album.name,
-                        album.artists.joinToString(", ") { it.name },
-                        album.images?.firstOrNull()?.url
-                    ))
-                }
             }
         } catch (e: Exception) {
             e.printStackTrace()
