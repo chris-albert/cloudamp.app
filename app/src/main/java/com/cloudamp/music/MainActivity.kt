@@ -122,7 +122,7 @@ class MainActivity : AppCompatActivity() {
         showLoading(true)
         scope.launch {
             try {
-                // Load saved albums in background (don't block artists loading)
+                // Load saved albums and all top artists in parallel
                 val savedAlbumsDeferred = async(SupervisorJob()) {
                     try {
                         loadSavedAlbumIds()
@@ -131,11 +131,11 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                // Load top artists
-                val artistsResponse = spotifyClient.api.getMyTopArtists(limit = 50)
+                // Load all top artists (paginated)
+                val allArtists = loadAllTopArtists()
 
-                if (artistsResponse.isSuccessful) {
-                    val artists = artistsResponse.body()?.items?.sortedBy { it.name } ?: emptyList()
+                if (allArtists != null) {
+                    val artists = allArtists.sortedBy { it.name }
 
                     // Set saved album IDs for categorization (wait for it now)
                     val savedAlbumIds = savedAlbumsDeferred.await()
@@ -155,8 +155,6 @@ class MainActivity : AppCompatActivity() {
                             Toast.LENGTH_LONG
                         ).show()
                     }
-                } else {
-                    handleApiError(artistsResponse.code())
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -170,6 +168,40 @@ class MainActivity : AppCompatActivity() {
                 showLoading(false)
             }
         }
+    }
+
+    private suspend fun loadAllTopArtists(): List<Artist>? {
+        val allArtists = mutableListOf<Artist>()
+        val timeRanges = listOf("short_term", "medium_term", "long_term")
+        val seenIds = mutableSetOf<String>()
+
+        for (timeRange in timeRanges) {
+            var offset = 0
+            val limit = 50
+            do {
+                val response = spotifyClient.api.getMyTopArtists(
+                    limit = limit,
+                    offset = offset,
+                    timeRange = timeRange
+                )
+                if (response.isSuccessful) {
+                    val artists = response.body()?.items ?: emptyList()
+                    for (artist in artists) {
+                        if (artist.id !in seenIds) {
+                            seenIds.add(artist.id)
+                            allArtists.add(artist)
+                        }
+                    }
+                    offset += limit
+                    if (artists.size < limit) break
+                } else {
+                    handleApiError(response.code())
+                    return if (allArtists.isNotEmpty()) allArtists else null
+                }
+            } while (true)
+        }
+
+        return allArtists
     }
 
     private suspend fun loadSavedAlbumIds(): Set<String> {
