@@ -444,21 +444,16 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 ?: loadFollowedArtistsFromApi()?.sortedBy { it.name }
                 ?: emptyList()
 
-            // Group by first letter with section headers
-            var currentLetter: Char? = null
+            // Group by first letter using group title hint (creates non-clickable headers)
             for (artist in artists) {
                 val firstLetter = artist.name.firstOrNull()?.uppercaseChar() ?: '#'
                 val letter = if (firstLetter.isLetter()) firstLetter else '#'
 
-                if (letter != currentLetter) {
-                    currentLetter = letter
-                    items.add(createLetterSectionHeader(letter.toString(), "artist"))
-                }
-
-                items.add(createBrowsableItem(
+                items.add(createBrowsableItemWithGroup(
                     "artist_${artist.id}",
                     artist.name,
                     "Artist",
+                    letter.toString(),
                     artist.images?.firstOrNull()?.url
                 ))
             }
@@ -540,23 +535,18 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         try {
             val allAlbums = loadAllSavedAlbumsFromApi()
 
-            // Sort by album name and group by first letter
+            // Sort by album name and group by first letter using group title hint
             val sortedAlbums = allAlbums.sortedBy { it.name }
-            var currentLetter: Char? = null
 
             for (album in sortedAlbums) {
                 val firstLetter = album.name.firstOrNull()?.uppercaseChar() ?: '#'
                 val letter = if (firstLetter.isLetter()) firstLetter else '#'
 
-                if (letter != currentLetter) {
-                    currentLetter = letter
-                    items.add(createLetterSectionHeader(letter.toString(), "album"))
-                }
-
-                items.add(createBrowsableItem(
+                items.add(createBrowsableItemWithGroup(
                     "album_${album.id}",
                     album.name,
                     album.artists.joinToString(", ") { it.name },
+                    letter.toString(),
                     album.images?.firstOrNull()?.url
                 ))
             }
@@ -612,56 +602,48 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 // Sort each group by release date (newest first)
                 val sortByReleaseDate: (Album) -> String = { it.releaseDate ?: "" }
 
-                // Add Saved Albums section
-                if (savedAlbums.isNotEmpty()) {
-                    items.add(createTypeSectionHeader("♥ SAVED"))
-                    savedAlbums.sortedByDescending(sortByReleaseDate).forEach { album ->
-                        items.add(createBrowsableItem(
-                            "album_${album.id}",
-                            album.name,
-                            album.releaseDate?.take(4) ?: "",
-                            album.images?.firstOrNull()?.url
-                        ))
-                    }
+                // Add Saved Albums section using group title hint
+                savedAlbums.sortedByDescending(sortByReleaseDate).forEach { album ->
+                    items.add(createBrowsableItemWithGroup(
+                        "album_${album.id}",
+                        album.name,
+                        album.releaseDate?.take(4) ?: "",
+                        "♥ SAVED",
+                        album.images?.firstOrNull()?.url
+                    ))
                 }
 
                 // Add LP's section
-                if (lps.isNotEmpty()) {
-                    items.add(createTypeSectionHeader("LP's"))
-                    lps.sortedByDescending(sortByReleaseDate).forEach { album ->
-                        items.add(createBrowsableItem(
-                            "album_${album.id}",
-                            album.name,
-                            album.releaseDate?.take(4) ?: "",
-                            album.images?.firstOrNull()?.url
-                        ))
-                    }
+                lps.sortedByDescending(sortByReleaseDate).forEach { album ->
+                    items.add(createBrowsableItemWithGroup(
+                        "album_${album.id}",
+                        album.name,
+                        album.releaseDate?.take(4) ?: "",
+                        "LP's",
+                        album.images?.firstOrNull()?.url
+                    ))
                 }
 
                 // Add EP's section
-                if (eps.isNotEmpty()) {
-                    items.add(createTypeSectionHeader("EP's"))
-                    eps.sortedByDescending(sortByReleaseDate).forEach { album ->
-                        items.add(createBrowsableItem(
-                            "album_${album.id}",
-                            album.name,
-                            album.releaseDate?.take(4) ?: "",
-                            album.images?.firstOrNull()?.url
-                        ))
-                    }
+                eps.sortedByDescending(sortByReleaseDate).forEach { album ->
+                    items.add(createBrowsableItemWithGroup(
+                        "album_${album.id}",
+                        album.name,
+                        album.releaseDate?.take(4) ?: "",
+                        "EP's",
+                        album.images?.firstOrNull()?.url
+                    ))
                 }
 
                 // Add Singles section
-                if (singles.isNotEmpty()) {
-                    items.add(createTypeSectionHeader("SINGLES"))
-                    singles.sortedByDescending(sortByReleaseDate).forEach { album ->
-                        items.add(createBrowsableItem(
-                            "album_${album.id}",
-                            album.name,
-                            album.releaseDate?.take(4) ?: "",
-                            album.images?.firstOrNull()?.url
-                        ))
-                    }
+                singles.sortedByDescending(sortByReleaseDate).forEach { album ->
+                    items.add(createBrowsableItemWithGroup(
+                        "album_${album.id}",
+                        album.name,
+                        album.releaseDate?.take(4) ?: "",
+                        "SINGLES",
+                        album.images?.firstOrNull()?.url
+                    ))
                 }
             }
         } catch (e: Exception) {
@@ -742,24 +724,28 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         }
     }
 
-    private fun createLetterSectionHeader(letter: String, type: String): MediaBrowserCompat.MediaItem {
-        val description = MediaDescriptionCompat.Builder()
-            .setMediaId("section_letter_${type}_$letter")
-            .setTitle(letter)
-            .build()
+    private fun createBrowsableItemWithGroup(
+        id: String,
+        title: String,
+        subtitle: String,
+        groupTitle: String,
+        iconUri: String? = null
+    ): MediaBrowserCompat.MediaItem {
+        val extras = Bundle().apply {
+            putString("android.media.browse.CONTENT_STYLE_GROUP_TITLE_HINT", groupTitle)
+        }
 
-        // Use 0 flags to make it non-clickable
-        return MediaBrowserCompat.MediaItem(description, 0)
-    }
-
-    private fun createTypeSectionHeader(title: String): MediaBrowserCompat.MediaItem {
         val description = MediaDescriptionCompat.Builder()
-            .setMediaId("section_type_$title")
+            .setMediaId(id)
             .setTitle(title)
+            .setSubtitle(subtitle)
+            .setExtras(extras)
+            .apply {
+                iconUri?.let { setIconUri(android.net.Uri.parse(it)) }
+            }
             .build()
 
-        // Use 0 flags to make it non-clickable
-        return MediaBrowserCompat.MediaItem(description, 0)
+        return MediaBrowserCompat.MediaItem(description, MediaBrowserCompat.MediaItem.FLAG_BROWSABLE)
     }
 
     private fun createBrowsableItem(
