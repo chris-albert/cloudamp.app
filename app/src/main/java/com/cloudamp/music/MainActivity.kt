@@ -99,12 +99,13 @@ class MainActivity : AppCompatActivity() {
                 if (artistsResponse.isSuccessful) {
                     val artists = artistsResponse.body()?.items?.sortedBy { it.name } ?: emptyList()
                     Log.d(TAG, "loadMyLibrary: Got ${artists.size} artists")
+                    Toast.makeText(this@MainActivity, "DEBUG: Got ${artists.size} artists", Toast.LENGTH_SHORT).show()
 
                     // Set saved album IDs for categorization (wait for it now)
                     val savedAlbumIds = savedAlbumsDeferred.await()
                     Log.d(TAG, "loadMyLibrary: Got ${savedAlbumIds.size} saved album IDs")
-                    libraryAdapter.setSavedAlbumIds(savedAlbumIds)
 
+                    libraryAdapter.setSavedAlbumIds(savedAlbumIds)
                     libraryAdapter.setArtists(artists)
                     hasLoadedContent = true
 
@@ -117,11 +118,13 @@ class MainActivity : AppCompatActivity() {
                     }
                 } else {
                     Log.e(TAG, "loadMyLibrary: API error code=${artistsResponse.code()}")
+                    Toast.makeText(this@MainActivity, "DEBUG: API error ${artistsResponse.code()}", Toast.LENGTH_LONG).show()
                     handleApiError(artistsResponse.code())
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "loadMyLibrary: Exception", e)
                 e.printStackTrace()
+                Toast.makeText(this@MainActivity, "DEBUG: Exception ${e.message}", Toast.LENGTH_LONG).show()
                 val errorMsg = when {
                     e.message?.contains("401") == true -> "Token expired. Please re-login in Settings."
                     e.message?.contains("403") == true -> "Insufficient permissions. Please re-login in Settings."
