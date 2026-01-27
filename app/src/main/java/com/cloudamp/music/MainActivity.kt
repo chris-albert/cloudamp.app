@@ -11,6 +11,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.cloudamp.music.api.SpotifyApiClient
+import com.cloudamp.music.cache.LibraryCache
 import com.cloudamp.music.models.Album
 import com.cloudamp.music.models.Artist
 import com.cloudamp.music.models.Track
@@ -23,6 +24,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var spotifyClient: SpotifyApiClient
     private lateinit var playbackManager: PlaybackManager
+    private lateinit var libraryCache: LibraryCache
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private lateinit var libraryRecyclerView: RecyclerView
@@ -37,12 +39,19 @@ class MainActivity : AppCompatActivity() {
 
         spotifyClient = SpotifyApiClient.getInstance(this)
         playbackManager = PlaybackManager.getInstance(this)
+        libraryCache = LibraryCache.getInstance(this)
 
         setupRecyclerView()
     }
 
     override fun onResume() {
         super.onResume()
+
+        // Register reload callback
+        SettingsActivity.onLibraryReloadRequested = {
+            reloadLibrary()
+        }
+
         checkSpotifyToken()
     }
 
@@ -85,6 +94,31 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadMyLibrary() {
+        // Try to load from cache first
+        if (libraryCache.hasCache()) {
+            val cachedArtists = libraryCache.getArtists()
+            val cachedSavedAlbumIds = libraryCache.getSavedAlbumIds()
+
+            if (cachedArtists != null && cachedArtists.isNotEmpty()) {
+                libraryAdapter.setSavedAlbumIds(cachedSavedAlbumIds)
+                libraryAdapter.setArtists(cachedArtists)
+                hasLoadedContent = true
+                return
+            }
+        }
+
+        // No cache, load from API
+        loadLibraryFromApi()
+    }
+
+    fun reloadLibrary() {
+        libraryCache.clearCache()
+        hasLoadedContent = false
+        libraryAdapter.setArtists(emptyList())
+        loadLibraryFromApi()
+    }
+
+    private fun loadLibraryFromApi() {
         showLoading(true)
         scope.launch {
             try {
@@ -105,6 +139,10 @@ class MainActivity : AppCompatActivity() {
 
                     // Set saved album IDs for categorization (wait for it now)
                     val savedAlbumIds = savedAlbumsDeferred.await()
+
+                    // Save to cache
+                    libraryCache.saveArtists(artists)
+                    libraryCache.saveSavedAlbumIds(savedAlbumIds)
 
                     libraryAdapter.setSavedAlbumIds(savedAlbumIds)
                     libraryAdapter.setArtists(artists)

@@ -12,12 +12,14 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.auth.SpotifyAuthManager
+import com.cloudamp.music.cache.LibraryCache
 import kotlinx.coroutines.*
 
 class SettingsActivity : AppCompatActivity() {
 
     private lateinit var spotifyClient: SpotifyApiClient
     private lateinit var authManager: SpotifyAuthManager
+    private lateinit var libraryCache: LibraryCache
 
     // OAuth fields
     private lateinit var clientIdEditText: EditText
@@ -33,7 +35,15 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var validationProgress: ProgressBar
     private lateinit var validationStatus: TextView
 
+    // Library fields
+    private lateinit var lastLoadedText: TextView
+    private lateinit var reloadLibraryButton: Button
+
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+    companion object {
+        var onLibraryReloadRequested: (() -> Unit)? = null
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,6 +54,7 @@ class SettingsActivity : AppCompatActivity() {
 
         spotifyClient = SpotifyApiClient.getInstance(this)
         authManager = SpotifyAuthManager(this)
+        libraryCache = LibraryCache.getInstance(this)
 
         // OAuth views
         clientIdEditText = findViewById(R.id.clientIdEditText)
@@ -113,6 +124,27 @@ class SettingsActivity : AppCompatActivity() {
             loginWithSpotifyButton.isEnabled = false
             updateValidationStatus("", false)
             Toast.makeText(this, "All credentials cleared", Toast.LENGTH_SHORT).show()
+        }
+
+        // Library views
+        lastLoadedText = findViewById(R.id.lastLoadedText)
+        reloadLibraryButton = findViewById(R.id.reloadLibraryButton)
+
+        updateLastLoadedDisplay()
+
+        reloadLibraryButton.setOnClickListener {
+            onLibraryReloadRequested?.invoke()
+            Toast.makeText(this, "Library will reload", Toast.LENGTH_SHORT).show()
+            finish()
+        }
+    }
+
+    private fun updateLastLoadedDisplay() {
+        val lastLoaded = libraryCache.getLastLoadedFormatted()
+        lastLoadedText.text = if (lastLoaded != null) {
+            "Last loaded: $lastLoaded"
+        } else {
+            "Last loaded: Never"
         }
     }
 
