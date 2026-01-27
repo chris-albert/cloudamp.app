@@ -2,6 +2,7 @@ package com.cloudamp.music
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.widget.Toast
@@ -77,19 +78,32 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadMyLibrary() {
+        Log.d(TAG, "loadMyLibrary: Starting to load library")
         scope.launch {
             try {
-                // Load saved albums and top artists in parallel
-                val savedAlbumsDeferred = async { loadSavedAlbumIds() }
-                val artistsDeferred = async { spotifyClient.api.getMyTopArtists(limit = 50) }
+                // Load saved albums in background (don't block artists loading)
+                val savedAlbumsDeferred = async(SupervisorJob()) {
+                    try {
+                        loadSavedAlbumIds()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "loadMyLibrary: Failed to load saved albums", e)
+                        emptySet()
+                    }
+                }
 
-                // Set saved album IDs for categorization
-                val savedAlbumIds = savedAlbumsDeferred.await()
-                libraryAdapter.setSavedAlbumIds(savedAlbumIds)
+                // Load top artists
+                Log.d(TAG, "loadMyLibrary: Fetching top artists")
+                val artistsResponse = spotifyClient.api.getMyTopArtists(limit = 50)
+                Log.d(TAG, "loadMyLibrary: Artists response successful=${artistsResponse.isSuccessful}")
 
-                val artistsResponse = artistsDeferred.await()
                 if (artistsResponse.isSuccessful) {
                     val artists = artistsResponse.body()?.items?.sortedBy { it.name } ?: emptyList()
+                    Log.d(TAG, "loadMyLibrary: Got ${artists.size} artists")
+
+                    // Set saved album IDs for categorization (wait for it now)
+                    val savedAlbumIds = savedAlbumsDeferred.await()
+                    Log.d(TAG, "loadMyLibrary: Got ${savedAlbumIds.size} saved album IDs")
+                    libraryAdapter.setSavedAlbumIds(savedAlbumIds)
 
                     libraryAdapter.setArtists(artists)
                     hasLoadedContent = true
@@ -102,9 +116,11 @@ class MainActivity : AppCompatActivity() {
                         ).show()
                     }
                 } else {
+                    Log.e(TAG, "loadMyLibrary: API error code=${artistsResponse.code()}")
                     handleApiError(artistsResponse.code())
                 }
             } catch (e: Exception) {
+                Log.e(TAG, "loadMyLibrary: Exception", e)
                 e.printStackTrace()
                 val errorMsg = when {
                     e.message?.contains("401") == true -> "Token expired. Please re-login in Settings."
@@ -116,26 +132,36 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    companion object {
+        private const val TAG = "MainActivity"
+    }
+
     private suspend fun loadSavedAlbumIds(): Set<String> {
+        Log.d(TAG, "loadSavedAlbumIds: Starting")
         val savedIds = mutableSetOf<String>()
         try {
             var offset = 0
             val limit = 50
             do {
+                Log.d(TAG, "loadSavedAlbumIds: Fetching offset=$offset")
                 val response = spotifyClient.api.getMySavedAlbums(limit = limit, offset = offset)
                 if (response.isSuccessful) {
                     val albums = response.body()?.items ?: emptyList()
+                    Log.d(TAG, "loadSavedAlbumIds: Got ${albums.size} albums at offset=$offset")
                     savedIds.addAll(albums.map { it.album.id })
                     offset += limit
                     // Continue if there are more albums
                     if (albums.size < limit) break
                 } else {
+                    Log.e(TAG, "loadSavedAlbumIds: API error code=${response.code()}")
                     break
                 }
             } while (true)
         } catch (e: Exception) {
+            Log.e(TAG, "loadSavedAlbumIds: Exception", e)
             e.printStackTrace()
         }
+        Log.d(TAG, "loadSavedAlbumIds: Returning ${savedIds.size} IDs")
         return savedIds
     }
 
