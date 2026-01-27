@@ -171,34 +171,30 @@ class MainActivity : AppCompatActivity() {
     }
 
     private suspend fun loadAllTopArtists(): List<Artist>? {
+        // Spotify caps at 50 artists per time range, so we query all three
+        // to maximize coverage (recent favorites + all-time favorites)
         val allArtists = mutableListOf<Artist>()
-        val timeRanges = listOf("short_term", "medium_term", "long_term")
+        val timeRanges = listOf("long_term", "medium_term", "short_term")
         val seenIds = mutableSetOf<String>()
 
         for (timeRange in timeRanges) {
-            var offset = 0
-            val limit = 50
-            do {
-                val response = spotifyClient.api.getMyTopArtists(
-                    limit = limit,
-                    offset = offset,
-                    timeRange = timeRange
-                )
-                if (response.isSuccessful) {
-                    val artists = response.body()?.items ?: emptyList()
-                    for (artist in artists) {
-                        if (artist.id !in seenIds) {
-                            seenIds.add(artist.id)
-                            allArtists.add(artist)
-                        }
+            val response = spotifyClient.api.getMyTopArtists(
+                limit = 50,
+                offset = 0,
+                timeRange = timeRange
+            )
+            if (response.isSuccessful) {
+                val artists = response.body()?.items ?: emptyList()
+                for (artist in artists) {
+                    if (artist.id !in seenIds) {
+                        seenIds.add(artist.id)
+                        allArtists.add(artist)
                     }
-                    offset += limit
-                    if (artists.size < limit) break
-                } else {
-                    handleApiError(response.code())
-                    return if (allArtists.isNotEmpty()) allArtists else null
                 }
-            } while (true)
+            } else {
+                handleApiError(response.code())
+                return if (allArtists.isNotEmpty()) allArtists else null
+            }
         }
 
         return allArtists
