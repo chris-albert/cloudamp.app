@@ -176,6 +176,21 @@ class PlaybackManager private constructor(
                 "next" -> onSkipToNext()
             }
         }
+
+        override fun onSkipToQueueItem(id: Long) {
+            scope.launch {
+                try {
+                    val index = id.toInt()
+                    if (index in currentQueue.indices) {
+                        currentIndex = index
+                        playTrackAtIndex(index)
+                        service?.updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
     }
 
     fun setQueue(tracks: List<Track>) {
@@ -266,6 +281,9 @@ class PlaybackManager private constructor(
             try {
                 setQueue(tracks)
                 currentIndex = startIndex
+
+                // Update MediaSession queue for Android Auto
+                service?.updateQueue(tracks, currentIndex)
 
                 val trackUris = tracks.map { it.uri }
                 val request = PlayRequest(

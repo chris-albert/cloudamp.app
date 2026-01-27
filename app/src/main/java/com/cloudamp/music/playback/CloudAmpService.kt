@@ -13,6 +13,7 @@ import android.support.v4.media.MediaBrowserCompat
 import android.support.v4.media.MediaDescriptionCompat
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
+import android.support.v4.media.session.MediaSessionCompat.QueueItem
 import android.support.v4.media.session.PlaybackStateCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -128,7 +129,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 PlaybackStateCompat.ACTION_STOP or
                 PlaybackStateCompat.ACTION_SEEK_TO or
                 PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID or
-                PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH
+                PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH or
+                PlaybackStateCompat.ACTION_SKIP_TO_QUEUE_ITEM
     }
 
     fun updateNotification(isPlaying: Boolean) {
@@ -283,6 +285,11 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         val queue = playbackManager.getCurrentQueue()
         val currentIndex = playbackManager.getCurrentIndex()
 
+        // Set active queue item ID for Android Auto to highlight current track
+        if (queue.isNotEmpty() && currentIndex in queue.indices) {
+            stateBuilder.setActiveQueueItemId(currentIndex.toLong())
+        }
+
         if (currentIndex > 0) {
             stateBuilder.addCustomAction(
                 PlaybackStateCompat.CustomAction.Builder(
@@ -308,6 +315,24 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         // Update notification
         val isPlaying = state == PlaybackStateCompat.STATE_PLAYING
         updateNotification(isPlaying)
+    }
+
+    fun updateQueue(tracks: List<Track>, currentIndex: Int) {
+        val queueItems = tracks.mapIndexed { index, track ->
+            val description = MediaDescriptionCompat.Builder()
+                .setMediaId(track.uri)
+                .setTitle(track.name)
+                .setSubtitle(track.artists.joinToString(", ") { it.name })
+                .apply {
+                    track.album?.images?.firstOrNull()?.url?.let { url ->
+                        setIconUri(android.net.Uri.parse(url))
+                    }
+                }
+                .build()
+            QueueItem(description, index.toLong())
+        }
+        mediaSession.setQueue(queueItems)
+        mediaSession.setQueueTitle("Now Playing")
     }
 
     private fun startPlaybackPolling() {
