@@ -110,7 +110,20 @@ class ExpandableLibraryAdapter(
 
     fun setArtists(artists: List<Artist>) {
         items.clear()
-        items.addAll(artists.map { LibraryItem.ArtistItem(it) })
+
+        // Group artists by first letter and add section headers
+        var currentLetter: Char? = null
+        for (artist in artists) {
+            val firstLetter = artist.name.firstOrNull()?.uppercaseChar() ?: '#'
+            val letter = if (firstLetter.isLetter()) firstLetter else '#'
+
+            if (letter != currentLetter) {
+                currentLetter = letter
+                items.add(LibraryItem.HeaderItem(letter.toString()))
+            }
+            items.add(LibraryItem.ArtistItem(artist))
+        }
+
         notifyDataSetChanged()
     }
 
