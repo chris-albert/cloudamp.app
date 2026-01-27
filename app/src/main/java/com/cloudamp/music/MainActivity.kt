@@ -131,8 +131,8 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                // Load all top artists (paginated)
-                val allArtists = loadAllTopArtists()
+                // Load all followed artists (paginated)
+                val allArtists = loadAllFollowedArtists()
 
                 if (allArtists != null) {
                     val artists = allArtists.sortedBy { it.name }
@@ -170,32 +170,25 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private suspend fun loadAllTopArtists(): List<Artist>? {
-        // Spotify caps at 50 artists per time range, so we query all three
-        // to maximize coverage (recent favorites + all-time favorites)
+    private suspend fun loadAllFollowedArtists(): List<Artist>? {
         val allArtists = mutableListOf<Artist>()
-        val timeRanges = listOf("long_term", "medium_term", "short_term")
-        val seenIds = mutableSetOf<String>()
+        var after: String? = null
 
-        for (timeRange in timeRanges) {
-            val response = spotifyClient.api.getMyTopArtists(
+        do {
+            val response = spotifyClient.api.getFollowedArtists(
                 limit = 50,
-                offset = 0,
-                timeRange = timeRange
+                after = after
             )
             if (response.isSuccessful) {
-                val artists = response.body()?.items ?: emptyList()
-                for (artist in artists) {
-                    if (artist.id !in seenIds) {
-                        seenIds.add(artist.id)
-                        allArtists.add(artist)
-                    }
-                }
+                val artistsPage = response.body()?.artists
+                val artists = artistsPage?.items ?: emptyList()
+                allArtists.addAll(artists)
+                after = artistsPage?.cursors?.after
             } else {
                 handleApiError(response.code())
                 return if (allArtists.isNotEmpty()) allArtists else null
             }
-        }
+        } while (after != null)
 
         return allArtists
     }

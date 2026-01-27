@@ -39,6 +39,13 @@ interface SpotifyApiService {
         @Query("time_range") timeRange: String = "medium_term"
     ): Response<Paging<Artist>>
 
+    @GET("v1/me/following")
+    suspend fun getFollowedArtists(
+        @Query("type") type: String = "artist",
+        @Query("limit") limit: Int = 50,
+        @Query("after") after: String? = null
+    ): Response<FollowedArtistsResponse>
+
     @GET("v1/me/top/tracks")
     suspend fun getTopTracks(
         @Query("limit") limit: Int = 50,
@@ -190,4 +197,20 @@ data class PlaylistTrack(
 data class PlaylistTracksResponse(
     val items: List<PlaylistTrack>,
     val total: Int
+)
+
+data class FollowedArtistsResponse(
+    val artists: CursorPaging<Artist>
+)
+
+data class CursorPaging<T>(
+    val items: List<T>,
+    val total: Int,
+    val limit: Int,
+    val cursors: Cursors?
+)
+
+data class Cursors(
+    val after: String?,
+    val before: String?
 )
