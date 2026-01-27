@@ -32,6 +32,26 @@ interface SpotifyApiService {
         @Query("time_range") timeRange: String = "medium_term"
     ): Response<Paging<Artist>>
 
+    @GET("v1/me/top/artists")
+    suspend fun getTopArtists(
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0,
+        @Query("time_range") timeRange: String = "medium_term"
+    ): Response<Paging<Artist>>
+
+    @GET("v1/me/top/tracks")
+    suspend fun getTopTracks(
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0,
+        @Query("time_range") timeRange: String = "medium_term"
+    ): Response<Paging<Track>>
+
+    @GET("v1/me/albums")
+    suspend fun getSavedAlbums(
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0
+    ): Response<SavedAlbumsResponse>
+
     @GET("v1/playlists/{playlist_id}/tracks")
     suspend fun getPlaylistTracks(
         @Path("playlist_id") playlistId: String,

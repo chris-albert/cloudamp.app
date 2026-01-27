@@ -183,8 +183,8 @@ class NowPlayingActivity : AppCompatActivity() {
                         currentTrack = track
                         updateTrackInfo(track)
                         isPlaying = playback.isPlaying
-                        currentPosition = playback.progressMs ?: 0L
-                        totalDuration = track.durationMs
+                        currentPosition = playback.progressMs.toLong()
+                        totalDuration = track.durationMs.toLong()
 
                         playPauseButton.setImageResource(
                             if (isPlaying) R.drawable.ic_pause
@@ -201,9 +201,9 @@ class NowPlayingActivity : AppCompatActivity() {
     private fun updateTrackInfo(track: Track) {
         trackTitleTextView.text = track.name
         trackArtistTextView.text = track.artists.joinToString(", ") { it.name }
-        trackAlbumTextView.text = track.album.name
+        trackAlbumTextView.text = track.album?.name ?: ""
 
-        totalDuration = track.durationMs
+        totalDuration = track.durationMs.toLong()
         totalTimeTextView.text = formatTime(totalDuration)
         seekBar.max = totalDuration.toInt()
     }

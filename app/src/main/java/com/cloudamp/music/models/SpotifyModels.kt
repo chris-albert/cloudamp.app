@@ -26,9 +26,9 @@ data class Track(
     val id: String,
     val name: String,
     val artists: List<Artist>,
-    val album: Album,
+    val album: Album? = null,
     val uri: String,
-    @SerializedName("duration_ms") val durationMs: Long,
+    @SerializedName("duration_ms") val durationMs: Int = 0,
     @SerializedName("track_number") val trackNumber: Int? = null
 )
 
@@ -38,7 +38,7 @@ data class SimplifiedTrack(
     val name: String,
     val artists: List<Artist>,
     val uri: String,
-    @SerializedName("duration_ms") val durationMs: Long,
+    @SerializedName("duration_ms") val durationMs: Int = 0,
     @SerializedName("track_number") val trackNumber: Int? = null
 )
 
@@ -84,7 +84,7 @@ data class AlbumTracksResponse(
 data class CurrentPlayback(
     @SerializedName("is_playing") val isPlaying: Boolean,
     val item: Track?,
-    @SerializedName("progress_ms") val progressMs: Long?
+    @SerializedName("progress_ms") val progressMs: Int = 0
 )
 
 // Playback State for local tracking
