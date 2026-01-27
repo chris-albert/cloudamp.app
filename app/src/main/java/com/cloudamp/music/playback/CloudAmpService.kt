@@ -666,7 +666,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         track.uri,
                         track.name,
                         track.artists.joinToString(", ") { it.name },
-                        albumArtUrl
+                        albumArtUrl,
+                        albumId
                     ))
                 }
             }
@@ -770,12 +771,18 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         id: String,
         title: String,
         subtitle: String,
-        iconUri: String? = null
+        iconUri: String? = null,
+        albumId: String? = null
     ): MediaBrowserCompat.MediaItem {
+        val extras = Bundle().apply {
+            albumId?.let { putString("album_id", it) }
+        }
+
         val description = MediaDescriptionCompat.Builder()
             .setMediaId(id)
             .setTitle(title)
             .setSubtitle(subtitle)
+            .setExtras(extras)
             .apply {
                 iconUri?.let { setIconUri(android.net.Uri.parse(it)) }
             }
