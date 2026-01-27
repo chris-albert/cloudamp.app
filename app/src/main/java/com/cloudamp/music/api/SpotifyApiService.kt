@@ -76,7 +76,8 @@ interface SpotifyApiService {
     suspend fun getArtistAlbums(
         @Path("id") artistId: String,
         @Query("limit") limit: Int = 50,
-        @Query("offset") offset: Int = 0
+        @Query("offset") offset: Int = 0,
+        @Query("include_groups") includeGroups: String = "album,single"
     ): Response<ArtistAlbumsResponse>
 
     // Get Album

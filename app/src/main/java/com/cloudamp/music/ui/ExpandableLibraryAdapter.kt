@@ -49,6 +49,12 @@ class ExpandableLibraryAdapter(
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private val items = mutableListOf<LibraryItem>()
+    private val savedAlbumIds = mutableSetOf<String>()
+
+    fun setSavedAlbumIds(ids: Set<String>) {
+        savedAlbumIds.clear()
+        savedAlbumIds.addAll(ids)
+    }
 
     companion object {
         private const val TYPE_ARTIST = 0
@@ -139,13 +145,59 @@ class ExpandableLibraryAdapter(
         item.isLoadingAlbums = false
 
         if (item.isExpanded && albums.isNotEmpty()) {
-            // Sort albums by release date descending (newest first)
-            val sortedAlbums = albums.sortedByDescending { it.releaseDate ?: "" }
-
             val itemsToAdd = mutableListOf<LibraryItem>()
-            itemsToAdd.add(LibraryItem.HeaderItem("▶ ALBUMS"))
-            itemsToAdd.addAll(sortedAlbums.map { LibraryItem.AlbumItem(it, item.artist.id) })
-            itemsToAdd.add(LibraryItem.FooterItem(item.artist.id))
+
+            // Group albums into categories
+            val savedAlbums = mutableListOf<Album>()
+            val lps = mutableListOf<Album>()
+            val eps = mutableListOf<Album>()
+            val singles = mutableListOf<Album>()
+
+            for (album in albums) {
+                when {
+                    savedAlbumIds.contains(album.id) -> savedAlbums.add(album)
+                    album.getAlbumCategory() == "single" -> singles.add(album)
+                    album.getAlbumCategory() == "ep" -> eps.add(album)
+                    else -> lps.add(album)
+                }
+            }
+
+            // Sort each group by release date (newest first)
+            val sortByReleaseDate: (Album) -> String = { it.releaseDate ?: "" }
+
+            // Add Saved Albums section
+            if (savedAlbums.isNotEmpty()) {
+                itemsToAdd.add(LibraryItem.HeaderItem("♥ SAVED ALBUMS"))
+                itemsToAdd.addAll(savedAlbums.sortedByDescending(sortByReleaseDate)
+                    .map { LibraryItem.AlbumItem(it, item.artist.id) })
+            }
+
+            // Add LP's section
+            if (lps.isNotEmpty()) {
+                itemsToAdd.add(LibraryItem.HeaderItem("▶ LP's"))
+                itemsToAdd.addAll(lps.sortedByDescending(sortByReleaseDate)
+                    .map { LibraryItem.AlbumItem(it, item.artist.id) })
+            }
+
+            // Add EP's section
+            if (eps.isNotEmpty()) {
+                itemsToAdd.add(LibraryItem.HeaderItem("▶ EP's"))
+                itemsToAdd.addAll(eps.sortedByDescending(sortByReleaseDate)
+                    .map { LibraryItem.AlbumItem(it, item.artist.id) })
+            }
+
+            // Add Singles section
+            if (singles.isNotEmpty()) {
+                itemsToAdd.add(LibraryItem.HeaderItem("▶ SINGLES"))
+                itemsToAdd.addAll(singles.sortedByDescending(sortByReleaseDate)
+                    .map { LibraryItem.AlbumItem(it, item.artist.id) })
+            }
+
+            // Add footer at the end
+            if (itemsToAdd.isNotEmpty()) {
+                itemsToAdd.add(LibraryItem.FooterItem(item.artist.id))
+            }
+
             items.addAll(position + 1, itemsToAdd)
             notifyItemChanged(position)
             notifyItemRangeInserted(position + 1, itemsToAdd.size)

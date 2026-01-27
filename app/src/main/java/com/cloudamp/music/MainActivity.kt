@@ -79,8 +79,15 @@ class MainActivity : AppCompatActivity() {
     private fun loadMyLibrary() {
         scope.launch {
             try {
-                // Load user's top artists with images
-                val artistsResponse = spotifyClient.api.getMyTopArtists(limit = 50)
+                // Load saved albums and top artists in parallel
+                val savedAlbumsDeferred = async { loadSavedAlbumIds() }
+                val artistsDeferred = async { spotifyClient.api.getMyTopArtists(limit = 50) }
+
+                // Set saved album IDs for categorization
+                val savedAlbumIds = savedAlbumsDeferred.await()
+                libraryAdapter.setSavedAlbumIds(savedAlbumIds)
+
+                val artistsResponse = artistsDeferred.await()
                 if (artistsResponse.isSuccessful) {
                     val artists = artistsResponse.body()?.items?.sortedBy { it.name } ?: emptyList()
 
@@ -107,6 +114,29 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this@MainActivity, errorMsg, Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    private suspend fun loadSavedAlbumIds(): Set<String> {
+        val savedIds = mutableSetOf<String>()
+        try {
+            var offset = 0
+            val limit = 50
+            do {
+                val response = spotifyClient.api.getMySavedAlbums(limit = limit, offset = offset)
+                if (response.isSuccessful) {
+                    val albums = response.body()?.items ?: emptyList()
+                    savedIds.addAll(albums.map { it.album.id })
+                    offset += limit
+                    // Continue if there are more albums
+                    if (albums.size < limit) break
+                } else {
+                    break
+                }
+            } while (true)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return savedIds
     }
 
     private fun loadArtistAlbums(artist: Artist, position: Int) {
