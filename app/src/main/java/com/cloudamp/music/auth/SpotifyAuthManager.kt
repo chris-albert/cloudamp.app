@@ -26,6 +26,7 @@ class SpotifyAuthManager(private val context: Context) {
             "user-modify-playback-state",
             "user-read-currently-playing",
             "user-top-read",
+            "user-follow-read",
             "streaming",
             "playlist-read-private",
             "playlist-read-collaborative",
