@@ -2,9 +2,10 @@ package com.cloudamp.music
 
 import android.content.Intent
 import android.os.Bundle
-import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
+import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -26,6 +27,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var libraryRecyclerView: RecyclerView
     private lateinit var libraryAdapter: ExpandableLibraryAdapter
+    private lateinit var loadingContainer: LinearLayout
 
     private var hasLoadedContent = false
 
@@ -46,6 +48,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupRecyclerView() {
         libraryRecyclerView = findViewById(R.id.libraryRecyclerView)
+        loadingContainer = findViewById(R.id.loadingContainer)
         libraryRecyclerView.layoutManager = LinearLayoutManager(this)
 
         libraryAdapter = ExpandableLibraryAdapter(
@@ -77,8 +80,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun showLoading(show: Boolean) {
+        loadingContainer.visibility = if (show) View.VISIBLE else View.GONE
+    }
+
     private fun loadMyLibrary() {
-        Log.d(TAG, "loadMyLibrary: Starting to load library")
+        showLoading(true)
         scope.launch {
             try {
                 // Load saved albums in background (don't block artists loading)
@@ -86,24 +93,18 @@ class MainActivity : AppCompatActivity() {
                     try {
                         loadSavedAlbumIds()
                     } catch (e: Exception) {
-                        Log.e(TAG, "loadMyLibrary: Failed to load saved albums", e)
                         emptySet()
                     }
                 }
 
                 // Load top artists
-                Log.d(TAG, "loadMyLibrary: Fetching top artists")
                 val artistsResponse = spotifyClient.api.getMyTopArtists(limit = 50)
-                Log.d(TAG, "loadMyLibrary: Artists response successful=${artistsResponse.isSuccessful}")
 
                 if (artistsResponse.isSuccessful) {
                     val artists = artistsResponse.body()?.items?.sortedBy { it.name } ?: emptyList()
-                    Log.d(TAG, "loadMyLibrary: Got ${artists.size} artists")
-                    Toast.makeText(this@MainActivity, "DEBUG: Got ${artists.size} artists", Toast.LENGTH_SHORT).show()
 
                     // Set saved album IDs for categorization (wait for it now)
                     val savedAlbumIds = savedAlbumsDeferred.await()
-                    Log.d(TAG, "loadMyLibrary: Got ${savedAlbumIds.size} saved album IDs")
 
                     libraryAdapter.setSavedAlbumIds(savedAlbumIds)
                     libraryAdapter.setArtists(artists)
@@ -117,54 +118,41 @@ class MainActivity : AppCompatActivity() {
                         ).show()
                     }
                 } else {
-                    Log.e(TAG, "loadMyLibrary: API error code=${artistsResponse.code()}")
-                    Toast.makeText(this@MainActivity, "DEBUG: API error ${artistsResponse.code()}", Toast.LENGTH_LONG).show()
                     handleApiError(artistsResponse.code())
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "loadMyLibrary: Exception", e)
                 e.printStackTrace()
-                Toast.makeText(this@MainActivity, "DEBUG: Exception ${e.message}", Toast.LENGTH_LONG).show()
                 val errorMsg = when {
                     e.message?.contains("401") == true -> "Token expired. Please re-login in Settings."
                     e.message?.contains("403") == true -> "Insufficient permissions. Please re-login in Settings."
                     else -> "Error loading library: ${e.message}"
                 }
                 Toast.makeText(this@MainActivity, errorMsg, Toast.LENGTH_LONG).show()
+            } finally {
+                showLoading(false)
             }
         }
     }
 
-    companion object {
-        private const val TAG = "MainActivity"
-    }
-
     private suspend fun loadSavedAlbumIds(): Set<String> {
-        Log.d(TAG, "loadSavedAlbumIds: Starting")
         val savedIds = mutableSetOf<String>()
         try {
             var offset = 0
             val limit = 50
             do {
-                Log.d(TAG, "loadSavedAlbumIds: Fetching offset=$offset")
                 val response = spotifyClient.api.getMySavedAlbums(limit = limit, offset = offset)
                 if (response.isSuccessful) {
                     val albums = response.body()?.items ?: emptyList()
-                    Log.d(TAG, "loadSavedAlbumIds: Got ${albums.size} albums at offset=$offset")
                     savedIds.addAll(albums.map { it.album.id })
                     offset += limit
-                    // Continue if there are more albums
                     if (albums.size < limit) break
                 } else {
-                    Log.e(TAG, "loadSavedAlbumIds: API error code=${response.code()}")
                     break
                 }
             } while (true)
         } catch (e: Exception) {
-            Log.e(TAG, "loadSavedAlbumIds: Exception", e)
             e.printStackTrace()
         }
-        Log.d(TAG, "loadSavedAlbumIds: Returning ${savedIds.size} IDs")
         return savedIds
     }
 
