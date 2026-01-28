@@ -324,11 +324,13 @@ class ExpandableLibraryAdapter(
     }
 
     inner class TrackViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val trackNumberTextView: TextView = itemView.findViewById(R.id.trackNumber)
         private val nameTextView: TextView = itemView.findViewById(R.id.trackNameTextView)
         private val artistTextView: TextView = itemView.findViewById(R.id.trackArtistTextView)
         private val durationTextView: TextView = itemView.findViewById(R.id.trackDurationTextView)
 
         fun bind(item: LibraryItem.TrackItem) {
+            trackNumberTextView.text = item.track.trackNumber?.toString() ?: ""
             nameTextView.text = item.track.name
             artistTextView.text = item.track.artists.joinToString(", ") { it.name }
 
