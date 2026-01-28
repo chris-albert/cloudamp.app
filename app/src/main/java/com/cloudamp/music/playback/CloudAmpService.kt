@@ -26,6 +26,7 @@ import com.cloudamp.music.MainActivity
 import com.cloudamp.music.R
 import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.cache.LibraryCache
+import com.cloudamp.music.api.Playlist
 import com.cloudamp.music.models.Album
 import com.cloudamp.music.models.Artist
 import com.cloudamp.music.models.Track
@@ -49,6 +50,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         const val TOP_ARTISTS_ID = "top_artists"
         const val TOP_TRACKS_ID = "top_tracks"
         const val SAVED_ALBUMS_ID = "saved_albums"
+        const val LIBRARY_ID = "library"
+        const val PLAYLISTS_ID = "playlists"
         const val SEARCH_ID = "search"
 
         private const val CHANNEL_ID = "cloudamp_playback"
@@ -391,8 +394,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             when (parentId) {
                 ROOT_ID -> {
                     // Root menu - main categories
-                    mediaItems.add(createBrowsableItem(TOP_TRACKS_ID, "Top Tracks", "Your most played tracks"))
-                    mediaItems.add(createBrowsableItem(TOP_ARTISTS_ID, "Artists", "Your followed artists"))
+                    mediaItems.add(createBrowsableItem(LIBRARY_ID, "Library", "Your followed artists"))
+                    mediaItems.add(createBrowsableItem(PLAYLISTS_ID, "Playlists", "Your playlists"))
                     mediaItems.add(createBrowsableItem(SAVED_ALBUMS_ID, "Saved Albums", "Albums in your library"))
                 }
 
@@ -402,6 +405,14 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
                 TOP_ARTISTS_ID -> {
                     loadTopArtists(mediaItems)
+                }
+
+                LIBRARY_ID -> {
+                    loadTopArtists(mediaItems)
+                }
+
+                PLAYLISTS_ID -> {
+                    loadPlaylists(mediaItems)
                 }
 
                 SAVED_ALBUMS_ID -> {
@@ -425,8 +436,17 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                             val letter = parentId.removePrefix("section_letter_album_")
                             loadAlbumsForLetter(letter, mediaItems)
                         }
+                        parentId.startsWith("section_letter_playlist_") -> {
+                            // Show playlists for this letter
+                            val letter = parentId.removePrefix("section_letter_playlist_")
+                            loadPlaylistsForLetter(letter, mediaItems)
+                        }
                         parentId.startsWith("section_type_") -> {
                             // Type headers don't navigate - return empty
+                        }
+                        parentId.startsWith("playlist_") -> {
+                            val playlistId = parentId.removePrefix("playlist_")
+                            loadPlaylistTracks(playlistId, mediaItems)
                         }
                         parentId.startsWith("artist_") -> {
                             val artistId = parentId.removePrefix("artist_")
@@ -530,6 +550,96 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         album.artists.joinToString(", ") { it.name },
                         album.images?.firstOrNull()?.url
                     ))
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private suspend fun loadPlaylists(items: MutableList<MediaBrowserCompat.MediaItem>) {
+        try {
+            val allPlaylists = loadAllPlaylistsFromApi()
+
+            // Sort by playlist name and group by first letter using group title hint
+            val sortedPlaylists = allPlaylists.sortedBy { it.name }
+
+            for (playlist in sortedPlaylists) {
+                val firstLetter = playlist.name.firstOrNull()?.uppercaseChar() ?: '#'
+                val letter = if (firstLetter.isLetter()) firstLetter else '#'
+
+                items.add(createBrowsableItemWithGroup(
+                    "playlist_${playlist.id}",
+                    playlist.name,
+                    "${playlist.tracks.total} tracks",
+                    letter.toString(),
+                    playlist.images?.firstOrNull()?.url
+                ))
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private suspend fun loadPlaylistsForLetter(letter: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
+        try {
+            val allPlaylists = loadAllPlaylistsFromApi()
+            val sortedPlaylists = allPlaylists.sortedBy { it.name }
+            val targetLetter = letter.firstOrNull()?.uppercaseChar() ?: '#'
+
+            for (playlist in sortedPlaylists) {
+                val firstLetter = playlist.name.firstOrNull()?.uppercaseChar() ?: '#'
+                val playlistLetter = if (firstLetter.isLetter()) firstLetter else '#'
+
+                if (playlistLetter == targetLetter) {
+                    items.add(createBrowsableItem(
+                        "playlist_${playlist.id}",
+                        playlist.name,
+                        "${playlist.tracks.total} tracks",
+                        playlist.images?.firstOrNull()?.url
+                    ))
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private suspend fun loadAllPlaylistsFromApi(): List<Playlist> {
+        val allPlaylists = mutableListOf<Playlist>()
+        var offset = 0
+        val limit = 50
+
+        do {
+            val response = spotifyClient.api.getMyPlaylists(limit = limit, offset = offset)
+            if (response.isSuccessful) {
+                val playlists = response.body()?.items ?: emptyList()
+                allPlaylists.addAll(playlists)
+                offset += limit
+                if (playlists.size < limit) break
+            } else {
+                break
+            }
+        } while (true)
+
+        return allPlaylists
+    }
+
+    private suspend fun loadPlaylistTracks(playlistId: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
+        try {
+            val response = spotifyClient.api.getPlaylistTracks(playlistId)
+            if (response.isSuccessful) {
+                response.body()?.items?.forEach { playlistTrack ->
+                    val track = playlistTrack.track
+                    if (track != null) {
+                        items.add(createPlayableItem(
+                            track.uri,
+                            track.name,
+                            track.artists.joinToString(", ") { it.name },
+                            track.album?.images?.firstOrNull()?.url,
+                            playlistId
+                        ))
+                    }
                 }
             }
         } catch (e: Exception) {
