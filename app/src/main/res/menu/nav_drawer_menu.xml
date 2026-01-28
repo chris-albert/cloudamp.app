@@ -1,13 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
-    <group android:checkableBehavior="single">
-        <item
-            android:id="@+id/nav_library"
-            android:icon="@drawable/ic_library"
-            android:title="Library" />
-        <item
-            android:id="@+id/nav_playlists"
-            android:icon="@drawable/ic_playlist"
-            android:title="Playlists" />
-    </group>
+    <item android:title="Spotify">
+        <menu>
+            <group android:checkableBehavior="single">
+                <item
+                    android:id="@+id/nav_library"
+                    android:icon="@drawable/ic_library"
+                    android:title="Library" />
+                <item
+                    android:id="@+id/nav_playlists"
+                    android:icon="@drawable/ic_playlist"
+                    android:title="Playlists" />
+            </group>
+        </menu>
+    </item>
+    <item android:title="Google Drive">
+        <menu>
+            <group android:checkableBehavior="single">
+                <item
+                    android:id="@+id/nav_gdrive_library"
+                    android:icon="@drawable/ic_gdrive"
+                    android:title="GDrive Library" />
+            </group>
+        </menu>
+    </item>
 </menu>

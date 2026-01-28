@@ -1,0 +1,300 @@
+package com.cloudamp.music
+
+import android.content.Intent
+import android.os.Bundle
+import android.view.Menu
+import android.view.MenuItem
+import android.view.View
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.ActionBarDrawerToggle
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.GravityCompat
+import androidx.drawerlayout.widget.DrawerLayout
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.cloudamp.music.api.DriveFile
+import com.cloudamp.music.api.GoogleDriveApiClient
+import com.cloudamp.music.auth.GoogleDriveAuthManager
+import com.cloudamp.music.ui.GDriveAdapter
+import com.google.android.material.navigation.NavigationView
+import kotlinx.coroutines.*
+
+class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelectedListener {
+
+    private lateinit var driveClient: GoogleDriveApiClient
+    private lateinit var authManager: GoogleDriveAuthManager
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+    private lateinit var drawerLayout: DrawerLayout
+    private lateinit var navigationView: NavigationView
+    private lateinit var toggle: ActionBarDrawerToggle
+
+    private lateinit var gdriveRecyclerView: RecyclerView
+    private lateinit var gdriveAdapter: GDriveAdapter
+    private lateinit var loadingContainer: LinearLayout
+    private lateinit var emptyContainer: LinearLayout
+    private lateinit var emptyTextView: TextView
+    private lateinit var pathTextView: TextView
+    private lateinit var settingsButton: Button
+
+    // Navigation stack: pairs of (folderId, folderName)
+    private val folderStack = mutableListOf<Pair<String, String>>()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_gdrive_library)
+
+        driveClient = GoogleDriveApiClient.getInstance(this)
+        authManager = GoogleDriveAuthManager(this)
+
+        setupDrawer()
+        setupRecyclerView()
+        setupEmptyState()
+    }
+
+    private fun setupDrawer() {
+        drawerLayout = findViewById(R.id.drawerLayout)
+        navigationView = findViewById(R.id.navigationView)
+
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        supportActionBar?.setHomeButtonEnabled(true)
+
+        toggle = ActionBarDrawerToggle(
+            this,
+            drawerLayout,
+            R.string.navigation_drawer_open,
+            R.string.navigation_drawer_close
+        )
+        drawerLayout.addDrawerListener(toggle)
+        toggle.syncState()
+
+        navigationView.setNavigationItemSelectedListener(this)
+        navigationView.setCheckedItem(R.id.nav_gdrive_library)
+    }
+
+    private fun setupRecyclerView() {
+        gdriveRecyclerView = findViewById(R.id.gdriveRecyclerView)
+        loadingContainer = findViewById(R.id.loadingContainer)
+        pathTextView = findViewById(R.id.pathTextView)
+
+        gdriveRecyclerView.layoutManager = LinearLayoutManager(this)
+
+        gdriveAdapter = GDriveAdapter(
+            onFolderClick = { folder ->
+                navigateToFolder(folder.id, folder.name)
+            },
+            onAudioClick = { file, allAudioFiles, position ->
+                onAudioFileClicked(file, allAudioFiles, position)
+            },
+            onBackClick = {
+                navigateBack()
+            }
+        )
+
+        gdriveRecyclerView.adapter = gdriveAdapter
+    }
+
+    private fun setupEmptyState() {
+        emptyContainer = findViewById(R.id.emptyContainer)
+        emptyTextView = findViewById(R.id.emptyTextView)
+        settingsButton = findViewById(R.id.gdriveSettingsButton)
+
+        settingsButton.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        checkAuthAndLoad()
+    }
+
+    private fun checkAuthAndLoad() {
+        if (!authManager.hasAccessToken()) {
+            showEmptyState("Connect Google Drive in Settings\nto browse your music files")
+        } else {
+            hideEmptyState()
+            if (folderStack.isEmpty()) {
+                loadRootFolder()
+            }
+        }
+    }
+
+    private fun showEmptyState(message: String) {
+        emptyContainer.visibility = View.VISIBLE
+        emptyTextView.text = message
+        gdriveRecyclerView.visibility = View.GONE
+    }
+
+    private fun hideEmptyState() {
+        emptyContainer.visibility = View.GONE
+        gdriveRecyclerView.visibility = View.VISIBLE
+    }
+
+    private fun showLoading(show: Boolean) {
+        loadingContainer.visibility = if (show) View.VISIBLE else View.GONE
+    }
+
+    private fun updatePath() {
+        if (folderStack.isEmpty()) {
+            pathTextView.text = "GDRIVE / My Drive"
+        } else {
+            val path = "GDRIVE / " + folderStack.joinToString(" / ") { it.second }
+            pathTextView.text = path
+        }
+    }
+
+    private fun loadRootFolder() {
+        loadFolder("root")
+    }
+
+    private fun navigateToFolder(folderId: String, folderName: String) {
+        folderStack.add(Pair(folderId, folderName))
+        updatePath()
+        loadFolder(folderId)
+    }
+
+    private fun navigateBack() {
+        if (folderStack.isNotEmpty()) {
+            folderStack.removeAt(folderStack.size - 1)
+            updatePath()
+
+            val parentId = if (folderStack.isNotEmpty()) {
+                folderStack.last().first
+            } else {
+                "root"
+            }
+            loadFolder(parentId)
+        }
+    }
+
+    private fun loadFolder(folderId: String) {
+        showLoading(true)
+        scope.launch {
+            try {
+                val allFiles = mutableListOf<DriveFile>()
+                var pageToken: String? = null
+
+                do {
+                    val query = "'$folderId' in parents and trashed = false and " +
+                            "(mimeType contains 'audio/' or mimeType = 'application/vnd.google-apps.folder')"
+
+                    val response = driveClient.api.listFiles(
+                        query = query,
+                        pageToken = pageToken
+                    )
+
+                    if (response.isSuccessful) {
+                        val result = response.body()
+                        allFiles.addAll(result?.files ?: emptyList())
+                        pageToken = result?.nextPageToken
+                    } else {
+                        handleApiError(response.code())
+                        break
+                    }
+                } while (pageToken != null)
+
+                val hasParent = folderStack.isNotEmpty()
+                gdriveAdapter.setFiles(allFiles, hasParent)
+
+                if (allFiles.isEmpty() && !hasParent) {
+                    showEmptyState("No audio files or folders found\nin your Google Drive")
+                } else if (allFiles.isEmpty()) {
+                    // Empty folder but we have navigation, show empty list with back
+                    gdriveAdapter.setFiles(emptyList(), true)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Toast.makeText(
+                    this@GDriveLibraryActivity,
+                    "Error loading files: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            } finally {
+                showLoading(false)
+            }
+        }
+    }
+
+    private fun onAudioFileClicked(file: DriveFile, allAudioFiles: List<DriveFile>, position: Int) {
+        // For now, show a toast with the file info.
+        // Actual playback via ExoPlayer streaming will be implemented next.
+        Toast.makeText(
+            this,
+            "Selected: ${file.name}\n${file.getFileSizeFormatted()} ${file.getFileExtension()}",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    private fun handleApiError(code: Int) {
+        val errorMsg = when (code) {
+            401 -> "Google Drive token expired. Please re-login in Settings."
+            403 -> "Insufficient permissions. Please re-login in Settings."
+            404 -> "Content not found."
+            else -> "Error loading content (code: $code)"
+        }
+        Toast.makeText(this, errorMsg, Toast.LENGTH_LONG).show()
+    }
+
+    override fun onNavigationItemSelected(item: MenuItem): Boolean {
+        when (item.itemId) {
+            R.id.nav_library -> {
+                val intent = Intent(this, MainActivity::class.java)
+                intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                startActivity(intent)
+                finish()
+            }
+            R.id.nav_playlists -> {
+                startActivity(Intent(this, PlaylistsActivity::class.java))
+                finish()
+            }
+            R.id.nav_gdrive_library -> {
+                // Already here
+            }
+        }
+        drawerLayout.closeDrawer(GravityCompat.START)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        if (toggle.onOptionsItemSelected(item)) {
+            return true
+        }
+        return when (item.itemId) {
+            R.id.action_now_playing -> {
+                startActivity(Intent(this, NowPlayingActivity::class.java))
+                true
+            }
+            R.id.action_settings -> {
+                startActivity(Intent(this, SettingsActivity::class.java))
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.main_menu, menu)
+        // Hide search in GDrive view for now
+        menu.findItem(R.id.action_search)?.isVisible = false
+        return true
+    }
+
+    override fun onBackPressed() {
+        if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+            drawerLayout.closeDrawer(GravityCompat.START)
+        } else if (folderStack.isNotEmpty()) {
+            navigateBack()
+        } else {
+            super.onBackPressed()
+        }
+    }
+
+    override fun onDestroy() {
+        scope.cancel()
+        super.onDestroy()
+    }
+}

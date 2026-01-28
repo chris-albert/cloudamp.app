@@ -181,6 +181,10 @@ class PlaylistsActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
             R.id.nav_playlists -> {
                 // Already here
             }
+            R.id.nav_gdrive_library -> {
+                startActivity(Intent(this, GDriveLibraryActivity::class.java))
+                finish()
+            }
         }
         drawerLayout.closeDrawer(GravityCompat.START)
         return true

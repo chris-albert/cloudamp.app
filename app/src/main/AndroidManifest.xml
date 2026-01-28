@@ -49,6 +49,12 @@
             android:exported="false"
             android:parentActivityName=".MainActivity" />
 
+        <!-- GDrive Library Activity -->
+        <activity
+            android:name=".GDriveLibraryActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity" />
+
         <!-- Spotify OAuth Callback Activity -->
         <activity
             android:name=".auth.SpotifyCallbackActivity"
@@ -61,6 +67,21 @@
                 <data
                     android:scheme="cloudamp"
                     android:host="callback" />
+            </intent-filter>
+        </activity>
+
+        <!-- Google Drive OAuth Callback Activity -->
+        <activity
+            android:name=".auth.GoogleDriveCallbackActivity"
+            android:exported="true"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="cloudamp"
+                    android:host="gdrive-callback" />
             </intent-filter>
         </activity>
 
