@@ -9,6 +9,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.cloudamp.music.api.PlayRequest
 import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.models.Track
 import com.cloudamp.music.playback.PlaybackManager
@@ -112,9 +113,7 @@ class NowPlayingActivity : AppCompatActivity() {
                         isPlaying = false
                         playPauseButton.setImageResource(R.drawable.ic_play)
                     } else {
-                        currentTrack?.let { track ->
-                            playbackManager.playTracks(listOf(track), 0)
-                        }
+                        spotifyClient.api.play(PlayRequest())
                         isPlaying = true
                         playPauseButton.setImageResource(R.drawable.ic_pause)
                     }
