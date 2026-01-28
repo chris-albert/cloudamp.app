@@ -38,6 +38,12 @@
             android:exported="false"
             android:parentActivityName=".MainActivity" />
 
+        <!-- Playlists Activity -->
+        <activity
+            android:name=".PlaylistsActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity" />
+
         <!-- Spotify OAuth Callback Activity -->
         <activity
             android:name=".auth.SpotifyCallbackActivity"
