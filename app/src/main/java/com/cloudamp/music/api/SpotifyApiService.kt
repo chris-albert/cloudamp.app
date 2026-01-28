@@ -98,10 +98,20 @@ interface SpotifyApiService {
         @Query("limit") limit: Int = 50
     ): Response<AlbumTracksResponse>
 
+    // Device Management
+    @GET("v1/me/player/devices")
+    suspend fun getAvailableDevices(): Response<DevicesResponse>
+
+    @PUT("v1/me/player")
+    suspend fun transferPlayback(
+        @Body transferRequest: TransferPlaybackRequest
+    ): Response<Unit>
+
     // Playback Control
     @PUT("v1/me/player/play")
     suspend fun play(
-        @Body playRequest: PlayRequest
+        @Body playRequest: PlayRequest,
+        @Query("device_id") deviceId: String? = null
     ): Response<Unit>
 
     @PUT("v1/me/player/pause")
@@ -213,4 +223,24 @@ data class CursorPaging<T>(
 data class Cursors(
     val after: String?,
     val before: String?
+)
+
+// Device Management Models
+data class SpotifyDevice(
+    val id: String?,
+    val is_active: Boolean,
+    val is_private_session: Boolean,
+    val is_restricted: Boolean,
+    val name: String,
+    val type: String,
+    val volume_percent: Int?
+)
+
+data class DevicesResponse(
+    val devices: List<SpotifyDevice>
+)
+
+data class TransferPlaybackRequest(
+    val device_ids: List<String>,
+    val play: Boolean = true
 )

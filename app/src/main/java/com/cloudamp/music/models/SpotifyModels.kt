@@ -106,11 +106,23 @@ data class AlbumTracksResponse(
     val total: Int
 )
 
+// Device info returned in playback response
+data class PlaybackDevice(
+    val id: String?,
+    @SerializedName("is_active") val is_active: Boolean,
+    @SerializedName("is_private_session") val is_private_session: Boolean,
+    @SerializedName("is_restricted") val is_restricted: Boolean,
+    val name: String,
+    val type: String,
+    @SerializedName("volume_percent") val volume_percent: Int?
+)
+
 // Current Playback
 data class CurrentPlayback(
     @SerializedName("is_playing") val isPlaying: Boolean,
     val item: Track?,
-    @SerializedName("progress_ms") val progressMs: Int = 0
+    @SerializedName("progress_ms") val progressMs: Int = 0,
+    val device: PlaybackDevice? = null
 )
 
 // Playback State for local tracking
