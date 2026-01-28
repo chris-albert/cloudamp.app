@@ -17,11 +17,11 @@
             android:layout_height="match_parent"
             android:orientation="vertical">
 
-            <!-- Artists Header -->
+            <!-- Playlists Header -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="▶ ARTISTS"
+                android:text="▶ PLAYLISTS"
                 android:textColor="@color/winamp_text"
                 android:textSize="14sp"
                 android:fontFamily="monospace"
@@ -29,9 +29,9 @@
                 android:background="@color/winamp_section_header"
                 android:padding="8dp"/>
 
-            <!-- Single RecyclerView for Accordion-style Library -->
+            <!-- RecyclerView for Playlists -->
             <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/libraryRecyclerView"
+                android:id="@+id/playlistsRecyclerView"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1"
@@ -57,7 +57,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Loading library..."
+                android:text="Loading playlists..."
                 android:textColor="@color/winamp_text"
                 android:textSize="14sp"
                 android:fontFamily="monospace"
