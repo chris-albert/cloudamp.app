@@ -11,8 +11,7 @@ import com.google.android.exoplayer2.ExoPlayer
 import com.google.android.exoplayer2.MediaItem
 import com.google.android.exoplayer2.Player
 import com.google.android.exoplayer2.ext.okhttp.OkHttpDataSource
-import com.google.android.exoplayer2.source.ProgressiveMediaSource
-import com.google.android.exoplayer2.upstream.DataSource
+import com.google.android.exoplayer2.source.DefaultMediaSourceFactory
 
 /**
  * Manages Google Drive audio playback using ExoPlayer.
@@ -56,12 +55,18 @@ class GDrivePlaybackManager private constructor(
 
     /**
      * Get or create the ExoPlayer instance.
+     * Uses OkHttpDataSource with Google Drive auth headers so all media
+     * requests include the Bearer token automatically.
      */
     private fun getPlayer(): ExoPlayer {
         if (exoPlayer == null) {
-            exoPlayer = ExoPlayer.Builder(context).build().apply {
-                addListener(playerListener)
-            }
+            val mediaSourceFactory = DefaultMediaSourceFactory(getDataSourceFactory())
+            exoPlayer = ExoPlayer.Builder(context)
+                .setMediaSourceFactory(mediaSourceFactory)
+                .build()
+                .apply {
+                    addListener(playerListener)
+                }
         }
         return exoPlayer!!
     }
@@ -96,17 +101,11 @@ class GDrivePlaybackManager private constructor(
         currentIndex = startIndex
 
         val player = getPlayer()
-        val factory = getDataSourceFactory()
 
-        // Build media items for all tracks
-        val mediaItems = files.map { file ->
-            val uri = buildStreamUri(file.id)
-            val mediaSource = ProgressiveMediaSource.Factory(factory)
-                .createMediaSource(MediaItem.fromUri(uri))
-            mediaSource
-        }
-
-        // Clear and set the new playlist
+        // Clear and set the new playlist.
+        // ExoPlayer is configured with our OkHttpDataSource.Factory (via
+        // DefaultMediaSourceFactory), so all HTTP requests for these URIs
+        // will include the Google Drive Authorization header automatically.
         player.stop()
         player.clearMediaItems()
 
