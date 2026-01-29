@@ -387,27 +387,37 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         playbackPollingJob = serviceScope.launch {
             while (isActive) {
                 try {
-                    // Skip Spotify polling when GDrive is the active provider
-                    if (!suppressPollingUpdates && !GDrivePlaybackManager.isActiveProvider) {
-                        val response = spotifyClient.api.getCurrentPlayback()
-                        if (response.isSuccessful) {
-                            val playback = response.body()
-                            if (playback != null) {
-                                val state = if (playback.isPlaying) {
-                                    PlaybackStateCompat.STATE_PLAYING
-                                } else {
-                                    PlaybackStateCompat.STATE_PAUSED
-                                }
+                    if (!suppressPollingUpdates) {
+                        if (GDrivePlaybackManager.isActiveProvider) {
+                            // Poll ExoPlayer position for Google Drive playback
+                            val position = gdrivePlaybackManager.getCurrentPosition()
+                            val state = if (gdrivePlaybackManager.isPlaying()) {
+                                PlaybackStateCompat.STATE_PLAYING
+                            } else {
+                                PlaybackStateCompat.STATE_PAUSED
+                            }
+                            updatePlaybackState(state, position, 1.0f)
+                        } else {
+                            val response = spotifyClient.api.getCurrentPlayback()
+                            if (response.isSuccessful) {
+                                val playback = response.body()
+                                if (playback != null) {
+                                    val state = if (playback.isPlaying) {
+                                        PlaybackStateCompat.STATE_PLAYING
+                                    } else {
+                                        PlaybackStateCompat.STATE_PAUSED
+                                    }
 
-                                updatePlaybackState(
-                                    state,
-                                    playback.progressMs.toLong(),
-                                    1.0f
-                                )
+                                    updatePlaybackState(
+                                        state,
+                                        playback.progressMs.toLong(),
+                                        1.0f
+                                    )
 
-                                // Update metadata if track info available
-                                playback.item?.let { track ->
-                                    updateMetadata(track, track.album?.images?.firstOrNull()?.url)
+                                    // Update metadata if track info available
+                                    playback.item?.let { track ->
+                                        updateMetadata(track, track.album?.images?.firstOrNull()?.url)
+                                    }
                                 }
                             }
                         }
@@ -415,7 +425,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 } catch (e: Exception) {
                     // Ignore polling errors
                 }
-                delay(3000) // Poll every 3 seconds
+                // Poll every 1s for GDrive (cheap local call), 3s for Spotify (network API)
+                delay(if (GDrivePlaybackManager.isActiveProvider) 1000 else 3000)
             }
         }
     }
