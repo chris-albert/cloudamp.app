@@ -10,7 +10,9 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.cloudamp.music.api.GoogleDriveApiClient
 import com.cloudamp.music.api.SpotifyApiClient
+import com.cloudamp.music.auth.GoogleDriveAuthManager
 import com.cloudamp.music.auth.SpotifyAuthManager
 import com.cloudamp.music.cache.LibraryCache
 import kotlinx.coroutines.*
@@ -21,7 +23,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var authManager: SpotifyAuthManager
     private lateinit var libraryCache: LibraryCache
 
-    // OAuth fields
+    // Spotify OAuth fields
     private lateinit var clientIdEditText: EditText
     private lateinit var clientSecretEditText: EditText
     private lateinit var saveCredentialsButton: Button
@@ -39,6 +41,15 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var lastLoadedText: TextView
     private lateinit var reloadLibraryButton: Button
 
+    // Google Drive fields
+    private lateinit var gdriveAuthManager: GoogleDriveAuthManager
+    private lateinit var gdriveClientIdEditText: EditText
+    private lateinit var gdriveClientSecretEditText: EditText
+    private lateinit var saveGdriveCredentialsButton: Button
+    private lateinit var loginWithGdriveButton: Button
+    private lateinit var clearGdriveButton: Button
+    private lateinit var gdriveValidationStatus: TextView
+
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     companion object {
@@ -55,6 +66,7 @@ class SettingsActivity : AppCompatActivity() {
         spotifyClient = SpotifyApiClient.getInstance(this)
         authManager = SpotifyAuthManager(this)
         libraryCache = LibraryCache.getInstance(this)
+        gdriveAuthManager = GoogleDriveAuthManager(this)
 
         // OAuth views
         clientIdEditText = findViewById(R.id.clientIdEditText)
@@ -137,6 +149,121 @@ class SettingsActivity : AppCompatActivity() {
             Toast.makeText(this, "Library will reload", Toast.LENGTH_SHORT).show()
             finish()
         }
+
+        // Google Drive views
+        setupGoogleDrive()
+    }
+
+    private fun setupGoogleDrive() {
+        gdriveClientIdEditText = findViewById(R.id.gdriveClientIdEditText)
+        gdriveClientSecretEditText = findViewById(R.id.gdriveClientSecretEditText)
+        saveGdriveCredentialsButton = findViewById(R.id.saveGdriveCredentialsButton)
+        loginWithGdriveButton = findViewById(R.id.loginWithGdriveButton)
+        clearGdriveButton = findViewById(R.id.clearGdriveButton)
+        gdriveValidationStatus = findViewById(R.id.gdriveValidationStatus)
+
+        // Load existing credentials
+        gdriveAuthManager.getClientId()?.let { gdriveClientIdEditText.setText(it) }
+        gdriveAuthManager.getClientSecret()?.let { gdriveClientSecretEditText.setText(it) }
+
+        // Show current status
+        if (gdriveAuthManager.hasAccessToken()) {
+            updateGdriveStatus("Connected to Google Drive", true)
+            validateGdriveToken()
+        }
+
+        loginWithGdriveButton.isEnabled = gdriveAuthManager.hasClientCredentials()
+
+        saveGdriveCredentialsButton.setOnClickListener {
+            val clientId = gdriveClientIdEditText.text.toString().trim()
+            val clientSecret = gdriveClientSecretEditText.text.toString().trim()
+            if (clientId.isNotEmpty() && clientSecret.isNotEmpty()) {
+                gdriveAuthManager.saveClientCredentials(clientId, clientSecret)
+                loginWithGdriveButton.isEnabled = true
+                Toast.makeText(this, "Google Drive credentials saved", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Please enter both Client ID and Secret", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        loginWithGdriveButton.setOnClickListener {
+            startGoogleDriveLogin()
+        }
+
+        clearGdriveButton.setOnClickListener {
+            gdriveAuthManager.clearCredentials()
+            gdriveClientIdEditText.setText("")
+            gdriveClientSecretEditText.setText("")
+            loginWithGdriveButton.isEnabled = false
+            updateGdriveStatus("", false)
+            Toast.makeText(this, "Google Drive credentials cleared", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun startGoogleDriveLogin() {
+        try {
+            val authUrl = gdriveAuthManager.getAuthorizationUrl()
+
+            loginWithGdriveButton.isEnabled = false
+            updateGdriveStatus("Waiting for authorization...", false)
+
+            // Start listening for the loopback callback in background
+            scope.launch {
+                val codeResult = withContext(Dispatchers.IO) {
+                    gdriveAuthManager.waitForAuthorizationCode()
+                }
+
+                codeResult.onSuccess { code ->
+                    updateGdriveStatus("Exchanging token...", false)
+                    val tokenResult = gdriveAuthManager.exchangeCodeForToken(code)
+                    tokenResult.onSuccess {
+                        updateGdriveStatus("Connected to Google Drive!", true)
+                        validateGdriveToken()
+                    }.onFailure { error ->
+                        updateGdriveStatus("Token exchange failed: ${error.message}", false)
+                    }
+                }.onFailure { error ->
+                    updateGdriveStatus("Authorization failed: ${error.message}", false)
+                }
+
+                loginWithGdriveButton.isEnabled = true
+            }
+
+            // Open browser for authorization
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
+            startActivity(intent)
+        } catch (e: Exception) {
+            loginWithGdriveButton.isEnabled = true
+            updateGdriveStatus("Error: ${e.message}", false)
+            Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun validateGdriveToken() {
+        scope.launch {
+            try {
+                val driveClient = GoogleDriveApiClient.getInstance(this@SettingsActivity)
+                val response = driveClient.api.getAbout()
+                if (response.isSuccessful) {
+                    val displayName = response.body()?.user?.displayName ?: "User"
+                    val email = response.body()?.user?.emailAddress ?: ""
+                    updateGdriveStatus("Connected: $displayName ($email)", true)
+                } else {
+                    updateGdriveStatus("Token expired - please re-login", false)
+                }
+            } catch (e: Exception) {
+                updateGdriveStatus("Connection error", false)
+            }
+        }
+    }
+
+    private fun updateGdriveStatus(message: String, isValid: Boolean) {
+        gdriveValidationStatus.text = message
+        gdriveValidationStatus.visibility = if (message.isEmpty()) View.GONE else View.VISIBLE
+        gdriveValidationStatus.setTextColor(
+            if (isValid) getColor(android.R.color.holo_green_dark)
+            else getColor(android.R.color.holo_red_dark)
+        )
     }
 
     private fun updateLastLoadedDisplay() {

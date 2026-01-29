@@ -49,6 +49,12 @@
             android:exported="false"
             android:parentActivityName=".MainActivity" />
 
+        <!-- GDrive Library Activity -->
+        <activity
+            android:name=".GDriveLibraryActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity" />
+
         <!-- Spotify OAuth Callback Activity -->
         <activity
             android:name=".auth.SpotifyCallbackActivity"

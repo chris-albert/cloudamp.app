@@ -73,6 +73,7 @@ dependencies {
     // Media and Android Auto
     implementation 'androidx.media:media:1.7.0'
     implementation 'com.google.android.exoplayer:exoplayer:2.19.1'
+    implementation 'com.google.android.exoplayer:extension-okhttp:2.19.1'
 
     // Networking
     implementation 'com.squareup.retrofit2:retrofit:2.9.0'
