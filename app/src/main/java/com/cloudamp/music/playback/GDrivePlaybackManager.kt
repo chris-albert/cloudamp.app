@@ -3,13 +3,17 @@ package com.cloudamp.music.playback
 import android.content.Context
 import android.net.Uri
 import android.support.v4.media.session.PlaybackStateCompat
+import android.util.Log
 import com.cloudamp.music.api.DriveFile
 import com.cloudamp.music.api.GoogleDriveApiClient
 import com.cloudamp.music.models.Artist
 import com.cloudamp.music.models.Track
+import com.google.android.exoplayer2.C
 import com.google.android.exoplayer2.ExoPlayer
 import com.google.android.exoplayer2.MediaItem
+import com.google.android.exoplayer2.PlaybackException
 import com.google.android.exoplayer2.Player
+import com.google.android.exoplayer2.audio.AudioAttributes
 import com.google.android.exoplayer2.ext.okhttp.OkHttpDataSource
 import com.google.android.exoplayer2.source.DefaultMediaSourceFactory
 import com.google.android.exoplayer2.upstream.DataSource
@@ -24,6 +28,8 @@ class GDrivePlaybackManager private constructor(
 ) {
 
     companion object {
+        private const val TAG = "GDrivePlayback"
+
         @Volatile
         private var instance: GDrivePlaybackManager? = null
 
@@ -63,8 +69,15 @@ class GDrivePlaybackManager private constructor(
         if (exoPlayer == null) {
             val dsFactory: DataSource.Factory = getDataSourceFactory()
             val mediaSourceFactory = DefaultMediaSourceFactory(dsFactory)
+
+            val audioAttributes = AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA)
+                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                .build()
+
             exoPlayer = ExoPlayer.Builder(context)
                 .setMediaSourceFactory(mediaSourceFactory)
+                .setAudioAttributes(audioAttributes, true)
                 .build()
                 .apply {
                     addListener(playerListener)
@@ -75,12 +88,14 @@ class GDrivePlaybackManager private constructor(
 
     /**
      * Get or create the DataSource.Factory with Google Drive auth headers.
+     * Uses a streaming-specific HTTP client WITHOUT body-level logging
+     * (which would buffer entire audio files into memory).
      */
     private fun getDataSourceFactory(): DataSource.Factory {
         if (dataSourceFactory == null) {
             val driveClient = GoogleDriveApiClient.getInstance(context)
-            val okHttpClient = driveClient.getAuthenticatedHttpClient()
-            dataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
+            val streamingClient = driveClient.getStreamingHttpClient()
+            dataSourceFactory = OkHttpDataSource.Factory(streamingClient)
         }
         return dataSourceFactory!!
     }
@@ -113,12 +128,15 @@ class GDrivePlaybackManager private constructor(
 
         files.forEach { file ->
             val uri = buildStreamUri(file.id)
+            Log.d(TAG, "Adding media item: ${file.name} -> $uri")
             player.addMediaItem(MediaItem.fromUri(uri))
         }
 
         player.seekTo(startIndex, 0)
         player.prepare()
-        player.play()
+        player.playWhenReady = true
+
+        Log.d(TAG, "playFiles: ${files.size} files, starting at index $startIndex")
 
         // Update media session metadata and queue
         updateServiceMetadata()
@@ -244,9 +262,9 @@ class GDrivePlaybackManager private constructor(
     private val playerListener = object : Player.Listener {
 
         override fun onPlaybackStateChanged(playbackState: Int) {
+            Log.d(TAG, "onPlaybackStateChanged: $playbackState (IDLE=1, BUFFERING=2, READY=3, ENDED=4)")
             when (playbackState) {
                 Player.STATE_READY -> {
-                    // Now we know the real duration — update metadata
                     updateServiceMetadata()
                     val state = if (getPlayer().isPlaying) {
                         PlaybackStateCompat.STATE_PLAYING
@@ -266,6 +284,7 @@ class GDrivePlaybackManager private constructor(
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
+            Log.d(TAG, "onIsPlayingChanged: $isPlaying")
             val state = if (isPlaying) {
                 PlaybackStateCompat.STATE_PLAYING
             } else {
@@ -274,10 +293,15 @@ class GDrivePlaybackManager private constructor(
             service?.updatePlaybackState(state, getCurrentPosition())
         }
 
+        override fun onPlayerError(error: PlaybackException) {
+            Log.e(TAG, "ExoPlayer error: ${error.errorCodeName} (${error.errorCode})", error)
+            Log.e(TAG, "  cause: ${error.cause?.message}")
+        }
+
         override fun onMediaItemTransition(mediaItem: com.google.android.exoplayer2.MediaItem?, reason: Int) {
-            // Track changed — update index and metadata
             val player = exoPlayer ?: return
             currentIndex = player.currentMediaItemIndex
+            Log.d(TAG, "onMediaItemTransition: index=$currentIndex, reason=$reason")
             updateServiceMetadata()
             updateServiceQueue()
         }

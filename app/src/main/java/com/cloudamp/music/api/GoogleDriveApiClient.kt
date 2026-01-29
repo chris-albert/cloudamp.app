@@ -96,6 +96,20 @@ class GoogleDriveApiClient(private val context: Context) {
     val api: GoogleDriveApiService = retrofit.create(GoogleDriveApiService::class.java)
 
     /**
+     * Returns an OkHttpClient for streaming media (ExoPlayer).
+     * Has auth + token refresh but NO body logging (which would buffer
+     * entire audio files into memory and stall playback).
+     */
+    fun getStreamingHttpClient(): OkHttpClient {
+        return OkHttpClient.Builder()
+            .addInterceptor(authInterceptor)
+            .authenticator(tokenAuthenticator)
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .build()
+    }
+
+    /**
      * Returns the OkHttpClient with auth headers for use by ExoPlayer's OkHttpDataSource.
      */
     fun getAuthenticatedHttpClient(): OkHttpClient = okHttpClient
