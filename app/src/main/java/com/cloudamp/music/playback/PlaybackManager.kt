@@ -63,49 +63,82 @@ class PlaybackManager private constructor(
             if (playbackResponse.isSuccessful) {
                 val playback = playbackResponse.body()
                 if (playback?.device != null && playback.device.is_active) {
-                    // Already have an active device
                     return playback.device.id
                 }
             }
 
-            // No active device, get available devices
-            val devicesResponse = spotifyClient.api.getAvailableDevices()
-            if (!devicesResponse.isSuccessful) {
-                return null
-            }
+            // No active device — check for available (but inactive) devices
+            var devices = spotifyClient.api.getAvailableDevices()
+                .body()?.devices?.filter { it.id != null } ?: emptyList()
 
-            val devices = devicesResponse.body()?.devices ?: return null
+            // If no devices at all, Spotify is likely not running — launch it and poll
             if (devices.isEmpty()) {
-                return null
+                launchSpotifyApp()
+                devices = pollForDevices()
+                if (devices.isEmpty()) {
+                    return null
+                }
             }
 
-            // Find the best device to activate:
-            // 1. Prefer smartphone devices (likely the current phone)
-            // 2. Fall back to any available device
-            val targetDevice = devices.firstOrNull { it.type.equals("Smartphone", ignoreCase = true) && it.id != null }
-                ?: devices.firstOrNull { it.id != null }
-                ?: return null
+            // Pick the best device to activate
+            val targetDevice = devices.firstOrNull { it.type.equals("Smartphone", ignoreCase = true) }
+                ?: devices.first()
 
             val deviceId = targetDevice.id ?: return null
 
             // Transfer playback to activate the device
             val transferRequest = TransferPlaybackRequest(
                 device_ids = listOf(deviceId),
-                play = false  // Don't start playing yet, we'll do that with our play request
+                play = false
             )
             val transferResponse = spotifyClient.api.transferPlayback(transferRequest)
 
-            // Give Spotify a moment to activate the device
             if (transferResponse.isSuccessful) {
                 delay(500)
                 return deviceId
             }
 
-            return null
+            // Transfer failed, but still return the device ID — the play call
+            // with device_id might still work on an already-available device
+            return deviceId
         } catch (e: Exception) {
             e.printStackTrace()
             return null
         }
+    }
+
+    /**
+     * Launches the Spotify app to wake it up so it registers as an available device.
+     */
+    private fun launchSpotifyApp() {
+        try {
+            val intent = context.packageManager.getLaunchIntentForPackage("com.spotify.music")
+            if (intent != null) {
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                context.startActivity(intent)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    /**
+     * Polls the Spotify devices endpoint until at least one device appears.
+     * Returns the list of devices found, or empty if none appeared within the timeout.
+     */
+    private suspend fun pollForDevices(): List<com.cloudamp.music.api.SpotifyDevice> {
+        // Poll every 500ms for up to 5 seconds
+        repeat(10) {
+            delay(500)
+            try {
+                val response = spotifyClient.api.getAvailableDevices()
+                val devices = response.body()?.devices?.filter { it.id != null } ?: emptyList()
+                if (devices.isNotEmpty()) {
+                    return devices
+                }
+            } catch (_: Exception) { }
+        }
+        return emptyList()
     }
 
     /**
