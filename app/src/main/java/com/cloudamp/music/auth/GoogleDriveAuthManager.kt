@@ -30,22 +30,25 @@ class GoogleDriveAuthManager(private val context: Context) {
     private val prefs = context.getSharedPreferences("gdrive_auth", Context.MODE_PRIVATE)
     private val httpClient = OkHttpClient()
 
-    fun saveClientCredentials(clientId: String) {
+    fun saveClientCredentials(clientId: String, clientSecret: String) {
         prefs.edit().apply {
             putString("client_id", clientId)
+            putString("client_secret", clientSecret)
             apply()
         }
     }
 
     fun getClientId(): String? = prefs.getString("client_id", null)
+    fun getClientSecret(): String? = prefs.getString("client_secret", null)
 
     fun hasClientCredentials(): Boolean {
-        return !getClientId().isNullOrEmpty()
+        return !getClientId().isNullOrEmpty() && !getClientSecret().isNullOrEmpty()
     }
 
     fun clearCredentials() {
         prefs.edit().apply {
             remove("client_id")
+            remove("client_secret")
             remove("refresh_token")
             remove("access_token")
             remove("code_verifier")
@@ -188,6 +191,9 @@ class GoogleDriveAuthManager(private val context: Context) {
             val clientId = getClientId() ?: return@withContext Result.failure(
                 IllegalStateException("Client ID not set")
             )
+            val clientSecret = getClientSecret() ?: return@withContext Result.failure(
+                IllegalStateException("Client Secret not set")
+            )
             val codeVerifier = prefs.getString("code_verifier", null) ?: return@withContext Result.failure(
                 IllegalStateException("Code verifier not found")
             )
@@ -202,6 +208,7 @@ class GoogleDriveAuthManager(private val context: Context) {
                 .add("code", code)
                 .add("redirect_uri", redirectUri)
                 .add("client_id", clientId)
+                .add("client_secret", clientSecret)
                 .add("code_verifier", codeVerifier)
                 .build()
 
@@ -245,6 +252,9 @@ class GoogleDriveAuthManager(private val context: Context) {
             val clientId = getClientId() ?: return@withContext Result.failure(
                 IllegalStateException("Client ID not set")
             )
+            val clientSecret = getClientSecret() ?: return@withContext Result.failure(
+                IllegalStateException("Client Secret not set")
+            )
             val refreshToken = prefs.getString("refresh_token", null) ?: return@withContext Result.failure(
                 IllegalStateException("No refresh token available")
             )
@@ -253,6 +263,7 @@ class GoogleDriveAuthManager(private val context: Context) {
                 .add("grant_type", "refresh_token")
                 .add("refresh_token", refreshToken)
                 .add("client_id", clientId)
+                .add("client_secret", clientSecret)
                 .build()
 
             val request = Request.Builder()
