@@ -24,6 +24,8 @@ import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
 import com.cloudamp.music.MainActivity
 import com.cloudamp.music.R
+import com.cloudamp.music.api.DriveFile
+import com.cloudamp.music.api.GoogleDriveApiClient
 import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.cache.LibraryCache
 import com.cloudamp.music.api.Playlist
@@ -38,10 +40,14 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     private lateinit var spotifyClient: SpotifyApiClient
     private lateinit var playbackManager: PlaybackManager
     private lateinit var gdrivePlaybackManager: GDrivePlaybackManager
+    private lateinit var gdriveClient: GoogleDriveApiClient
     private lateinit var libraryCache: LibraryCache
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var currentAlbumArt: Bitmap? = null
     private var playbackPollingJob: Job? = null
+
+    // Cache of audio files per GDrive folder for building playback queues
+    private val gdriveAudioFilesByFolder = mutableMapOf<String, List<DriveFile>>()
 
     // When true, playback polling skips state updates (e.g., during Spotify wake flow)
     var suppressPollingUpdates = false
@@ -56,6 +62,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         const val SAVED_ALBUMS_ID = "saved_albums"
         const val LIBRARY_ID = "library"
         const val PLAYLISTS_ID = "playlists"
+        const val GDRIVE_ID = "gdrive"
         const val SEARCH_ID = "search"
 
         private const val CHANNEL_ID = "cloudamp_playback"
@@ -70,6 +77,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         spotifyClient = SpotifyApiClient.getInstance(this)
         playbackManager = PlaybackManager.getInstance(this)
         gdrivePlaybackManager = GDrivePlaybackManager.getInstance(this)
+        gdriveClient = GoogleDriveApiClient.getInstance(this)
         libraryCache = LibraryCache.getInstance(this)
 
         // Create MediaSession
@@ -435,7 +443,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     // Root menu - main categories
                     mediaItems.add(createBrowsableItem(LIBRARY_ID, "Library", "Your followed artists"))
                     mediaItems.add(createBrowsableItem(PLAYLISTS_ID, "Playlists", "Your playlists"))
-                    mediaItems.add(createBrowsableItem(SAVED_ALBUMS_ID, "Saved Albums", "Albums in your library"))
+                    mediaItems.add(createBrowsableItem(GDRIVE_ID, "Google Drive", "Browse your Drive music"))
                 }
 
                 TOP_TRACKS_ID -> {
@@ -458,6 +466,10 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     loadSavedAlbums(mediaItems)
                 }
 
+                GDRIVE_ID -> {
+                    loadGDriveFolder("root", mediaItems)
+                }
+
                 ARTISTS_ID -> {
                     loadTopArtists(mediaItems)
                 }
@@ -465,6 +477,13 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 else -> {
                     // Handle dynamic IDs
                     when {
+                        parentId == "gdrive_no_auth" -> {
+                            // No-op: placeholder item when GDrive is not connected
+                        }
+                        parentId.startsWith("gdrive_folder_") -> {
+                            val folderId = parentId.removePrefix("gdrive_folder_")
+                            loadGDriveFolder(folderId, mediaItems)
+                        }
                         parentId.startsWith("section_letter_artist_") -> {
                             // Show artists for this letter
                             val letter = parentId.removePrefix("section_letter_artist_")
@@ -848,6 +867,109 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    // ── Google Drive browsing ─────────────────────────────────────────
+
+    private suspend fun loadGDriveFolder(folderId: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
+        try {
+            if (!gdriveClient.hasAccessToken()) {
+                // No auth — show a hint to open the app
+                items.add(createBrowsableItem(
+                    "gdrive_no_auth",
+                    "Connect Google Drive",
+                    "Open CloudAmp app to sign in"
+                ))
+                return
+            }
+
+            val allFiles = mutableListOf<DriveFile>()
+            var pageToken: String? = null
+            val query = "'$folderId' in parents and trashed = false and " +
+                    "(mimeType contains 'audio/' or mimeType = 'application/vnd.google-apps.folder')"
+
+            do {
+                val response = gdriveClient.api.listFiles(
+                    query = query,
+                    pageToken = pageToken
+                )
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    allFiles.addAll(body?.files ?: emptyList())
+                    pageToken = body?.nextPageToken
+                } else {
+                    break
+                }
+            } while (pageToken != null)
+
+            val folders = allFiles.filter { it.isFolder() }.sortedBy { it.name }
+            val audioFiles = allFiles.filter { it.isAudioFile() }.sortedBy { it.name }
+
+            // Cache audio files so playback can build the full queue
+            gdriveAudioFilesByFolder[folderId] = audioFiles
+
+            // Add folders as browsable items
+            for (folder in folders) {
+                items.add(createBrowsableItem(
+                    "gdrive_folder_${folder.id}",
+                    folder.name,
+                    "Folder"
+                ))
+            }
+
+            // Add audio files as playable items
+            for (file in audioFiles) {
+                val nameWithoutExtension = file.name.substringBeforeLast('.')
+                items.add(createGDrivePlayableItem(
+                    "gdrive_file_${file.id}",
+                    nameWithoutExtension,
+                    "${file.getFileExtension()} · ${file.getFileSizeFormatted()}",
+                    folderId
+                ))
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    /**
+     * Called by PlaybackManager when a Google Drive file is selected from Android Auto.
+     * Looks up the cached folder contents to build the playback queue.
+     */
+    fun playGDriveFromMediaId(fileId: String, parentFolderId: String?) {
+        val files = if (parentFolderId != null) {
+            gdriveAudioFilesByFolder[parentFolderId]
+        } else {
+            // Fallback: find any cached folder containing this file
+            gdriveAudioFilesByFolder.values.firstOrNull { folder ->
+                folder.any { it.id == fileId }
+            }
+        }
+
+        if (files.isNullOrEmpty()) return
+
+        val index = files.indexOfFirst { it.id == fileId }.takeIf { it >= 0 } ?: 0
+        gdrivePlaybackManager.playFiles(files, index)
+    }
+
+    private fun createGDrivePlayableItem(
+        id: String,
+        title: String,
+        subtitle: String,
+        gdriveParentId: String
+    ): MediaBrowserCompat.MediaItem {
+        val extras = Bundle().apply {
+            putString("gdrive_parent_id", gdriveParentId)
+        }
+
+        val description = MediaDescriptionCompat.Builder()
+            .setMediaId(id)
+            .setTitle(title)
+            .setSubtitle(subtitle)
+            .setExtras(extras)
+            .build()
+
+        return MediaBrowserCompat.MediaItem(description, MediaBrowserCompat.MediaItem.FLAG_PLAYABLE)
     }
 
     override fun onSearch(query: String, extras: Bundle?, result: Result<MutableList<MediaBrowserCompat.MediaItem>>) {
