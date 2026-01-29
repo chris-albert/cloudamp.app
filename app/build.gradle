@@ -90,6 +90,9 @@ dependencies {
 
     // Preferences
     implementation 'androidx.preference:preference-ktx:1.2.1'
+
+    // Spotify App Remote SDK (for waking Spotify from idle/force-stopped state)
+    implementation files('libs/spotify-app-remote-release-0.8.0.aar')
 }
 
 // Task to print version code for CI/CD

@@ -42,6 +42,9 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     private var currentAlbumArt: Bitmap? = null
     private var playbackPollingJob: Job? = null
 
+    // When true, playback polling skips state updates (e.g., during Spotify wake flow)
+    var suppressPollingUpdates = false
+
     companion object {
         const val ROOT_ID = "root"
         const val ARTISTS_ID = "artists"
@@ -320,6 +323,29 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         updateNotification(isPlaying)
     }
 
+    /**
+     * Sets the playback state to STATE_ERROR with an error message shown in Android Auto.
+     */
+    fun updatePlaybackStateError(errorCode: Int, message: String) {
+        val stateBuilder = PlaybackStateCompat.Builder()
+            .setState(PlaybackStateCompat.STATE_ERROR, 0, 0f)
+            .setActions(getAvailableActions())
+            .setErrorMessage(errorCode, message)
+
+        mediaSession.setPlaybackState(stateBuilder.build())
+        updateNotification(false)
+    }
+
+    /**
+     * Sets metadata to show a status message (e.g., "Waking Spotify...") during loading.
+     */
+    fun updateStatusMetadata(message: String) {
+        val metadataBuilder = MediaMetadataCompat.Builder()
+            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, message)
+            .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, "CloudAmp")
+        mediaSession.setMetadata(metadataBuilder.build())
+    }
+
     fun updateQueue(tracks: List<Track>, currentIndex: Int) {
         val queueItems = tracks.mapIndexed { index, track ->
             val description = MediaDescriptionCompat.Builder()
@@ -343,25 +369,27 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         playbackPollingJob = serviceScope.launch {
             while (isActive) {
                 try {
-                    val response = spotifyClient.api.getCurrentPlayback()
-                    if (response.isSuccessful) {
-                        val playback = response.body()
-                        if (playback != null) {
-                            val state = if (playback.isPlaying) {
-                                PlaybackStateCompat.STATE_PLAYING
-                            } else {
-                                PlaybackStateCompat.STATE_PAUSED
-                            }
+                    if (!suppressPollingUpdates) {
+                        val response = spotifyClient.api.getCurrentPlayback()
+                        if (response.isSuccessful) {
+                            val playback = response.body()
+                            if (playback != null) {
+                                val state = if (playback.isPlaying) {
+                                    PlaybackStateCompat.STATE_PLAYING
+                                } else {
+                                    PlaybackStateCompat.STATE_PAUSED
+                                }
 
-                            updatePlaybackState(
-                                state,
-                                playback.progressMs.toLong(),
-                                1.0f
-                            )
+                                updatePlaybackState(
+                                    state,
+                                    playback.progressMs.toLong(),
+                                    1.0f
+                                )
 
-                            // Update metadata if track info available
-                            playback.item?.let { track ->
-                                updateMetadata(track, track.album?.images?.firstOrNull()?.url)
+                                // Update metadata if track info available
+                                playback.item?.let { track ->
+                                    updateMetadata(track, track.album?.images?.firstOrNull()?.url)
+                                }
                             }
                         }
                     }
