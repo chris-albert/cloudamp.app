@@ -1,11 +1,14 @@
 package com.cloudamp.music.playback
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.support.v4.media.MediaBrowserCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import android.view.KeyEvent
 import android.widget.Toast
 import com.cloudamp.music.api.PlayRequest
 import com.cloudamp.music.api.SpotifyApiClient
@@ -71,9 +74,9 @@ class PlaybackManager private constructor(
             var devices = spotifyClient.api.getAvailableDevices()
                 .body()?.devices?.filter { it.id != null } ?: emptyList()
 
-            // If no devices at all, Spotify is likely not running — launch it and poll
+            // If no devices at all, Spotify is likely not running — wake it up and poll
             if (devices.isEmpty()) {
-                launchSpotifyApp()
+                wakeUpSpotify()
                 devices = pollForDevices()
                 if (devices.isEmpty()) {
                     return null
@@ -108,9 +111,54 @@ class PlaybackManager private constructor(
     }
 
     /**
-     * Launches the Spotify app to wake it up so it registers as an available device.
+     * Wakes up the Spotify app using multiple strategies so it registers as a Connect device.
+     * Tries: media button broadcast, MediaBrowser connection, and launch intent.
      */
-    private fun launchSpotifyApp() {
+    private suspend fun wakeUpSpotify() {
+        // Strategy 1: Send a media button broadcast to Spotify's package.
+        // Broadcasts aren't blocked by background activity restrictions.
+        try {
+            val downIntent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
+                `package` = "com.spotify.music"
+                putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY))
+            }
+            val upIntent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
+                `package` = "com.spotify.music"
+                putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY))
+            }
+            context.sendBroadcast(downIntent)
+            context.sendBroadcast(upIntent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // Strategy 2: Connect to Spotify's MediaBrowserService.
+        // This forces Android to start the Spotify service process.
+        try {
+            val browserComponent = ComponentName(
+                "com.spotify.music",
+                "com.spotify.music.internal.mediabrowser.MediaBrowserService"
+            )
+            val browser = MediaBrowserCompat(
+                context,
+                browserComponent,
+                object : MediaBrowserCompat.ConnectionCallback() {
+                    override fun onConnected() { }
+                    override fun onConnectionFailed() { }
+                },
+                null
+            )
+            browser.connect()
+            // Disconnect after a delay to avoid leaking the connection
+            scope.launch {
+                delay(10_000)
+                try { browser.disconnect() } catch (_: Exception) { }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // Strategy 3: Launch intent (may work if foreground service conditions are met)
         try {
             val intent = context.packageManager.getLaunchIntentForPackage("com.spotify.music")
             if (intent != null) {
@@ -127,9 +175,9 @@ class PlaybackManager private constructor(
      * Returns the list of devices found, or empty if none appeared within the timeout.
      */
     private suspend fun pollForDevices(): List<com.cloudamp.music.api.SpotifyDevice> {
-        // Poll every 500ms for up to 5 seconds
+        // Poll every second for up to 10 seconds — cold-starting Spotify takes time
         repeat(10) {
-            delay(500)
+            delay(1_000)
             try {
                 val response = spotifyClient.api.getAvailableDevices()
                 val devices = response.body()?.devices?.filter { it.id != null } ?: emptyList()
