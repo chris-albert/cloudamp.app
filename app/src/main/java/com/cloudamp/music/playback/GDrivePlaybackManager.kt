@@ -12,6 +12,7 @@ import com.google.android.exoplayer2.MediaItem
 import com.google.android.exoplayer2.Player
 import com.google.android.exoplayer2.ext.okhttp.OkHttpDataSource
 import com.google.android.exoplayer2.source.DefaultMediaSourceFactory
+import com.google.android.exoplayer2.upstream.DataSource
 
 /**
  * Manages Google Drive audio playback using ExoPlayer.
@@ -60,7 +61,8 @@ class GDrivePlaybackManager private constructor(
      */
     private fun getPlayer(): ExoPlayer {
         if (exoPlayer == null) {
-            val mediaSourceFactory = DefaultMediaSourceFactory(getDataSourceFactory())
+            val dsFactory: DataSource.Factory = getDataSourceFactory()
+            val mediaSourceFactory = DefaultMediaSourceFactory(dsFactory)
             exoPlayer = ExoPlayer.Builder(context)
                 .setMediaSourceFactory(mediaSourceFactory)
                 .build()
