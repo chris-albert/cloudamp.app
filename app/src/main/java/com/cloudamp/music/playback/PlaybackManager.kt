@@ -13,9 +13,14 @@ import android.widget.Toast
 import com.cloudamp.music.api.PlayRequest
 import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.api.TransferPlaybackRequest
+import com.cloudamp.music.auth.SpotifyAuthManager
 import com.cloudamp.music.models.Track
+import com.spotify.android.appremote.api.ConnectionParams
+import com.spotify.android.appremote.api.Connector
+import com.spotify.android.appremote.api.SpotifyAppRemote
 import retrofit2.Response
 import kotlinx.coroutines.*
+import kotlin.coroutines.resume
 
 /**
  * Represents a playback request that is pending while Spotify wakes up.
@@ -119,9 +124,22 @@ class PlaybackManager private constructor(
         service?.updatePlaybackState(PlaybackStateCompat.STATE_BUFFERING)
 
         try {
-            // Wake intents were already fired by playWithDeviceActivation(),
-            // so just poll for a device to appear.
-            val devices = pollForDevices()
+            // Use Spotify App Remote SDK to wake Spotify — works even for force-stopped apps.
+            // The SDK uses a content provider mechanism that bypasses Android's background
+            // activity restrictions and can launch Spotify from any state.
+            val connected = withTimeoutOrNull(10_000) {
+                connectSpotifyAppRemote()
+            } ?: false
+
+            if (!connected) {
+                // Fallback to legacy wake strategies (broadcasts, MediaBrowser, launch intent)
+                wakeUpSpotifyLegacy()
+            }
+
+            // Poll for a Web API device. If App Remote connected, Spotify is alive
+            // and the device should appear quickly.
+            val maxPolls = if (connected) 20 else 30  // 10s or 15s
+            val devices = pollForDevices(maxPolls)
 
             if (devices.isEmpty()) {
                 return null
@@ -132,7 +150,7 @@ class PlaybackManager private constructor(
 
             val deviceId = targetDevice.id ?: return null
 
-            // The MEDIA_PLAY key event may have started Spotify's old queue.
+            // The legacy MEDIA_PLAY fallback may have started Spotify's old queue.
             // Pause it immediately so our play command starts clean.
             try {
                 spotifyClient.api.pause()
@@ -152,13 +170,50 @@ class PlaybackManager private constructor(
         }
     }
 
+    // ── Spotify App Remote SDK ─────────────────────────────────────────
+
     /**
-     * Wakes up the Spotify app using multiple strategies so it registers as a Connect device.
+     * Connects to Spotify via the App Remote SDK, which can launch Spotify even from
+     * a force-stopped state. Returns true if the connection succeeded (Spotify is alive).
+     * Disconnects immediately after — we only need this to wake Spotify, not for playback.
      */
-    private fun wakeUpSpotify() {
+    private suspend fun connectSpotifyAppRemote(): Boolean {
+        val clientId = SpotifyAuthManager(context).getClientId() ?: return false
+
+        return suspendCancellableCoroutine { continuation ->
+            val connectionParams = ConnectionParams.Builder(clientId)
+                .setRedirectUri("cloudamp://callback")
+                .showAuthView(true)
+                .build()
+
+            SpotifyAppRemote.connect(context, connectionParams,
+                object : Connector.ConnectionListener {
+                    override fun onConnected(appRemote: SpotifyAppRemote) {
+                        // Spotify is alive — disconnect immediately since we use Web API for playback
+                        SpotifyAppRemote.disconnect(appRemote)
+                        if (continuation.isActive) {
+                            continuation.resume(true)
+                        }
+                    }
+
+                    override fun onFailure(error: Throwable) {
+                        error.printStackTrace()
+                        if (continuation.isActive) {
+                            continuation.resume(false)
+                        }
+                    }
+                })
+        }
+    }
+
+    // ── Legacy wake strategies (fallback) ──────────────────────────────
+
+    /**
+     * Fallback: wakes Spotify using broadcasts, MediaBrowser, and launch intent.
+     * Used when the App Remote SDK fails (e.g., first-time auth not yet completed).
+     */
+    private fun wakeUpSpotifyLegacy() {
         // Strategy 1: Send a MEDIA_PLAY key event to Spotify's package.
-        // This is the most reliable way to wake Spotify — it starts the process
-        // and creates an active device. We'll pause the old queue after the device appears.
         try {
             val downIntent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
                 `package` = "com.spotify.music"
@@ -212,10 +267,10 @@ class PlaybackManager private constructor(
 
     /**
      * Polls the Spotify devices endpoint until at least one device appears.
-     * Polls every 500ms for up to 15 seconds.
+     * Polls every 500ms for up to [maxPolls] attempts (default 30 = 15 seconds).
      */
-    private suspend fun pollForDevices(): List<com.cloudamp.music.api.SpotifyDevice> {
-        repeat(30) {
+    private suspend fun pollForDevices(maxPolls: Int = 30): List<com.cloudamp.music.api.SpotifyDevice> {
+        repeat(maxPolls) {
             delay(500)
             try {
                 val response = spotifyClient.api.getAvailableDevices()
@@ -239,11 +294,6 @@ class PlaybackManager private constructor(
         request: PlayRequest,
         pending: PendingPlayback
     ): Response<Unit> {
-        // Fire wake intents immediately in the background — if Spotify is already
-        // running these are harmless, but if it's idle we get a head start on waking
-        // while the fast-path check runs.
-        wakeUpSpotify()
-
         // Fast path: check if a device is already active
         val existingDevice = findActiveDevice()
         if (existingDevice != null) {
@@ -255,8 +305,6 @@ class PlaybackManager private constructor(
         }
 
         // No active device — store pending and start the visible wake flow.
-        // Spotify is already waking from the intents fired above, so polling
-        // should find a device faster.
         pendingPlayback = pending
 
         val deviceId = wakeSpotifyWithUI()
