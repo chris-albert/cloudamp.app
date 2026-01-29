@@ -344,6 +344,14 @@ class PlaybackManager private constructor(
         override fun onPlay() {
             scope.launch {
                 try {
+                    // Route to GDrive if it's the active provider
+                    if (GDrivePlaybackManager.isActiveProvider) {
+                        val gdrive = GDrivePlaybackManager.getInstance(context)
+                        gdrive.play()
+                        service?.updatePlaybackState(PlaybackStateCompat.STATE_PLAYING, gdrive.getCurrentPosition())
+                        return@launch
+                    }
+
                     // Check for a pending playback to retry
                     val pending = pendingPlayback
                     if (pending != null) {
@@ -373,6 +381,12 @@ class PlaybackManager private constructor(
         override fun onPause() {
             scope.launch {
                 try {
+                    if (GDrivePlaybackManager.isActiveProvider) {
+                        val gdrive = GDrivePlaybackManager.getInstance(context)
+                        gdrive.pause()
+                        service?.updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, gdrive.getCurrentPosition())
+                        return@launch
+                    }
                     spotifyClient.api.pause()
                     service?.updatePlaybackState(PlaybackStateCompat.STATE_PAUSED)
                 } catch (e: Exception) {
@@ -384,6 +398,10 @@ class PlaybackManager private constructor(
         override fun onSkipToNext() {
             scope.launch {
                 try {
+                    if (GDrivePlaybackManager.isActiveProvider) {
+                        GDrivePlaybackManager.getInstance(context).skipToNext()
+                        return@launch
+                    }
                     if (currentIndex < currentQueue.size - 1) {
                         currentIndex++
                         playTrackAtIndex(currentIndex)
@@ -400,6 +418,10 @@ class PlaybackManager private constructor(
         override fun onSkipToPrevious() {
             scope.launch {
                 try {
+                    if (GDrivePlaybackManager.isActiveProvider) {
+                        GDrivePlaybackManager.getInstance(context).skipToPrevious()
+                        return@launch
+                    }
                     if (currentIndex > 0) {
                         currentIndex--
                         playTrackAtIndex(currentIndex)
@@ -416,7 +438,11 @@ class PlaybackManager private constructor(
         override fun onPlayFromMediaId(mediaId: String, extras: Bundle?) {
             scope.launch {
                 try {
-                    if (mediaId.startsWith("spotify:track:")) {
+                    if (mediaId.startsWith("gdrive_file_")) {
+                        val fileId = mediaId.removePrefix("gdrive_file_")
+                        val parentId = extras?.getString("gdrive_parent_id")
+                        service?.playGDriveFromMediaId(fileId, parentId)
+                    } else if (mediaId.startsWith("spotify:track:")) {
                         val albumId = extras?.getString("album_id")
                         if (albumId != null) {
                             playAlbumFromTrack(albumId, mediaId)
@@ -455,6 +481,11 @@ class PlaybackManager private constructor(
         override fun onStop() {
             scope.launch {
                 try {
+                    if (GDrivePlaybackManager.isActiveProvider) {
+                        GDrivePlaybackManager.getInstance(context).stop()
+                        service?.updatePlaybackState(PlaybackStateCompat.STATE_STOPPED)
+                        return@launch
+                    }
                     spotifyClient.api.pause()
                     service?.updatePlaybackState(PlaybackStateCompat.STATE_STOPPED)
                 } catch (e: Exception) {
@@ -466,6 +497,10 @@ class PlaybackManager private constructor(
         override fun onSeekTo(pos: Long) {
             scope.launch {
                 try {
+                    if (GDrivePlaybackManager.isActiveProvider) {
+                        GDrivePlaybackManager.getInstance(context).seekTo(pos)
+                        return@launch
+                    }
                     spotifyClient.api.seek(pos)
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -483,6 +518,10 @@ class PlaybackManager private constructor(
         override fun onSkipToQueueItem(id: Long) {
             scope.launch {
                 try {
+                    if (GDrivePlaybackManager.isActiveProvider) {
+                        GDrivePlaybackManager.getInstance(context).skipToQueueItem(id.toInt())
+                        return@launch
+                    }
                     val index = id.toInt()
                     if (index in currentQueue.indices) {
                         currentIndex = index
@@ -541,6 +580,10 @@ class PlaybackManager private constructor(
 
     private suspend fun playTrackFromMediaId(trackUri: String) {
         try {
+            // Deactivate GDrive if switching back to Spotify
+            if (GDrivePlaybackManager.isActiveProvider) {
+                GDrivePlaybackManager.getInstance(context).deactivate()
+            }
             val request = PlayRequest(uris = listOf(trackUri))
             val pending = PendingPlayback.SingleTrack(trackUri)
             val response = playWithDeviceActivation(request, pending)
@@ -582,6 +625,10 @@ class PlaybackManager private constructor(
     fun playTracks(tracks: List<Track>, startIndex: Int = 0) {
         scope.launch {
             try {
+                // Deactivate GDrive if switching back to Spotify
+                if (GDrivePlaybackManager.isActiveProvider) {
+                    GDrivePlaybackManager.getInstance(context).deactivate()
+                }
                 setQueue(tracks)
                 currentIndex = startIndex
                 service?.updateQueue(tracks, currentIndex)

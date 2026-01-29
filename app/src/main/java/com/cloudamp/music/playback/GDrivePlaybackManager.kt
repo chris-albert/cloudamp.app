@@ -261,7 +261,14 @@ class GDrivePlaybackManager private constructor(
         if (currentIndex in queue.indices) {
             val file = queue[currentIndex]
             val track = driveFileToTrack(file)
-            service?.updateMetadata(track, null)
+            // Include actual duration from ExoPlayer when available
+            val duration = getDuration()
+            val trackWithDuration = if (duration > 0) {
+                track.copy(durationMs = duration.toInt())
+            } else {
+                track
+            }
+            service?.updateMetadata(trackWithDuration, null)
         }
     }
 
