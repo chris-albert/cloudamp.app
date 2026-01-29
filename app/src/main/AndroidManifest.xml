@@ -70,21 +70,6 @@
             </intent-filter>
         </activity>
 
-        <!-- Google Drive OAuth Callback Activity -->
-        <activity
-            android:name=".auth.GoogleDriveCallbackActivity"
-            android:exported="true"
-            android:launchMode="singleTask">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="cloudamp"
-                    android:host="gdrive-callback" />
-            </intent-filter>
-        </activity>
-
         <!-- Media Browser Service for Android Auto -->
         <service
             android:name=".playback.CloudAmpService"

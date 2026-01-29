@@ -183,13 +183,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         loginWithGdriveButton.setOnClickListener {
-            try {
-                val authUrl = gdriveAuthManager.getAuthorizationUrl()
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
-                startActivity(intent)
-            } catch (e: Exception) {
-                Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_LONG).show()
-            }
+            startGoogleDriveLogin()
         }
 
         clearGdriveButton.setOnClickListener {
@@ -198,6 +192,45 @@ class SettingsActivity : AppCompatActivity() {
             loginWithGdriveButton.isEnabled = false
             updateGdriveStatus("", false)
             Toast.makeText(this, "Google Drive credentials cleared", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun startGoogleDriveLogin() {
+        try {
+            val authUrl = gdriveAuthManager.getAuthorizationUrl()
+
+            loginWithGdriveButton.isEnabled = false
+            updateGdriveStatus("Waiting for authorization...", false)
+
+            // Start listening for the loopback callback in background
+            scope.launch {
+                val codeResult = withContext(Dispatchers.IO) {
+                    gdriveAuthManager.waitForAuthorizationCode()
+                }
+
+                codeResult.onSuccess { code ->
+                    updateGdriveStatus("Exchanging token...", false)
+                    val tokenResult = gdriveAuthManager.exchangeCodeForToken(code)
+                    tokenResult.onSuccess {
+                        updateGdriveStatus("Connected to Google Drive!", true)
+                        validateGdriveToken()
+                    }.onFailure { error ->
+                        updateGdriveStatus("Token exchange failed: ${error.message}", false)
+                    }
+                }.onFailure { error ->
+                    updateGdriveStatus("Authorization failed: ${error.message}", false)
+                }
+
+                loginWithGdriveButton.isEnabled = true
+            }
+
+            // Open browser for authorization
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
+            startActivity(intent)
+        } catch (e: Exception) {
+            loginWithGdriveButton.isEnabled = true
+            updateGdriveStatus("Error: ${e.message}", false)
+            Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 

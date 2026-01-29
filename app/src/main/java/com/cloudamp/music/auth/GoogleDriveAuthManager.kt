@@ -9,13 +9,16 @@ import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.ServerSocket
 import java.security.MessageDigest
 import java.security.SecureRandom
 
 class GoogleDriveAuthManager(private val context: Context) {
 
     companion object {
-        private const val REDIRECT_URI = "cloudamp://gdrive-callback"
+        private const val LOOPBACK_HOST = "127.0.0.1"
         private const val AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
         private const val TOKEN_URL = "https://oauth2.googleapis.com/token"
 
@@ -46,6 +49,7 @@ class GoogleDriveAuthManager(private val context: Context) {
             remove("refresh_token")
             remove("access_token")
             remove("code_verifier")
+            remove("loopback_port")
             apply()
         }
     }
@@ -77,25 +81,106 @@ class GoogleDriveAuthManager(private val context: Context) {
         return Base64.encodeToString(digest, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
     }
 
+    /**
+     * Returns the redirect URI using a loopback address.
+     * Google OAuth supports http://127.0.0.1:<port> for installed/desktop apps.
+     */
+    private fun getRedirectUri(port: Int): String {
+        return "http://$LOOPBACK_HOST:$port"
+    }
+
     fun getAuthorizationUrl(): String {
         val clientId = getClientId() ?: throw IllegalStateException("Client ID not set")
 
         val codeVerifier = generateCodeVerifier()
         val codeChallenge = generateCodeChallenge(codeVerifier)
 
-        // Save code verifier for later token exchange
-        prefs.edit().putString("code_verifier", codeVerifier).apply()
+        // Find an available port and save it
+        val port = findAvailablePort()
+        prefs.edit().apply {
+            putString("code_verifier", codeVerifier)
+            putInt("loopback_port", port)
+            apply()
+        }
+
+        val redirectUri = getRedirectUri(port)
 
         return Uri.parse(AUTH_URL).buildUpon().apply {
             appendQueryParameter("client_id", clientId)
             appendQueryParameter("response_type", "code")
-            appendQueryParameter("redirect_uri", REDIRECT_URI)
+            appendQueryParameter("redirect_uri", redirectUri)
             appendQueryParameter("scope", SCOPES.joinToString(" "))
             appendQueryParameter("code_challenge_method", "S256")
             appendQueryParameter("code_challenge", codeChallenge)
             appendQueryParameter("access_type", "offline")
             appendQueryParameter("prompt", "consent")
         }.build().toString()
+    }
+
+    /**
+     * Find an available port on the loopback interface.
+     */
+    private fun findAvailablePort(): Int {
+        val socket = ServerSocket(0)
+        val port = socket.localPort
+        socket.close()
+        return port
+    }
+
+    /**
+     * Start a loopback HTTP server to listen for the OAuth callback.
+     * This blocks until the callback is received or times out.
+     * Must be called from a background thread.
+     *
+     * Returns the authorization code or throws an exception.
+     */
+    fun waitForAuthorizationCode(): Result<String> {
+        val port = prefs.getInt("loopback_port", 0)
+        if (port == 0) return Result.failure(IllegalStateException("No loopback port configured"))
+
+        return try {
+            val serverSocket = ServerSocket(port)
+            serverSocket.soTimeout = 120_000 // 2 minute timeout
+
+            val socket = serverSocket.accept()
+            val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
+            val requestLine = reader.readLine() ?: ""
+
+            // Parse the GET request: "GET /?code=xxx&scope=yyy HTTP/1.1"
+            val path = requestLine.split(" ").getOrNull(1) ?: ""
+            val uri = Uri.parse("http://localhost$path")
+            val code = uri.getQueryParameter("code")
+            val error = uri.getQueryParameter("error")
+
+            // Send a response to the browser
+            val responseHtml = if (code != null) {
+                "<html><body style=\"font-family:monospace;background:#1a1a2e;color:#00ff41;display:flex;justify-content:center;align-items:center;height:100vh;margin:0\">" +
+                "<div style=\"text-align:center\"><h1>CloudAmp</h1><p>Google Drive connected successfully!</p><p>You can close this window.</p></div></body></html>"
+            } else {
+                "<html><body style=\"font-family:monospace;background:#1a1a2e;color:#ff4444;display:flex;justify-content:center;align-items:center;height:100vh;margin:0\">" +
+                "<div style=\"text-align:center\"><h1>CloudAmp</h1><p>Authorization failed: ${error ?: "unknown error"}</p><p>You can close this window.</p></div></body></html>"
+            }
+
+            val httpResponse = "HTTP/1.1 200 OK\r\n" +
+                    "Content-Type: text/html\r\n" +
+                    "Content-Length: ${responseHtml.toByteArray().size}\r\n" +
+                    "Connection: close\r\n" +
+                    "\r\n" +
+                    responseHtml
+
+            socket.getOutputStream().write(httpResponse.toByteArray())
+            socket.getOutputStream().flush()
+            socket.close()
+            serverSocket.close()
+
+            if (code != null) {
+                Result.success(code)
+            } else {
+                Result.failure(Exception("Authorization failed: ${error ?: "unknown error"}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     suspend fun exchangeCodeForToken(code: String): Result<String> = withContext(Dispatchers.IO) {
@@ -106,11 +191,16 @@ class GoogleDriveAuthManager(private val context: Context) {
             val codeVerifier = prefs.getString("code_verifier", null) ?: return@withContext Result.failure(
                 IllegalStateException("Code verifier not found")
             )
+            val port = prefs.getInt("loopback_port", 0)
+            if (port == 0) return@withContext Result.failure(
+                IllegalStateException("No loopback port configured")
+            )
+            val redirectUri = getRedirectUri(port)
 
             val requestBody = FormBody.Builder()
                 .add("grant_type", "authorization_code")
                 .add("code", code)
-                .add("redirect_uri", REDIRECT_URI)
+                .add("redirect_uri", redirectUri)
                 .add("client_id", clientId)
                 .add("code_verifier", codeVerifier)
                 .build()
@@ -134,8 +224,12 @@ class GoogleDriveAuthManager(private val context: Context) {
                     prefs.edit().putString("refresh_token", refreshToken).apply()
                 }
 
-                // Clear code verifier
-                prefs.edit().remove("code_verifier").apply()
+                // Clear code verifier and port
+                prefs.edit().apply {
+                    remove("code_verifier")
+                    remove("loopback_port")
+                    apply()
+                }
 
                 Result.success(accessToken)
             } else {
