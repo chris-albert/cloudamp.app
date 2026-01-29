@@ -290,9 +290,16 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             .setState(state, position, playbackSpeed)
             .setActions(getAvailableActions())
 
-        // Add queue navigation
-        val queue = playbackManager.getCurrentQueue()
-        val currentIndex = playbackManager.getCurrentIndex()
+        // Add queue navigation - use the correct provider's queue
+        val queue: List<Track>
+        val currentIndex: Int
+        if (GDrivePlaybackManager.isActiveProvider) {
+            queue = gdrivePlaybackManager.getQueueAsTracks()
+            currentIndex = gdrivePlaybackManager.getCurrentIndex()
+        } else {
+            queue = playbackManager.getCurrentQueue()
+            currentIndex = playbackManager.getCurrentIndex()
+        }
 
         // Set active queue item ID for Android Auto to highlight current track
         if (queue.isNotEmpty() && currentIndex in queue.indices) {

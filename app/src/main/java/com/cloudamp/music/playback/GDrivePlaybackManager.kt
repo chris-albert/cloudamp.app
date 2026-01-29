@@ -94,6 +94,8 @@ class GDrivePlaybackManager private constructor(
     private fun getDataSourceFactory(): DataSource.Factory {
         if (dataSourceFactory == null) {
             val driveClient = GoogleDriveApiClient.getInstance(context)
+            val hasToken = driveClient.hasAccessToken()
+            Log.d(TAG, "Creating DataSource.Factory, hasAccessToken=$hasToken")
             val streamingClient = driveClient.getStreamingHttpClient()
             dataSourceFactory = OkHttpDataSource.Factory(streamingClient)
         }
@@ -112,12 +114,21 @@ class GDrivePlaybackManager private constructor(
      * This sets GDrive as the active provider.
      */
     fun playFiles(files: List<DriveFile>, startIndex: Int = 0) {
+        Log.d(TAG, "playFiles called: ${files.size} files, startIndex=$startIndex")
+
+        // Pre-check: verify we have an access token before attempting playback
+        val driveClient = GoogleDriveApiClient.getInstance(context)
+        if (!driveClient.hasAccessToken()) {
+            Log.e(TAG, "playFiles: NO ACCESS TOKEN! Playback will fail. User needs to re-authenticate.")
+        }
+
         isActiveProvider = true
         queue.clear()
         queue.addAll(files)
         currentIndex = startIndex
 
         val player = getPlayer()
+        Log.d(TAG, "ExoPlayer obtained, state=${player.playbackState}")
 
         // Clear and set the new playlist.
         // ExoPlayer is configured with our OkHttpDataSource.Factory (via
@@ -133,10 +144,10 @@ class GDrivePlaybackManager private constructor(
         }
 
         player.seekTo(startIndex, 0)
+        Log.d(TAG, "Calling prepare()")
         player.prepare()
         player.playWhenReady = true
-
-        Log.d(TAG, "playFiles: ${files.size} files, starting at index $startIndex")
+        Log.d(TAG, "playWhenReady=true, playbackState=${player.playbackState}")
 
         // Update media session metadata and queue
         updateServiceMetadata()
@@ -296,6 +307,15 @@ class GDrivePlaybackManager private constructor(
         override fun onPlayerError(error: PlaybackException) {
             Log.e(TAG, "ExoPlayer error: ${error.errorCodeName} (${error.errorCode})", error)
             Log.e(TAG, "  cause: ${error.cause?.message}")
+            // Walk the cause chain for more details (e.g., HTTP status codes)
+            var cause: Throwable? = error.cause
+            var depth = 1
+            while (cause != null) {
+                Log.e(TAG, "  cause[$depth]: ${cause::class.java.simpleName}: ${cause.message}")
+                cause = cause.cause
+                depth++
+            }
+            service?.updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
         }
 
         override fun onMediaItemTransition(mediaItem: com.google.android.exoplayer2.MediaItem?, reason: Int) {

@@ -41,10 +41,12 @@ class GoogleDriveApiClient(private val context: Context) {
     private val authInterceptor = Interceptor { chain ->
         val token = authManager.getAccessToken()
         val request = if (token != null) {
+            Log.d(TAG, "Auth interceptor: adding Bearer token (${token.take(10)}...) for ${chain.request().url}")
             chain.request().newBuilder()
                 .addHeader("Authorization", "Bearer $token")
                 .build()
         } else {
+            Log.w(TAG, "Auth interceptor: NO token available for ${chain.request().url}")
             chain.request()
         }
         chain.proceed(request)
@@ -101,8 +103,14 @@ class GoogleDriveApiClient(private val context: Context) {
      * entire audio files into memory and stall playback).
      */
     fun getStreamingHttpClient(): OkHttpClient {
+        // Use HEADERS-level logging only (not BODY) to see request/response
+        // status codes without buffering audio data into memory.
+        val headersOnlyLogging = HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.HEADERS
+        }
         return OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
+            .addInterceptor(headersOnlyLogging)
             .authenticator(tokenAuthenticator)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
