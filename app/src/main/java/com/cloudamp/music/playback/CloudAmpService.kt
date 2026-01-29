@@ -37,6 +37,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     private lateinit var mediaSession: MediaSessionCompat
     private lateinit var spotifyClient: SpotifyApiClient
     private lateinit var playbackManager: PlaybackManager
+    private lateinit var gdrivePlaybackManager: GDrivePlaybackManager
     private lateinit var libraryCache: LibraryCache
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var currentAlbumArt: Bitmap? = null
@@ -68,6 +69,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
         spotifyClient = SpotifyApiClient.getInstance(this)
         playbackManager = PlaybackManager.getInstance(this)
+        gdrivePlaybackManager = GDrivePlaybackManager.getInstance(this)
         libraryCache = LibraryCache.getInstance(this)
 
         // Create MediaSession
@@ -101,6 +103,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         // Set the callback on MediaSession and pass reference to PlaybackManager
         playbackManager.setMediaSession(mediaSession)
         playbackManager.setService(this)
+        gdrivePlaybackManager.setService(this)
         mediaSession.setCallback(playbackManager.mediaSessionCallback)
 
         sessionToken = mediaSession.sessionToken
@@ -369,7 +372,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         playbackPollingJob = serviceScope.launch {
             while (isActive) {
                 try {
-                    if (!suppressPollingUpdates) {
+                    // Skip Spotify polling when GDrive is the active provider
+                    if (!suppressPollingUpdates && !GDrivePlaybackManager.isActiveProvider) {
                         val response = spotifyClient.api.getCurrentPlayback()
                         if (response.isSuccessful) {
                             val playback = response.body()

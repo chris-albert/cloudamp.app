@@ -18,6 +18,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.cloudamp.music.api.DriveFile
 import com.cloudamp.music.api.GoogleDriveApiClient
 import com.cloudamp.music.auth.GoogleDriveAuthManager
+import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.ui.GDriveAdapter
 import com.google.android.material.navigation.NavigationView
 import kotlinx.coroutines.*
@@ -220,13 +221,22 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
     }
 
     private fun onAudioFileClicked(file: DriveFile, allAudioFiles: List<DriveFile>, position: Int) {
-        // For now, show a toast with the file info.
-        // Actual playback via ExoPlayer streaming will be implemented next.
+        val gdrivePlayback = GDrivePlaybackManager.getInstance(this)
+
+        // Build queue: all audio files from clicked position onwards (like Spotify album behavior)
+        val queueFiles = allAudioFiles.subList(position, allAudioFiles.size) +
+                allAudioFiles.subList(0, position)
+
+        gdrivePlayback.playFiles(queueFiles, 0)
+
         Toast.makeText(
             this,
-            "Selected: ${file.name}\n${file.getFileSizeFormatted()} ${file.getFileExtension()}",
+            "Playing: ${file.name.substringBeforeLast('.')}",
             Toast.LENGTH_SHORT
         ).show()
+
+        // Open Now Playing
+        startActivity(Intent(this, NowPlayingActivity::class.java))
     }
 
     private fun handleApiError(code: Int) {

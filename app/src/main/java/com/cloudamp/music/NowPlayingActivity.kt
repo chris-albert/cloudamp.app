@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.cloudamp.music.api.PlayRequest
 import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.models.Track
+import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.playback.PlaybackManager
 import com.cloudamp.music.ui.QueueAdapter
 import kotlinx.coroutines.*
@@ -20,6 +21,7 @@ class NowPlayingActivity : AppCompatActivity() {
 
     private lateinit var spotifyClient: SpotifyApiClient
     private lateinit var playbackManager: PlaybackManager
+    private lateinit var gdrivePlayback: GDrivePlaybackManager
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private lateinit var trackTitleTextView: TextView
@@ -52,6 +54,9 @@ class NowPlayingActivity : AppCompatActivity() {
         }
     }
 
+    private val isGDriveActive: Boolean
+        get() = GDrivePlaybackManager.isActiveProvider
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_now_playing)
@@ -61,6 +66,7 @@ class NowPlayingActivity : AppCompatActivity() {
 
         spotifyClient = SpotifyApiClient.getInstance(this)
         playbackManager = PlaybackManager.getInstance(this)
+        gdrivePlayback = GDrivePlaybackManager.getInstance(this)
 
         initializeViews()
         setupControls()
@@ -94,58 +100,89 @@ class NowPlayingActivity : AppCompatActivity() {
 
     private fun setupControls() {
         previousButton.setOnClickListener {
-            scope.launch {
-                try {
-                    spotifyClient.api.previous()
-                    delay(500)
-                    loadCurrentTrack()
-                } catch (e: Exception) {
-                    e.printStackTrace()
+            if (isGDriveActive) {
+                gdrivePlayback.skipToPrevious()
+                updateGDriveTrackInfo()
+            } else {
+                scope.launch {
+                    try {
+                        spotifyClient.api.previous()
+                        delay(500)
+                        loadCurrentTrack()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
                 }
             }
         }
 
         playPauseButton.setOnClickListener {
-            scope.launch {
-                try {
-                    if (isPlaying) {
-                        spotifyClient.api.pause()
-                        isPlaying = false
-                        playPauseButton.setImageResource(R.drawable.ic_play)
-                    } else {
-                        spotifyClient.api.play(PlayRequest())
-                        isPlaying = true
-                        playPauseButton.setImageResource(R.drawable.ic_pause)
+            if (isGDriveActive) {
+                if (gdrivePlayback.isPlaying()) {
+                    gdrivePlayback.pause()
+                    isPlaying = false
+                    playPauseButton.setImageResource(R.drawable.ic_play)
+                } else {
+                    gdrivePlayback.play()
+                    isPlaying = true
+                    playPauseButton.setImageResource(R.drawable.ic_pause)
+                }
+            } else {
+                scope.launch {
+                    try {
+                        if (isPlaying) {
+                            spotifyClient.api.pause()
+                            isPlaying = false
+                            playPauseButton.setImageResource(R.drawable.ic_play)
+                        } else {
+                            spotifyClient.api.play(PlayRequest())
+                            isPlaying = true
+                            playPauseButton.setImageResource(R.drawable.ic_pause)
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
                     }
-                } catch (e: Exception) {
-                    e.printStackTrace()
                 }
             }
         }
 
         stopButton.setOnClickListener {
-            scope.launch {
-                try {
-                    spotifyClient.api.pause()
-                    isPlaying = false
-                    currentPosition = 0
-                    seekBar.progress = 0
-                    currentTimeTextView.text = "0:00"
-                    playPauseButton.setImageResource(R.drawable.ic_play)
-                } catch (e: Exception) {
-                    e.printStackTrace()
+            if (isGDriveActive) {
+                gdrivePlayback.stop()
+                isPlaying = false
+                currentPosition = 0
+                seekBar.progress = 0
+                currentTimeTextView.text = "0:00"
+                playPauseButton.setImageResource(R.drawable.ic_play)
+            } else {
+                scope.launch {
+                    try {
+                        spotifyClient.api.pause()
+                        isPlaying = false
+                        currentPosition = 0
+                        seekBar.progress = 0
+                        currentTimeTextView.text = "0:00"
+                        playPauseButton.setImageResource(R.drawable.ic_play)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
                 }
             }
         }
 
         nextButton.setOnClickListener {
-            scope.launch {
-                try {
-                    spotifyClient.api.next()
-                    delay(500)
-                    loadCurrentTrack()
-                } catch (e: Exception) {
-                    e.printStackTrace()
+            if (isGDriveActive) {
+                gdrivePlayback.skipToNext()
+                updateGDriveTrackInfo()
+            } else {
+                scope.launch {
+                    try {
+                        spotifyClient.api.next()
+                        delay(500)
+                        loadCurrentTrack()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
                 }
             }
         }
@@ -161,11 +198,15 @@ class NowPlayingActivity : AppCompatActivity() {
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
 
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                scope.launch {
-                    try {
-                        spotifyClient.api.seek(currentPosition)
-                    } catch (e: Exception) {
-                        e.printStackTrace()
+                if (isGDriveActive) {
+                    gdrivePlayback.seekTo(currentPosition)
+                } else {
+                    scope.launch {
+                        try {
+                            spotifyClient.api.seek(currentPosition)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
                     }
                 }
             }
@@ -173,6 +214,14 @@ class NowPlayingActivity : AppCompatActivity() {
     }
 
     private fun loadCurrentTrack() {
+        if (isGDriveActive) {
+            updateGDriveTrackInfo()
+        } else {
+            loadSpotifyTrack()
+        }
+    }
+
+    private fun loadSpotifyTrack() {
         scope.launch {
             try {
                 val response = spotifyClient.api.getCurrentPlayback()
@@ -197,28 +246,104 @@ class NowPlayingActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateGDriveTrackInfo() {
+        val queue = gdrivePlayback.getQueue()
+        val index = gdrivePlayback.getCurrentIndex()
+
+        if (index in queue.indices) {
+            val file = queue[index]
+            val track = gdrivePlayback.driveFileToTrack(file)
+            currentTrack = track
+            updateTrackInfo(track)
+        }
+
+        isPlaying = gdrivePlayback.isPlaying()
+        currentPosition = gdrivePlayback.getCurrentPosition()
+        totalDuration = gdrivePlayback.getDuration()
+
+        if (totalDuration > 0) {
+            totalTimeTextView.text = formatTime(totalDuration)
+            seekBar.max = totalDuration.toInt()
+        }
+
+        playPauseButton.setImageResource(
+            if (isPlaying) R.drawable.ic_pause
+            else R.drawable.ic_play
+        )
+    }
+
     private fun updateTrackInfo(track: Track) {
         trackTitleTextView.text = track.name
         trackArtistTextView.text = track.artists.joinToString(", ") { it.name }
         trackAlbumTextView.text = track.album?.name ?: ""
 
         totalDuration = track.durationMs.toLong()
-        totalTimeTextView.text = formatTime(totalDuration)
-        seekBar.max = totalDuration.toInt()
+        if (totalDuration > 0) {
+            totalTimeTextView.text = formatTime(totalDuration)
+            seekBar.max = totalDuration.toInt()
+        }
     }
 
     private fun updatePlaybackState() {
-        if (isPlaying && currentPosition < totalDuration) {
-            currentPosition += 1000 // Increment by 1 second
-            seekBar.progress = currentPosition.toInt()
-            currentTimeTextView.text = formatTime(currentPosition)
+        if (isGDriveActive) {
+            updateGDrivePlaybackState()
+        } else {
+            updateSpotifyPlaybackState()
         }
         updateQueueDisplay()
     }
 
+    private fun updateSpotifyPlaybackState() {
+        if (isPlaying && currentPosition < totalDuration) {
+            currentPosition += 1000
+            seekBar.progress = currentPosition.toInt()
+            currentTimeTextView.text = formatTime(currentPosition)
+        }
+    }
+
+    private fun updateGDrivePlaybackState() {
+        currentPosition = gdrivePlayback.getCurrentPosition()
+        isPlaying = gdrivePlayback.isPlaying()
+
+        val newDuration = gdrivePlayback.getDuration()
+        if (newDuration > 0 && newDuration != totalDuration) {
+            totalDuration = newDuration
+            totalTimeTextView.text = formatTime(totalDuration)
+            seekBar.max = totalDuration.toInt()
+        }
+
+        seekBar.progress = currentPosition.toInt()
+        currentTimeTextView.text = formatTime(currentPosition)
+
+        // Check if track changed
+        val currentIdx = gdrivePlayback.getCurrentIndex()
+        val queue = gdrivePlayback.getQueue()
+        if (currentIdx in queue.indices) {
+            val file = queue[currentIdx]
+            val track = gdrivePlayback.driveFileToTrack(file)
+            if (currentTrack?.id != track.id) {
+                currentTrack = track
+                updateTrackInfo(track)
+            }
+        }
+
+        playPauseButton.setImageResource(
+            if (isPlaying) R.drawable.ic_pause
+            else R.drawable.ic_play
+        )
+    }
+
     private fun updateQueueDisplay() {
-        val queue = playbackManager.getCurrentQueue()
-        val currentIndex = playbackManager.getCurrentIndex()
+        val queue: List<Track>
+        val currentIndex: Int
+
+        if (isGDriveActive) {
+            queue = gdrivePlayback.getQueueAsTracks()
+            currentIndex = gdrivePlayback.getCurrentIndex()
+        } else {
+            queue = playbackManager.getCurrentQueue()
+            currentIndex = playbackManager.getCurrentIndex()
+        }
 
         if (queue.isEmpty()) {
             queueInfoTextView.text = "PLAYLIST"

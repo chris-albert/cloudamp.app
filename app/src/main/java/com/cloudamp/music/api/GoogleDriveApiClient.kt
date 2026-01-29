@@ -95,5 +95,10 @@ class GoogleDriveApiClient(private val context: Context) {
 
     val api: GoogleDriveApiService = retrofit.create(GoogleDriveApiService::class.java)
 
+    /**
+     * Returns the OkHttpClient with auth headers for use by ExoPlayer's OkHttpDataSource.
+     */
+    fun getAuthenticatedHttpClient(): OkHttpClient = okHttpClient
+
     fun hasAccessToken(): Boolean = authManager.hasAccessToken()
 }
