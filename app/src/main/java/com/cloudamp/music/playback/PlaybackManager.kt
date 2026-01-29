@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.support.v4.media.MediaBrowserCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import android.view.KeyEvent
 import android.widget.Toast
 import com.cloudamp.music.api.PlayRequest
 import com.cloudamp.music.api.SpotifyApiClient
@@ -107,7 +108,7 @@ class PlaybackManager private constructor(
 
     /**
      * Full wake flow: shows "Waking Spotify..." in Android Auto, launches Spotify,
-     * polls for a device, and returns the device ID or null.
+     * polls for a device, pauses Spotify's old queue, and returns the device ID or null.
      */
     private suspend fun wakeSpotifyWithUI(): String? {
         // Suppress polling so it doesn't overwrite our UI states
@@ -130,11 +131,20 @@ class PlaybackManager private constructor(
 
             val deviceId = targetDevice.id ?: return null
 
+            // The MEDIA_PLAY key event may have started Spotify's old queue.
+            // Pause it immediately so our play command starts clean.
+            try {
+                spotifyClient.api.pause()
+            } catch (_: Exception) { }
+            delay(500)
+
             // Transfer playback to activate
             spotifyClient.api.transferPlayback(
                 TransferPlaybackRequest(device_ids = listOf(deviceId), play = false)
             )
             delay(1_000)
+
+            service?.updateStatusMetadata("Spotify connected")
             return deviceId
         } catch (e: Exception) {
             e.printStackTrace()
@@ -143,10 +153,28 @@ class PlaybackManager private constructor(
     }
 
     /**
-     * Wakes up the Spotify app so it registers as a Connect device.
+     * Wakes up the Spotify app using multiple strategies so it registers as a Connect device.
      */
     private fun wakeUpSpotify() {
-        // Strategy 1: Connect to Spotify's MediaBrowserService
+        // Strategy 1: Send a MEDIA_PLAY key event to Spotify's package.
+        // This is the most reliable way to wake Spotify — it starts the process
+        // and creates an active device. We'll pause the old queue after the device appears.
+        try {
+            val downIntent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
+                `package` = "com.spotify.music"
+                putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY))
+            }
+            val upIntent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
+                `package` = "com.spotify.music"
+                putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY))
+            }
+            context.sendBroadcast(downIntent)
+            context.sendBroadcast(upIntent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // Strategy 2: Connect to Spotify's MediaBrowserService
         try {
             val browserComponent = ComponentName(
                 "com.spotify.music",
@@ -170,7 +198,7 @@ class PlaybackManager private constructor(
             e.printStackTrace()
         }
 
-        // Strategy 2: Launch intent
+        // Strategy 3: Launch intent
         try {
             val intent = context.packageManager.getLaunchIntentForPackage("com.spotify.music")
             if (intent != null) {
@@ -255,10 +283,8 @@ class PlaybackManager private constructor(
         }
 
         // Wake failed — show error with retry hint
-        service?.updatePlaybackStateError(
-            PlaybackStateCompat.ERROR_CODE_APP_ERROR,
-            "Could not connect to Spotify. Tap play to retry."
-        )
+        service?.updateStatusMetadata("Could not connect to Spotify. Tap play to retry.")
+        service?.updatePlaybackState(PlaybackStateCompat.STATE_STOPPED)
         service?.suppressPollingUpdates = false
         // Return a failed response so callers know it didn't work
         return spotifyClient.api.play(request)
