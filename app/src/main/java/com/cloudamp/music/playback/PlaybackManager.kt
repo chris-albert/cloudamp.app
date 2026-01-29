@@ -119,7 +119,8 @@ class PlaybackManager private constructor(
         service?.updatePlaybackState(PlaybackStateCompat.STATE_BUFFERING)
 
         try {
-            wakeUpSpotify()
+            // Wake intents were already fired by playWithDeviceActivation(),
+            // so just poll for a device to appear.
             val devices = pollForDevices()
 
             if (devices.isEmpty()) {
@@ -136,13 +137,12 @@ class PlaybackManager private constructor(
             try {
                 spotifyClient.api.pause()
             } catch (_: Exception) { }
-            delay(500)
 
             // Transfer playback to activate
             spotifyClient.api.transferPlayback(
                 TransferPlaybackRequest(device_ids = listOf(deviceId), play = false)
             )
-            delay(1_000)
+            delay(500)
 
             service?.updateStatusMetadata("Spotify connected")
             return deviceId
@@ -212,10 +212,11 @@ class PlaybackManager private constructor(
 
     /**
      * Polls the Spotify devices endpoint until at least one device appears.
+     * Polls every 500ms for up to 15 seconds.
      */
     private suspend fun pollForDevices(): List<com.cloudamp.music.api.SpotifyDevice> {
-        repeat(10) {
-            delay(1_000)
+        repeat(30) {
+            delay(500)
             try {
                 val response = spotifyClient.api.getAvailableDevices()
                 val devices = response.body()?.devices?.filter { it.id != null } ?: emptyList()
@@ -238,7 +239,12 @@ class PlaybackManager private constructor(
         request: PlayRequest,
         pending: PendingPlayback
     ): Response<Unit> {
-        // First try the fast path: device is already active
+        // Fire wake intents immediately in the background — if Spotify is already
+        // running these are harmless, but if it's idle we get a head start on waking
+        // while the fast-path check runs.
+        wakeUpSpotify()
+
+        // Fast path: check if a device is already active
         val existingDevice = findActiveDevice()
         if (existingDevice != null) {
             val response = spotifyClient.api.play(request, existingDevice)
@@ -248,16 +254,9 @@ class PlaybackManager private constructor(
             }
         }
 
-        // Also try without device_id (Spotify may know its own active device)
-        try {
-            val response = spotifyClient.api.play(request)
-            if (response.isSuccessful) {
-                pendingPlayback = null
-                return response
-            }
-        } catch (_: Exception) { }
-
-        // No active device — store pending and start the wake flow
+        // No active device — store pending and start the visible wake flow.
+        // Spotify is already waking from the intents fired above, so polling
+        // should find a device faster.
         pendingPlayback = pending
 
         val deviceId = wakeSpotifyWithUI()
