@@ -8,7 +8,6 @@ import android.os.Bundle
 import android.support.v4.media.MediaBrowserCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
-import android.view.KeyEvent
 import android.widget.Toast
 import com.cloudamp.music.api.PlayRequest
 import com.cloudamp.music.api.SpotifyApiClient
@@ -97,7 +96,7 @@ class PlaybackManager private constructor(
             val transferResponse = spotifyClient.api.transferPlayback(transferRequest)
 
             if (transferResponse.isSuccessful) {
-                delay(500)
+                delay(1_000)
                 return deviceId
             }
 
@@ -111,29 +110,12 @@ class PlaybackManager private constructor(
     }
 
     /**
-     * Wakes up the Spotify app using multiple strategies so it registers as a Connect device.
-     * Tries: media button broadcast, MediaBrowser connection, and launch intent.
+     * Wakes up the Spotify app so it registers as a Connect device.
+     * Uses non-playback strategies to avoid resuming Spotify's previous queue.
      */
     private suspend fun wakeUpSpotify() {
-        // Strategy 1: Send a media button broadcast to Spotify's package.
-        // Broadcasts aren't blocked by background activity restrictions.
-        try {
-            val downIntent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
-                `package` = "com.spotify.music"
-                putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY))
-            }
-            val upIntent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
-                `package` = "com.spotify.music"
-                putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY))
-            }
-            context.sendBroadcast(downIntent)
-            context.sendBroadcast(upIntent)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-
-        // Strategy 2: Connect to Spotify's MediaBrowserService.
-        // This forces Android to start the Spotify service process.
+        // Strategy 1: Connect to Spotify's MediaBrowserService.
+        // This forces Android to start the Spotify service process without triggering playback.
         try {
             val browserComponent = ComponentName(
                 "com.spotify.music",
@@ -151,14 +133,14 @@ class PlaybackManager private constructor(
             browser.connect()
             // Disconnect after a delay to avoid leaking the connection
             scope.launch {
-                delay(10_000)
+                delay(15_000)
                 try { browser.disconnect() } catch (_: Exception) { }
             }
         } catch (e: Exception) {
             e.printStackTrace()
         }
 
-        // Strategy 3: Launch intent (may work if foreground service conditions are met)
+        // Strategy 2: Launch intent (may work if foreground service conditions are met)
         try {
             val intent = context.packageManager.getLaunchIntentForPackage("com.spotify.music")
             if (intent != null) {
