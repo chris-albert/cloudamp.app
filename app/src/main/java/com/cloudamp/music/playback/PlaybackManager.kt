@@ -16,6 +16,15 @@ import com.cloudamp.music.models.Track
 import retrofit2.Response
 import kotlinx.coroutines.*
 
+/**
+ * Represents a playback request that is pending while Spotify wakes up.
+ * Stored so the user can retry via the play button if the initial wake fails.
+ */
+private sealed class PendingPlayback {
+    data class SingleTrack(val trackUri: String) : PendingPlayback()
+    data class TrackList(val tracks: List<Track>, val startIndex: Int) : PendingPlayback()
+}
+
 class PlaybackManager private constructor(
     private val context: Context,
     private val spotifyClient: SpotifyApiClient
@@ -41,6 +50,9 @@ class PlaybackManager private constructor(
     private var mediaSession: MediaSessionCompat? = null
     private var service: CloudAmpService? = null
 
+    // Pending playback request for retry after failed Spotify wake
+    private var pendingPlayback: PendingPlayback? = null
+
     // Expose queue for UI
     fun getCurrentQueue(): List<Track> = currentQueue.toList()
     fun getCurrentIndex(): Int = currentIndex
@@ -53,14 +65,15 @@ class PlaybackManager private constructor(
         service = cloudAmpService
     }
 
+    // ── Device Activation ──────────────────────────────────────────────
+
     /**
-     * Best-effort attempt to ensure there's an active Spotify device for playback.
-     * Returns a device ID if one was found/activated, or null if we couldn't determine one.
-     * Callers should still attempt playback even if this returns null.
+     * Checks for an active Spotify device without any wake-up logic.
+     * Returns a device ID if one is already active or available, null otherwise.
      */
-    private suspend fun ensureActiveDevice(): String? {
+    private suspend fun findActiveDevice(): String? {
         try {
-            // First check current playback to see if there's an active device
+            // Check current playback for an active device
             val playbackResponse = spotifyClient.api.getCurrentPlayback()
             if (playbackResponse.isSuccessful) {
                 val playback = playbackResponse.body()
@@ -69,39 +82,59 @@ class PlaybackManager private constructor(
                 }
             }
 
-            // No active device — check for available (but inactive) devices
-            var devices = spotifyClient.api.getAvailableDevices()
+            // Check available (but inactive) devices
+            val devices = spotifyClient.api.getAvailableDevices()
                 .body()?.devices?.filter { it.id != null } ?: emptyList()
 
-            // If no devices at all, Spotify is likely not running — wake it up and poll
-            if (devices.isEmpty()) {
-                wakeUpSpotify()
-                devices = pollForDevices()
-                if (devices.isEmpty()) {
-                    return null
-                }
-            }
+            if (devices.isEmpty()) return null
 
-            // Pick the best device to activate
             val targetDevice = devices.firstOrNull { it.type.equals("Smartphone", ignoreCase = true) }
                 ?: devices.first()
 
             val deviceId = targetDevice.id ?: return null
 
             // Transfer playback to activate the device
-            val transferRequest = TransferPlaybackRequest(
-                device_ids = listOf(deviceId),
-                play = false
+            spotifyClient.api.transferPlayback(
+                TransferPlaybackRequest(device_ids = listOf(deviceId), play = false)
             )
-            val transferResponse = spotifyClient.api.transferPlayback(transferRequest)
+            delay(500)
+            return deviceId
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
+        }
+    }
 
-            if (transferResponse.isSuccessful) {
-                delay(1_000)
-                return deviceId
+    /**
+     * Full wake flow: shows "Waking Spotify..." in Android Auto, launches Spotify,
+     * polls for a device, and returns the device ID or null.
+     */
+    private suspend fun wakeSpotifyWithUI(): String? {
+        // Suppress polling so it doesn't overwrite our UI states
+        service?.suppressPollingUpdates = true
+
+        // Show buffering state with "Waking Spotify..." message
+        service?.updateStatusMetadata("Waking Spotify...")
+        service?.updatePlaybackState(PlaybackStateCompat.STATE_BUFFERING)
+
+        try {
+            wakeUpSpotify()
+            val devices = pollForDevices()
+
+            if (devices.isEmpty()) {
+                return null
             }
 
-            // Transfer failed, but still return the device ID — the play call
-            // with device_id might still work on an already-available device
+            val targetDevice = devices.firstOrNull { it.type.equals("Smartphone", ignoreCase = true) }
+                ?: devices.first()
+
+            val deviceId = targetDevice.id ?: return null
+
+            // Transfer playback to activate
+            spotifyClient.api.transferPlayback(
+                TransferPlaybackRequest(device_ids = listOf(deviceId), play = false)
+            )
+            delay(1_000)
             return deviceId
         } catch (e: Exception) {
             e.printStackTrace()
@@ -111,11 +144,9 @@ class PlaybackManager private constructor(
 
     /**
      * Wakes up the Spotify app so it registers as a Connect device.
-     * Uses non-playback strategies to avoid resuming Spotify's previous queue.
      */
-    private suspend fun wakeUpSpotify() {
-        // Strategy 1: Connect to Spotify's MediaBrowserService.
-        // This forces Android to start the Spotify service process without triggering playback.
+    private fun wakeUpSpotify() {
+        // Strategy 1: Connect to Spotify's MediaBrowserService
         try {
             val browserComponent = ComponentName(
                 "com.spotify.music",
@@ -131,7 +162,6 @@ class PlaybackManager private constructor(
                 null
             )
             browser.connect()
-            // Disconnect after a delay to avoid leaking the connection
             scope.launch {
                 delay(15_000)
                 try { browser.disconnect() } catch (_: Exception) { }
@@ -140,7 +170,7 @@ class PlaybackManager private constructor(
             e.printStackTrace()
         }
 
-        // Strategy 2: Launch intent (may work if foreground service conditions are met)
+        // Strategy 2: Launch intent
         try {
             val intent = context.packageManager.getLaunchIntentForPackage("com.spotify.music")
             if (intent != null) {
@@ -154,10 +184,8 @@ class PlaybackManager private constructor(
 
     /**
      * Polls the Spotify devices endpoint until at least one device appears.
-     * Returns the list of devices found, or empty if none appeared within the timeout.
      */
     private suspend fun pollForDevices(): List<com.cloudamp.music.api.SpotifyDevice> {
-        // Poll every second for up to 10 seconds — cold-starting Spotify takes time
         repeat(10) {
             delay(1_000)
             try {
@@ -171,31 +199,95 @@ class PlaybackManager private constructor(
         return emptyList()
     }
 
-    /**
-     * Attempts to play via the Spotify API, first trying with a device_id if available,
-     * then falling back to playing without one. Returns the Response from the play call.
-     */
-    private suspend fun playWithDeviceActivation(request: PlayRequest): Response<Unit> {
-        val deviceId = ensureActiveDevice()
+    // ── Play with device activation ────────────────────────────────────
 
-        // Try playing with the device_id if we have one
-        if (deviceId != null) {
-            val response = spotifyClient.api.play(request, deviceId)
+    /**
+     * Attempts to play via the Spotify API. If no device is active, shows the
+     * "Waking Spotify..." UI and attempts to wake it. On failure, sets an error
+     * state and stores the request for retry.
+     */
+    private suspend fun playWithDeviceActivation(
+        request: PlayRequest,
+        pending: PendingPlayback
+    ): Response<Unit> {
+        // First try the fast path: device is already active
+        val existingDevice = findActiveDevice()
+        if (existingDevice != null) {
+            val response = spotifyClient.api.play(request, existingDevice)
             if (response.isSuccessful) {
+                pendingPlayback = null
                 return response
             }
         }
 
-        // Fall back to playing without a device_id - Spotify may still find an active device
+        // Also try without device_id (Spotify may know its own active device)
+        try {
+            val response = spotifyClient.api.play(request)
+            if (response.isSuccessful) {
+                pendingPlayback = null
+                return response
+            }
+        } catch (_: Exception) { }
+
+        // No active device — store pending and start the wake flow
+        pendingPlayback = pending
+
+        val deviceId = wakeSpotifyWithUI()
+
+        if (deviceId != null) {
+            // Spotify woke up — try to play
+            val response = spotifyClient.api.play(request, deviceId)
+            if (response.isSuccessful) {
+                pendingPlayback = null
+                service?.suppressPollingUpdates = false
+                return response
+            }
+
+            // Try once more without device_id
+            try {
+                val fallbackResponse = spotifyClient.api.play(request)
+                if (fallbackResponse.isSuccessful) {
+                    pendingPlayback = null
+                    service?.suppressPollingUpdates = false
+                    return fallbackResponse
+                }
+            } catch (_: Exception) { }
+        }
+
+        // Wake failed — show error with retry hint
+        service?.updatePlaybackStateError(
+            PlaybackStateCompat.ERROR_CODE_APP_ERROR,
+            "Could not connect to Spotify. Tap play to retry."
+        )
+        service?.suppressPollingUpdates = false
+        // Return a failed response so callers know it didn't work
         return spotifyClient.api.play(request)
     }
+
+    // ── MediaSession Callback ──────────────────────────────────────────
 
     val mediaSessionCallback = object : MediaSessionCompat.Callback() {
 
         override fun onPlay() {
             scope.launch {
                 try {
-                    val response = playWithDeviceActivation(PlayRequest())
+                    // Check for a pending playback to retry
+                    val pending = pendingPlayback
+                    if (pending != null) {
+                        when (pending) {
+                            is PendingPlayback.SingleTrack -> playTrackFromMediaId(pending.trackUri)
+                            is PendingPlayback.TrackList -> playTracks(pending.tracks, pending.startIndex)
+                        }
+                        return@launch
+                    }
+
+                    // Normal resume
+                    val deviceId = findActiveDevice()
+                    val response = if (deviceId != null) {
+                        spotifyClient.api.play(PlayRequest(), deviceId)
+                    } else {
+                        spotifyClient.api.play(PlayRequest())
+                    }
                     if (response.isSuccessful) {
                         service?.updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
                     }
@@ -251,16 +343,13 @@ class PlaybackManager private constructor(
         override fun onPlayFromMediaId(mediaId: String, extras: Bundle?) {
             scope.launch {
                 try {
-                    // Check if it's a Spotify URI
                     if (mediaId.startsWith("spotify:track:")) {
-                        // Check if we have album context to queue the whole album
                         val albumId = extras?.getString("album_id")
                         if (albumId != null) {
                             playAlbumFromTrack(albumId, mediaId)
                         } else {
                             playTrackFromMediaId(mediaId)
                         }
-                        // Note: playback state is updated by the play methods after API success
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -270,14 +359,12 @@ class PlaybackManager private constructor(
 
         override fun onPlayFromSearch(query: String?, extras: Bundle?) {
             if (query.isNullOrBlank()) {
-                // Resume playback
                 onPlay()
                 return
             }
 
             scope.launch {
                 try {
-                    // Search for the query and play the first result
                     val response = spotifyClient.api.search(query, "track", limit = 1)
                     if (response.isSuccessful) {
                         val tracks = response.body()?.tracks?.items
@@ -336,22 +423,24 @@ class PlaybackManager private constructor(
         }
     }
 
+    // ── Queue Management ───────────────────────────────────────────────
+
     fun setQueue(tracks: List<Track>) {
         currentQueue.clear()
         currentQueue.addAll(tracks)
         currentIndex = 0
     }
 
+    // ── Playback Methods ───────────────────────────────────────────────
+
     private suspend fun playAlbumFromTrack(albumId: String, trackUri: String) {
         try {
-            // Fetch album details and tracks
             val albumResponse = spotifyClient.api.getAlbum(albumId)
-            val album = albumResponse.body() ?: return playTrack(trackUri)
+            val album = albumResponse.body() ?: return playTrackFromMediaId(trackUri)
 
             val tracksResponse = spotifyClient.api.getAlbumTracks(albumId)
-            val albumTracks = tracksResponse.body()?.items ?: return playTrack(trackUri)
+            val albumTracks = tracksResponse.body()?.items ?: return playTrackFromMediaId(trackUri)
 
-            // Convert to Track objects with album info
             val tracks = albumTracks.map { track ->
                 Track(
                     id = track.id,
@@ -363,15 +452,11 @@ class PlaybackManager private constructor(
                 )
             }
 
-            // Find the position of the clicked track
             val startIndex = tracks.indexOfFirst { it.uri == trackUri }.takeIf { it >= 0 } ?: 0
-
-            // Play all tracks starting from the selected one
             playTracks(tracks, startIndex)
         } catch (e: Exception) {
             e.printStackTrace()
-            // Fallback to single track playback
-            playTrack(trackUri)
+            playTrackFromMediaId(trackUri)
         }
     }
 
@@ -381,25 +466,22 @@ class PlaybackManager private constructor(
         }
     }
 
-    /**
-     * Suspend function to play a track by URI, ensuring device is active first.
-     * Used internally from coroutines (e.g., onPlayFromMediaId callback).
-     */
     private suspend fun playTrackFromMediaId(trackUri: String) {
         try {
             val request = PlayRequest(uris = listOf(trackUri))
-            val response = playWithDeviceActivation(request)
+            val pending = PendingPlayback.SingleTrack(trackUri)
+            val response = playWithDeviceActivation(request, pending)
 
             if (response.isSuccessful) {
                 service?.updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
-            } else {
-                service?.updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
-                openSpotifyApp(trackUri)
             }
+            // Error state is handled inside playWithDeviceActivation
         } catch (e: Exception) {
             e.printStackTrace()
-            service?.updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
-            openSpotifyApp(trackUri)
+            service?.updatePlaybackStateError(
+                PlaybackStateCompat.ERROR_CODE_APP_ERROR,
+                "Could not connect to Spotify. Tap play to retry."
+            )
         }
     }
 
@@ -407,19 +489,19 @@ class PlaybackManager private constructor(
         scope.launch {
             try {
                 val request = PlayRequest(uris = listOf(track.uri))
-                val response = playWithDeviceActivation(request)
+                val pending = PendingPlayback.SingleTrack(track.uri)
+                val response = playWithDeviceActivation(request, pending)
 
                 if (response.isSuccessful) {
                     service?.updateMetadata(track, track.album?.images?.firstOrNull()?.url)
                     service?.updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
-                } else {
-                    service?.updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
-                    openSpotifyApp(track.uri)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                service?.updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
-                openSpotifyApp(track.uri)
+                service?.updatePlaybackStateError(
+                    PlaybackStateCompat.ERROR_CODE_APP_ERROR,
+                    "Could not connect to Spotify. Tap play to retry."
+                )
             }
         }
     }
@@ -429,8 +511,6 @@ class PlaybackManager private constructor(
             try {
                 setQueue(tracks)
                 currentIndex = startIndex
-
-                // Update MediaSession queue for Android Auto
                 service?.updateQueue(tracks, currentIndex)
 
                 val trackUris = tracks.map { it.uri }
@@ -438,23 +518,22 @@ class PlaybackManager private constructor(
                     uris = trackUris,
                     offset = com.cloudamp.music.api.PlayOffset(position = startIndex)
                 )
-                val response = playWithDeviceActivation(request)
+                val pending = PendingPlayback.TrackList(tracks, startIndex)
+                val response = playWithDeviceActivation(request, pending)
 
                 if (response.isSuccessful) {
-                    // Update metadata for current track
                     if (startIndex in tracks.indices) {
                         val currentTrack = tracks[startIndex]
                         service?.updateMetadata(currentTrack, currentTrack.album?.images?.firstOrNull()?.url)
                     }
                     service?.updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
-                } else {
-                    service?.updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
-                    openSpotifyApp(tracks.getOrNull(startIndex)?.uri)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                service?.updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
-                openSpotifyApp(tracks.getOrNull(startIndex)?.uri)
+                service?.updatePlaybackStateError(
+                    PlaybackStateCompat.ERROR_CODE_APP_ERROR,
+                    "Could not connect to Spotify. Tap play to retry."
+                )
             }
         }
     }
@@ -468,7 +547,6 @@ class PlaybackManager private constructor(
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            // Show toast on main thread
             CoroutineScope(Dispatchers.Main).launch {
                 Toast.makeText(
                     context,
