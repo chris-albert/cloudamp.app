@@ -67,10 +67,11 @@ class EqMeterView @JvmOverloads constructor(
     /**
      * Attach to an audio session for real-time FFT analysis.
      * Pass audioSessionId = 0 for mix output (requires RECORD_AUDIO permission).
+     * Returns true if the Visualizer was successfully created and enabled.
      */
-    fun attachToAudioSession(audioSessionId: Int) {
+    fun attachToAudioSession(audioSessionId: Int): Boolean {
         releaseVisualizer()
-        try {
+        return try {
             val viz = Visualizer(audioSessionId)
             viz.captureSize = Visualizer.getCaptureSizeRange()[1] // Max capture size
             viz.setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
@@ -94,11 +95,11 @@ class EqMeterView @JvmOverloads constructor(
             visualizer = viz
             isVisualizerActive = true
             simulationActive = false
-            Log.d(TAG, "Visualizer attached to session $audioSessionId")
+            Log.d(TAG, "Visualizer attached to session $audioSessionId, enabled=${viz.enabled}")
+            true
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to create Visualizer: ${e.message}")
-            // Fall back to simulation
-            startSimulation()
+            Log.e(TAG, "Failed to create Visualizer for session $audioSessionId: ${e.message}", e)
+            false
         }
     }
 

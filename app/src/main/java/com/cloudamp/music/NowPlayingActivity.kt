@@ -253,15 +253,28 @@ class NowPlayingActivity : AppCompatActivity() {
         if (eqAttached) return
         if (isGDriveActive) {
             val sessionId = gdrivePlayback.getAudioSessionId()
+            Log.d(TAG, "GDrive audio session ID: $sessionId, isPlaying: ${gdrivePlayback.isPlaying()}")
+
+            // Try the ExoPlayer's audio session first
             if (sessionId != 0) {
-                Log.d(TAG, "Attaching EQ visualizer to audio session $sessionId")
-                eqMeterView.attachToAudioSession(sessionId)
-                eqAttached = true
-            } else {
-                // Player not ready yet - fall back to simulation
-                Log.d(TAG, "Audio session not ready, using simulation")
-                eqMeterView.setPlaying(isPlaying)
+                if (eqMeterView.attachToAudioSession(sessionId)) {
+                    Log.d(TAG, "EQ visualizer attached to ExoPlayer session $sessionId")
+                    eqAttached = true
+                    return
+                }
+                Log.w(TAG, "Failed to attach to ExoPlayer session $sessionId, trying global mix")
             }
+
+            // Fall back to session 0 (global mix output) which captures all device audio
+            if (eqMeterView.attachToAudioSession(0)) {
+                Log.d(TAG, "EQ visualizer attached to global mix (session 0)")
+                eqAttached = true
+                return
+            }
+
+            // Both failed - use simulation
+            Log.w(TAG, "Visualizer unavailable, falling back to simulation")
+            eqMeterView.setPlaying(isPlaying)
         } else {
             eqMeterView.setPlaying(isPlaying)
         }
