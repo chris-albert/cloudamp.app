@@ -240,6 +240,14 @@ class GDrivePlaybackManager private constructor(
     }
 
     /**
+     * Get the ExoPlayer audio session ID for attaching a Visualizer.
+     * Returns 0 if the player is not initialized.
+     */
+    fun getAudioSessionId(): Int {
+        return exoPlayer?.audioSessionId ?: 0
+    }
+
+    /**
      * Deactivates GDrive as the provider and releases the player.
      * Called when the user switches back to Spotify.
      */

@@ -1,12 +1,17 @@
 package com.cloudamp.music
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.widget.ImageButton
 import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.cloudamp.music.api.PlayRequest
@@ -14,6 +19,7 @@ import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.models.Track
 import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.playback.PlaybackManager
+import com.cloudamp.music.ui.EqMeterView
 import com.cloudamp.music.ui.QueueAdapter
 import kotlinx.coroutines.*
 
@@ -41,10 +47,18 @@ class NowPlayingActivity : AppCompatActivity() {
     private lateinit var shuffleButton: ImageButton
     private lateinit var repeatButton: ImageButton
 
+    private lateinit var eqMeterView: EqMeterView
+
     private var currentTrack: Track? = null
     private var isPlaying = false
     private var currentPosition = 0L
     private var totalDuration = 0L
+    private var eqAttached = false
+
+    companion object {
+        private const val TAG = "NowPlayingActivity"
+        private const val REQUEST_RECORD_AUDIO = 1001
+    }
 
     private val updateHandler = Handler(Looper.getMainLooper())
     private val updateRunnable = object : Runnable {
@@ -71,6 +85,7 @@ class NowPlayingActivity : AppCompatActivity() {
         initializeViews()
         setupControls()
         loadCurrentTrack()
+        setupEqMeter()
 
         // Start periodic updates
         updateHandler.post(updateRunnable)
@@ -96,6 +111,8 @@ class NowPlayingActivity : AppCompatActivity() {
         nextButton = findViewById(R.id.nextButton)
         shuffleButton = findViewById(R.id.shuffleButton)
         repeatButton = findViewById(R.id.repeatButton)
+
+        eqMeterView = findViewById(R.id.eqMeterView)
     }
 
     private fun setupControls() {
@@ -213,6 +230,74 @@ class NowPlayingActivity : AppCompatActivity() {
         })
     }
 
+    /**
+     * Set up the EQ meter visualization.
+     * For GDrive playback: attaches to ExoPlayer's audio session for real FFT analysis.
+     * For Spotify playback: uses simulated animation (Spotify plays remotely).
+     */
+    private fun setupEqMeter() {
+        if (isGDriveActive) {
+            // GDrive uses ExoPlayer locally - we can do real audio analysis
+            if (hasRecordAudioPermission()) {
+                attachEqVisualizer()
+            } else {
+                requestRecordAudioPermission()
+            }
+        } else {
+            // Spotify plays remotely - use simulated visualization
+            eqMeterView.setPlaying(isPlaying)
+        }
+    }
+
+    private fun attachEqVisualizer() {
+        if (eqAttached) return
+        if (isGDriveActive) {
+            val sessionId = gdrivePlayback.getAudioSessionId()
+            if (sessionId != 0) {
+                Log.d(TAG, "Attaching EQ visualizer to audio session $sessionId")
+                eqMeterView.attachToAudioSession(sessionId)
+                eqAttached = true
+            } else {
+                // Player not ready yet - fall back to simulation
+                Log.d(TAG, "Audio session not ready, using simulation")
+                eqMeterView.setPlaying(isPlaying)
+            }
+        } else {
+            eqMeterView.setPlaying(isPlaying)
+        }
+    }
+
+    private fun hasRecordAudioPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this, Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun requestRecordAudioPermission() {
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.RECORD_AUDIO),
+            REQUEST_RECORD_AUDIO
+        )
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_RECORD_AUDIO) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                attachEqVisualizer()
+            } else {
+                // Permission denied - use simulation instead
+                Log.d(TAG, "RECORD_AUDIO permission denied, using simulation")
+                eqMeterView.setPlaying(isPlaying)
+            }
+        }
+    }
+
     private fun loadCurrentTrack() {
         if (isGDriveActive) {
             updateGDriveTrackInfo()
@@ -287,8 +372,13 @@ class NowPlayingActivity : AppCompatActivity() {
     private fun updatePlaybackState() {
         if (isGDriveActive) {
             updateGDrivePlaybackState()
+            // Try to attach real visualizer if not yet connected
+            if (!eqAttached && hasRecordAudioPermission()) {
+                attachEqVisualizer()
+            }
         } else {
             updateSpotifyPlaybackState()
+            eqMeterView.setPlaying(isPlaying)
         }
         updateQueueDisplay()
     }
@@ -368,6 +458,7 @@ class NowPlayingActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         updateHandler.removeCallbacks(updateRunnable)
+        eqMeterView.releaseVisualizer()
         scope.cancel()
         super.onDestroy()
     }
