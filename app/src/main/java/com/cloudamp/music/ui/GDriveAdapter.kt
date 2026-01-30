@@ -22,6 +22,9 @@ class GDriveAdapter(
 
     private val items = mutableListOf<GDriveItem>()
     private var showBackItem = false
+    private var allFiles: List<DriveFile> = emptyList()
+    private var hasParentStored = false
+    private var currentFilter: String = ""
 
     companion object {
         private const val TYPE_BACK = 0
@@ -58,6 +61,13 @@ class GDriveAdapter(
     override fun getItemCount() = items.size
 
     fun setFiles(files: List<DriveFile>, hasParent: Boolean) {
+        allFiles = files
+        hasParentStored = hasParent
+        currentFilter = ""
+        rebuildItems(files, hasParent)
+    }
+
+    private fun rebuildItems(files: List<DriveFile>, hasParent: Boolean) {
         items.clear()
         showBackItem = hasParent
 
@@ -73,6 +83,38 @@ class GDriveAdapter(
         items.addAll(audioFiles.map { GDriveItem.AudioItem(it) })
 
         notifyDataSetChanged()
+    }
+
+    fun filterFiles(query: String) {
+        currentFilter = query
+        if (query.isEmpty()) {
+            rebuildItems(allFiles, hasParentStored)
+            return
+        }
+        val filtered = allFiles.filter { fuzzyMatch(it.name, query) }
+        rebuildItems(filtered, hasParentStored)
+    }
+
+    fun clearFilter() {
+        currentFilter = ""
+        rebuildItems(allFiles, hasParentStored)
+    }
+
+    private fun fuzzyMatch(text: String, query: String): Boolean {
+        val lowerText = text.lowercase()
+        val lowerQuery = query.lowercase()
+
+        // Substring match first (most intuitive)
+        if (lowerText.contains(lowerQuery)) return true
+
+        // Fuzzy: all query chars appear in order in the text
+        var textIndex = 0
+        for (queryChar in lowerQuery) {
+            val found = lowerText.indexOf(queryChar, textIndex)
+            if (found == -1) return false
+            textIndex = found + 1
+        }
+        return true
     }
 
     private fun getAllAudioFiles(): List<DriveFile> {

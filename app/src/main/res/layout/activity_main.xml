@@ -29,6 +29,52 @@
                 android:background="@color/winamp_section_header"
                 android:padding="8dp"/>
 
+            <!-- Inline Search Bar (hidden by default) -->
+            <LinearLayout
+                android:id="@+id/searchBarContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@color/winamp_header"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="4dp"
+                android:visibility="gone">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@android:drawable/ic_menu_search"
+                    app:tint="@color/winamp_display_text"
+                    android:layout_marginEnd="8dp"/>
+
+                <EditText
+                    android:id="@+id/searchEditText"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:hint="Filter artists..."
+                    android:textColor="@color/winamp_text"
+                    android:textColorHint="@color/winamp_display_text"
+                    android:textSize="14sp"
+                    android:fontFamily="monospace"
+                    android:background="@color/winamp_section_header"
+                    android:paddingHorizontal="12dp"
+                    android:singleLine="true"
+                    android:imeOptions="actionSearch"
+                    android:inputType="text"/>
+
+                <ImageView
+                    android:id="@+id/searchCloseButton"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:src="@android:drawable/ic_menu_close_clear_cancel"
+                    app:tint="@color/winamp_display_text"
+                    android:layout_marginStart="8dp"
+                    android:padding="4dp"/>
+
+            </LinearLayout>
+
             <!-- Library content with alphabet sidebar -->
             <FrameLayout
                 android:layout_width="match_parent"
