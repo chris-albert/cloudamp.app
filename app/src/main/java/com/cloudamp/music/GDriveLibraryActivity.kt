@@ -1,11 +1,17 @@
 package com.cloudamp.music
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.widget.Button
+import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -41,6 +47,11 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
     private lateinit var pathTextView: TextView
     private lateinit var settingsButton: Button
 
+    private lateinit var searchBarContainer: LinearLayout
+    private lateinit var searchEditText: EditText
+    private lateinit var searchCloseButton: ImageView
+    private var isSearchVisible = false
+
     // Navigation stack: pairs of (folderId, folderName)
     private val folderStack = mutableListOf<Pair<String, String>>()
 
@@ -54,6 +65,7 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
         setupDrawer()
         setupRecyclerView()
         setupEmptyState()
+        setupSearchBar()
     }
 
     private fun setupDrawer() {
@@ -153,12 +165,14 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
     }
 
     private fun navigateToFolder(folderId: String, folderName: String) {
+        if (isSearchVisible) hideSearchBar()
         folderStack.add(Pair(folderId, folderName))
         updatePath()
         loadFolder(folderId)
     }
 
     private fun navigateBack() {
+        if (isSearchVisible) hideSearchBar()
         if (folderStack.isNotEmpty()) {
             folderStack.removeAt(folderStack.size - 1)
             updatePath()
@@ -282,25 +296,73 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
                 startActivity(Intent(this, SettingsActivity::class.java))
                 true
             }
+            R.id.action_search -> {
+                toggleSearchBar()
+                true
+            }
             else -> super.onOptionsItemSelected(item)
         }
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.main_menu, menu)
-        // Hide search in GDrive view for now
-        menu.findItem(R.id.action_search)?.isVisible = false
         return true
     }
 
     override fun onBackPressed() {
         if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
             drawerLayout.closeDrawer(GravityCompat.START)
+        } else if (isSearchVisible) {
+            hideSearchBar()
         } else if (folderStack.isNotEmpty()) {
             navigateBack()
         } else {
             super.onBackPressed()
         }
+    }
+
+    private fun setupSearchBar() {
+        searchBarContainer = findViewById(R.id.searchBarContainer)
+        searchEditText = findViewById(R.id.searchEditText)
+        searchCloseButton = findViewById(R.id.searchCloseButton)
+
+        searchEditText.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                gdriveAdapter.filterFiles(s?.toString() ?: "")
+            }
+        })
+
+        searchCloseButton.setOnClickListener {
+            hideSearchBar()
+        }
+    }
+
+    private fun toggleSearchBar() {
+        if (isSearchVisible) {
+            hideSearchBar()
+        } else {
+            showSearchBar()
+        }
+    }
+
+    private fun showSearchBar() {
+        isSearchVisible = true
+        searchBarContainer.visibility = View.VISIBLE
+        searchEditText.setText("")
+        searchEditText.requestFocus()
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.showSoftInput(searchEditText, InputMethodManager.SHOW_IMPLICIT)
+    }
+
+    private fun hideSearchBar() {
+        isSearchVisible = false
+        searchBarContainer.visibility = View.GONE
+        searchEditText.setText("")
+        gdriveAdapter.clearFilter()
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.hideSoftInputFromWindow(searchEditText.windowToken, 0)
     }
 
     override fun onDestroy() {

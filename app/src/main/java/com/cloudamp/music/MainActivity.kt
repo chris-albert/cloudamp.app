@@ -1,10 +1,16 @@
 package com.cloudamp.music
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.ActionBarDrawerToggle
@@ -41,6 +47,11 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     private lateinit var loadingContainer: LinearLayout
     private lateinit var alphabetSidebar: AlphabetSidebarView
 
+    private lateinit var searchBarContainer: LinearLayout
+    private lateinit var searchEditText: EditText
+    private lateinit var searchCloseButton: ImageView
+    private var isSearchVisible = false
+
     private var hasLoadedContent = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,6 +64,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
 
         setupDrawer()
         setupRecyclerView()
+        setupSearchBar()
     }
 
     private fun setupDrawer() {
@@ -362,7 +374,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                 true
             }
             R.id.action_search -> {
-                performSearch()
+                toggleSearchBar()
                 true
             }
             else -> super.onOptionsItemSelected(item)
@@ -372,51 +384,59 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     override fun onBackPressed() {
         if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
             drawerLayout.closeDrawer(GravityCompat.START)
+        } else if (isSearchVisible) {
+            hideSearchBar()
         } else {
             super.onBackPressed()
         }
     }
 
-    private fun performSearch() {
-        val builder = android.app.AlertDialog.Builder(this)
-        builder.setTitle("Search Music")
+    private fun setupSearchBar() {
+        searchBarContainer = findViewById(R.id.searchBarContainer)
+        searchEditText = findViewById(R.id.searchEditText)
+        searchCloseButton = findViewById(R.id.searchCloseButton)
 
-        val input = android.widget.EditText(this)
-        input.hint = "Enter artist, album, or track name"
-        builder.setView(input)
-
-        builder.setPositiveButton("Search") { _, _ ->
-            val query = input.text.toString()
-            if (query.isNotEmpty()) {
-                searchMusic(query)
+        searchEditText.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                libraryAdapter.filterArtists(s?.toString() ?: "")
+                // Hide alphabet sidebar during search
+                showAlphabetSidebar(s.isNullOrEmpty() && hasLoadedContent)
             }
+        })
+
+        searchCloseButton.setOnClickListener {
+            hideSearchBar()
         }
-        builder.setNegativeButton("Cancel") { dialog, _ -> dialog.cancel() }
-        builder.show()
     }
 
-    private fun searchMusic(query: String) {
-        scope.launch {
-            try {
-                val response = spotifyClient.api.search(query, "artist,album,track")
-                if (response.isSuccessful) {
-                    val results = response.body()
-                    val artists = results?.artists?.items ?: emptyList()
-
-                    if (artists.isNotEmpty()) {
-                        libraryAdapter.setArtists(artists)
-                        showAlphabetSidebar(true)
-                    } else {
-                        Toast.makeText(this@MainActivity, "No results found", Toast.LENGTH_SHORT).show()
-                    }
-                } else {
-                    handleApiError(response.code())
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                Toast.makeText(this@MainActivity, "Search error: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
+    private fun toggleSearchBar() {
+        if (isSearchVisible) {
+            hideSearchBar()
+        } else {
+            showSearchBar()
         }
+    }
+
+    private fun showSearchBar() {
+        isSearchVisible = true
+        searchBarContainer.visibility = View.VISIBLE
+        searchEditText.setText("")
+        searchEditText.requestFocus()
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.showSoftInput(searchEditText, InputMethodManager.SHOW_IMPLICIT)
+        showAlphabetSidebar(false)
+    }
+
+    private fun hideSearchBar() {
+        isSearchVisible = false
+        searchBarContainer.visibility = View.GONE
+        searchEditText.setText("")
+        libraryAdapter.clearFilter()
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.hideSoftInputFromWindow(searchEditText.windowToken, 0)
+        showAlphabetSidebar(hasLoadedContent)
     }
 
     override fun onDestroy() {

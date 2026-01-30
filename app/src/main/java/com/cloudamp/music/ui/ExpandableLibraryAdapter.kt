@@ -50,6 +50,8 @@ class ExpandableLibraryAdapter(
 
     private val items = mutableListOf<LibraryItem>()
     private val savedAlbumIds = mutableSetOf<String>()
+    private var allArtists: List<Artist> = emptyList()
+    private var currentFilter: String = ""
 
     fun setSavedAlbumIds(ids: Set<String>) {
         savedAlbumIds.clear()
@@ -113,6 +115,12 @@ class ExpandableLibraryAdapter(
     }
 
     fun setArtists(artists: List<Artist>) {
+        allArtists = artists
+        currentFilter = ""
+        rebuildItems(artists)
+    }
+
+    private fun rebuildItems(artists: List<Artist>) {
         items.clear()
 
         // Group artists by first letter and add section headers
@@ -129,6 +137,38 @@ class ExpandableLibraryAdapter(
         }
 
         notifyDataSetChanged()
+    }
+
+    fun filterArtists(query: String) {
+        currentFilter = query
+        if (query.isEmpty()) {
+            rebuildItems(allArtists)
+            return
+        }
+        val filtered = allArtists.filter { fuzzyMatch(it.name, query) }
+        rebuildItems(filtered)
+    }
+
+    fun clearFilter() {
+        currentFilter = ""
+        rebuildItems(allArtists)
+    }
+
+    private fun fuzzyMatch(text: String, query: String): Boolean {
+        val lowerText = text.lowercase()
+        val lowerQuery = query.lowercase()
+
+        // Substring match first (most intuitive)
+        if (lowerText.contains(lowerQuery)) return true
+
+        // Fuzzy: all query chars appear in order in the text
+        var textIndex = 0
+        for (queryChar in lowerQuery) {
+            val found = lowerText.indexOf(queryChar, textIndex)
+            if (found == -1) return false
+            textIndex = found + 1
+        }
+        return true
     }
 
     fun toggleArtist(position: Int) {
