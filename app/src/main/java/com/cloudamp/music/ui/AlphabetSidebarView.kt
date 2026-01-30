@@ -22,13 +22,13 @@ class AlphabetSidebarView @JvmOverloads constructor(
     private val letters = listOf("#") + ('A'..'Z').map { it.toString() }
 
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = context.getColor(R.color.winamp_display_text)
+        color = context.getColor(R.color.winamp_section_header)
         textAlign = Paint.Align.CENTER
         typeface = Typeface.MONOSPACE
     }
 
     private val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = context.getColor(R.color.winamp_text)
+        color = context.getColor(R.color.winamp_section_header)
         textAlign = Paint.Align.CENTER
         typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
     }
