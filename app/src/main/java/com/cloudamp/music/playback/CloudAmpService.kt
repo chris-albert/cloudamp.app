@@ -558,16 +558,11 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 ?: loadFollowedArtistsFromApi()?.sortedBy { it.name }
                 ?: emptyList()
 
-            // Group by first letter using group title hint (creates non-clickable headers)
             for (artist in artists) {
-                val firstLetter = artist.name.firstOrNull()?.uppercaseChar() ?: '#'
-                val letter = if (firstLetter.isLetter()) firstLetter else '#'
-
-                items.add(createBrowsableItemWithGroup(
+                items.add(createBrowsableItem(
                     "artist_${artist.id}",
                     artist.name,
                     "Artist",
-                    letter.toString(),
                     artist.images?.firstOrNull()?.url
                 ))
             }
