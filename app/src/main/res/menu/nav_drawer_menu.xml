@@ -24,4 +24,14 @@
             </group>
         </menu>
     </item>
+    <item android:title="Queues">
+        <menu>
+            <group android:checkableBehavior="single">
+                <item
+                    android:id="@+id/nav_saved_queues"
+                    android:icon="@drawable/ic_saved_queues"
+                    android:title="Saved Queues" />
+            </group>
+        </menu>
+    </item>
 </menu>

@@ -3,14 +3,18 @@ package com.cloudamp.music
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.SeekBar
 import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.cloudamp.music.api.PlayRequest
 import com.cloudamp.music.api.SpotifyApiClient
+import com.cloudamp.music.cache.SavedQueuesManager
 import com.cloudamp.music.models.Track
 import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.playback.PlaybackManager
@@ -22,6 +26,7 @@ class NowPlayingActivity : AppCompatActivity() {
     private lateinit var spotifyClient: SpotifyApiClient
     private lateinit var playbackManager: PlaybackManager
     private lateinit var gdrivePlayback: GDrivePlaybackManager
+    private lateinit var savedQueuesManager: SavedQueuesManager
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private lateinit var trackTitleTextView: TextView
@@ -40,6 +45,7 @@ class NowPlayingActivity : AppCompatActivity() {
     private lateinit var nextButton: ImageButton
     private lateinit var shuffleButton: ImageButton
     private lateinit var repeatButton: ImageButton
+    private lateinit var saveQueueButton: ImageButton
 
     private var currentTrack: Track? = null
     private var isPlaying = false
@@ -67,6 +73,7 @@ class NowPlayingActivity : AppCompatActivity() {
         spotifyClient = SpotifyApiClient.getInstance(this)
         playbackManager = PlaybackManager.getInstance(this)
         gdrivePlayback = GDrivePlaybackManager.getInstance(this)
+        savedQueuesManager = SavedQueuesManager.getInstance(this)
 
         initializeViews()
         setupControls()
@@ -96,6 +103,59 @@ class NowPlayingActivity : AppCompatActivity() {
         nextButton = findViewById(R.id.nextButton)
         shuffleButton = findViewById(R.id.shuffleButton)
         repeatButton = findViewById(R.id.repeatButton)
+        saveQueueButton = findViewById(R.id.saveQueueButton)
+
+        saveQueueButton.setOnClickListener {
+            showSaveQueueDialog()
+        }
+    }
+
+    private fun showSaveQueueDialog() {
+        // Check if there's an active queue to save
+        val hasQueue = if (isGDriveActive) {
+            gdrivePlayback.getQueue().isNotEmpty()
+        } else {
+            playbackManager.getCurrentQueue().isNotEmpty()
+        }
+
+        if (!hasQueue) {
+            Toast.makeText(this, "No queue to save", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Default name from current track
+        val defaultName = currentTrack?.let { track ->
+            track.album?.name ?: track.name
+        } ?: "Queue"
+
+        val editText = EditText(this).apply {
+            setText(defaultName)
+            setTextColor(resources.getColor(R.color.winamp_text, null))
+            setBackgroundColor(resources.getColor(R.color.winamp_background, null))
+            setPadding(48, 32, 48, 32)
+            setSelection(text.length)
+        }
+
+        AlertDialog.Builder(this, R.style.Theme_CloudAmp_Dialog)
+            .setTitle("Save Queue")
+            .setView(editText)
+            .setPositiveButton("Save") { _, _ ->
+                val name = editText.text.toString().trim()
+                if (name.isNotEmpty()) {
+                    val saved = savedQueuesManager.saveCurrentQueue(name)
+                    if (saved != null) {
+                        Toast.makeText(
+                            this,
+                            "Saved: ${saved.name} (${saved.getTrackCount()} tracks)",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        Toast.makeText(this, "Failed to save queue", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun setupControls() {

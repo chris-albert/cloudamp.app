@@ -19,4 +19,11 @@
         <item name="android:textColor">@color/winamp_text</item>
         <item name="android:fontFamily">monospace</item>
     </style>
+
+    <style name="Theme.CloudAmp.Dialog" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="colorAccent">@color/winamp_text</item>
+        <item name="android:background">@color/winamp_header</item>
+        <item name="android:textColorPrimary">@color/winamp_text</item>
+        <item name="android:textColorSecondary">@color/winamp_display_text</item>
+    </style>
 </resources>
