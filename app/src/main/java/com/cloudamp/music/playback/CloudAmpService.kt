@@ -558,17 +558,22 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 ?: loadFollowedArtistsFromApi()?.sortedBy { it.name }
                 ?: emptyList()
 
-            // Group by first letter using group title hint (creates non-clickable headers)
+            // Build A-Z letter categories for quick navigation
+            val letterCounts = mutableMapOf<String, Int>()
             for (artist in artists) {
                 val firstLetter = artist.name.firstOrNull()?.uppercaseChar() ?: '#'
-                val letter = if (firstLetter.isLetter()) firstLetter else '#'
+                val letter = if (firstLetter.isLetter()) firstLetter.toString() else "#"
+                letterCounts[letter] = (letterCounts[letter] ?: 0) + 1
+            }
 
-                items.add(createBrowsableItemWithGroup(
-                    "artist_${artist.id}",
-                    artist.name,
-                    "Artist",
-                    letter.toString(),
-                    artist.images?.firstOrNull()?.url
+            // Add each letter that has artists as a browsable item
+            val sortedLetters = letterCounts.keys.sorted()
+            for (letter in sortedLetters) {
+                val count = letterCounts[letter] ?: 0
+                items.add(createBrowsableItem(
+                    "section_letter_artist_$letter",
+                    letter,
+                    "$count artist${if (count != 1) "s" else ""}"
                 ))
             }
         } catch (e: Exception) {
