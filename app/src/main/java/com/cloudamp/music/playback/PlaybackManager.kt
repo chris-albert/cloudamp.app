@@ -344,6 +344,14 @@ class PlaybackManager private constructor(
         override fun onPlay() {
             scope.launch {
                 try {
+                    // Route to Jellyfin if it's the active provider
+                    if (JellyfinPlaybackManager.isActiveProvider) {
+                        val jellyfin = JellyfinPlaybackManager.getInstance(context)
+                        jellyfin.play()
+                        service?.updatePlaybackState(PlaybackStateCompat.STATE_PLAYING, jellyfin.getCurrentPosition())
+                        return@launch
+                    }
+
                     // Route to GDrive if it's the active provider
                     if (GDrivePlaybackManager.isActiveProvider) {
                         val gdrive = GDrivePlaybackManager.getInstance(context)
@@ -381,6 +389,12 @@ class PlaybackManager private constructor(
         override fun onPause() {
             scope.launch {
                 try {
+                    if (JellyfinPlaybackManager.isActiveProvider) {
+                        val jellyfin = JellyfinPlaybackManager.getInstance(context)
+                        jellyfin.pause()
+                        service?.updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, jellyfin.getCurrentPosition())
+                        return@launch
+                    }
                     if (GDrivePlaybackManager.isActiveProvider) {
                         val gdrive = GDrivePlaybackManager.getInstance(context)
                         gdrive.pause()
@@ -398,6 +412,10 @@ class PlaybackManager private constructor(
         override fun onSkipToNext() {
             scope.launch {
                 try {
+                    if (JellyfinPlaybackManager.isActiveProvider) {
+                        JellyfinPlaybackManager.getInstance(context).skipToNext()
+                        return@launch
+                    }
                     if (GDrivePlaybackManager.isActiveProvider) {
                         GDrivePlaybackManager.getInstance(context).skipToNext()
                         return@launch
@@ -418,6 +436,10 @@ class PlaybackManager private constructor(
         override fun onSkipToPrevious() {
             scope.launch {
                 try {
+                    if (JellyfinPlaybackManager.isActiveProvider) {
+                        JellyfinPlaybackManager.getInstance(context).skipToPrevious()
+                        return@launch
+                    }
                     if (GDrivePlaybackManager.isActiveProvider) {
                         GDrivePlaybackManager.getInstance(context).skipToPrevious()
                         return@launch
@@ -438,7 +460,11 @@ class PlaybackManager private constructor(
         override fun onPlayFromMediaId(mediaId: String, extras: Bundle?) {
             scope.launch {
                 try {
-                    if (mediaId.startsWith("gdrive_file_")) {
+                    if (mediaId.startsWith("jellyfin_track_")) {
+                        val trackId = mediaId.removePrefix("jellyfin_track_")
+                        val albumId = extras?.getString("jellyfin_album_id")
+                        service?.playJellyfinFromMediaId(trackId, albumId)
+                    } else if (mediaId.startsWith("gdrive_file_")) {
                         val fileId = mediaId.removePrefix("gdrive_file_")
                         val parentId = extras?.getString("gdrive_parent_id")
                         service?.playGDriveFromMediaId(fileId, parentId)
@@ -481,6 +507,11 @@ class PlaybackManager private constructor(
         override fun onStop() {
             scope.launch {
                 try {
+                    if (JellyfinPlaybackManager.isActiveProvider) {
+                        JellyfinPlaybackManager.getInstance(context).stop()
+                        service?.updatePlaybackState(PlaybackStateCompat.STATE_STOPPED)
+                        return@launch
+                    }
                     if (GDrivePlaybackManager.isActiveProvider) {
                         GDrivePlaybackManager.getInstance(context).stop()
                         service?.updatePlaybackState(PlaybackStateCompat.STATE_STOPPED)
@@ -497,6 +528,10 @@ class PlaybackManager private constructor(
         override fun onSeekTo(pos: Long) {
             scope.launch {
                 try {
+                    if (JellyfinPlaybackManager.isActiveProvider) {
+                        JellyfinPlaybackManager.getInstance(context).seekTo(pos)
+                        return@launch
+                    }
                     if (GDrivePlaybackManager.isActiveProvider) {
                         GDrivePlaybackManager.getInstance(context).seekTo(pos)
                         return@launch
@@ -518,6 +553,10 @@ class PlaybackManager private constructor(
         override fun onSkipToQueueItem(id: Long) {
             scope.launch {
                 try {
+                    if (JellyfinPlaybackManager.isActiveProvider) {
+                        JellyfinPlaybackManager.getInstance(context).skipToQueueItem(id.toInt())
+                        return@launch
+                    }
                     if (GDrivePlaybackManager.isActiveProvider) {
                         GDrivePlaybackManager.getInstance(context).skipToQueueItem(id.toInt())
                         return@launch
@@ -580,9 +619,12 @@ class PlaybackManager private constructor(
 
     private suspend fun playTrackFromMediaId(trackUri: String) {
         try {
-            // Deactivate GDrive if switching back to Spotify
+            // Deactivate other providers if switching back to Spotify
             if (GDrivePlaybackManager.isActiveProvider) {
                 GDrivePlaybackManager.getInstance(context).deactivate()
+            }
+            if (JellyfinPlaybackManager.isActiveProvider) {
+                JellyfinPlaybackManager.getInstance(context).deactivate()
             }
             val request = PlayRequest(uris = listOf(trackUri))
             val pending = PendingPlayback.SingleTrack(trackUri)
@@ -625,9 +667,12 @@ class PlaybackManager private constructor(
     fun playTracks(tracks: List<Track>, startIndex: Int = 0) {
         scope.launch {
             try {
-                // Deactivate GDrive if switching back to Spotify
+                // Deactivate other providers if switching back to Spotify
                 if (GDrivePlaybackManager.isActiveProvider) {
                     GDrivePlaybackManager.getInstance(context).deactivate()
+                }
+                if (JellyfinPlaybackManager.isActiveProvider) {
+                    JellyfinPlaybackManager.getInstance(context).deactivate()
                 }
                 setQueue(tracks)
                 currentIndex = startIndex

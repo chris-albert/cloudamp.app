@@ -278,6 +278,10 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
             R.id.nav_gdrive_library -> {
                 // Already here
             }
+            R.id.nav_jellyfin_library -> {
+                startActivity(Intent(this, JellyfinLibraryActivity::class.java))
+                finish()
+            }
         }
         drawerLayout.closeDrawer(GravityCompat.START)
         return true

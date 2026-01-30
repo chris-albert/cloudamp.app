@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/drawerLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/winamp_background">
+
+    <!-- Main Content -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/winamp_background">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical">
+
+            <!-- Jellyfin Header -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@color/winamp_section_header"
+                android:padding="8dp">
+
+                <ImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:src="@drawable/ic_jellyfin"
+                    app:tint="@color/winamp_text"
+                    android:layout_marginEnd="8dp"/>
+
+                <TextView
+                    android:id="@+id/headerTextView"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="JELLYFIN / Artists"
+                    android:textColor="@color/winamp_text"
+                    android:textSize="14sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:singleLine="true"
+                    android:ellipsize="end"/>
+
+            </LinearLayout>
+
+            <!-- Inline Search Bar (hidden by default) -->
+            <LinearLayout
+                android:id="@+id/searchBarContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@color/winamp_header"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="4dp"
+                android:visibility="gone">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@android:drawable/ic_menu_search"
+                    app:tint="@color/winamp_display_text"
+                    android:layout_marginEnd="8dp"/>
+
+                <EditText
+                    android:id="@+id/searchEditText"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:hint="Filter artists..."
+                    android:textColor="@color/winamp_text"
+                    android:textColorHint="@color/winamp_display_text"
+                    android:textSize="14sp"
+                    android:fontFamily="monospace"
+                    android:background="@color/winamp_section_header"
+                    android:paddingHorizontal="12dp"
+                    android:singleLine="true"
+                    android:imeOptions="actionSearch"
+                    android:inputType="text"/>
+
+                <ImageView
+                    android:id="@+id/searchCloseButton"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:src="@android:drawable/ic_menu_close_clear_cancel"
+                    app:tint="@color/winamp_display_text"
+                    android:layout_marginStart="8dp"
+                    android:padding="4dp"/>
+
+            </LinearLayout>
+
+            <!-- Library content with alphabet sidebar -->
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1">
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/libraryRecyclerView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@color/winamp_background"
+                    android:clipToPadding="false"
+                    android:paddingEnd="24dp"/>
+
+                <com.cloudamp.music.ui.AlphabetSidebarView
+                    android:id="@+id/alphabetSidebar"
+                    android:layout_width="24dp"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="end"
+                    android:background="@color/winamp_section_header"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp"
+                    android:visibility="gone"/>
+
+            </FrameLayout>
+
+        </LinearLayout>
+
+        <!-- Loading Overlay -->
+        <LinearLayout
+            android:id="@+id/loadingContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@color/winamp_background"
+            android:visibility="gone">
+
+            <ProgressBar
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:indeterminate="true"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Loading library..."
+                android:textColor="@color/winamp_text"
+                android:textSize="14sp"
+                android:fontFamily="monospace"
+                android:layout_marginTop="16dp"/>
+
+        </LinearLayout>
+
+        <!-- Empty / Auth Required State -->
+        <LinearLayout
+            android:id="@+id/emptyContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@color/winamp_background"
+            android:visibility="gone"
+            android:padding="32dp">
+
+            <ImageView
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:src="@drawable/ic_jellyfin"
+                app:tint="@color/winamp_display_text"
+                android:layout_marginBottom="16dp"/>
+
+            <TextView
+                android:id="@+id/emptyTextView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Connect Jellyfin in Settings to browse your music library"
+                android:textColor="@color/winamp_display_text"
+                android:textSize="14sp"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:layout_marginBottom="16dp"/>
+
+            <Button
+                android:id="@+id/jellyfinSettingsButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="OPEN SETTINGS"
+                android:textColor="@color/winamp_text"
+                android:background="@color/winamp_button"
+                android:fontFamily="monospace"
+                android:paddingHorizontal="24dp"/>
+
+        </LinearLayout>
+
+    </FrameLayout>
+
+    <!-- Navigation Drawer -->
+    <com.google.android.material.navigation.NavigationView
+        android:id="@+id/navigationView"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
+        android:background="@color/winamp_header"
+        app:headerLayout="@layout/nav_header"
+        app:menu="@menu/nav_drawer_menu"
+        app:itemTextColor="@color/winamp_text"
+        app:itemIconTint="@color/winamp_text"/>
+
+</androidx.drawerlayout.widget.DrawerLayout>

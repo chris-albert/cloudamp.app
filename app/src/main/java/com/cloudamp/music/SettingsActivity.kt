@@ -11,8 +11,10 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.cloudamp.music.api.GoogleDriveApiClient
+import com.cloudamp.music.api.JellyfinApiClient
 import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.auth.GoogleDriveAuthManager
+import com.cloudamp.music.auth.JellyfinAuthManager
 import com.cloudamp.music.auth.SpotifyAuthManager
 import com.cloudamp.music.cache.LibraryCache
 import kotlinx.coroutines.*
@@ -50,6 +52,15 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var clearGdriveButton: Button
     private lateinit var gdriveValidationStatus: TextView
 
+    // Jellyfin fields
+    private lateinit var jellyfinAuthManager: JellyfinAuthManager
+    private lateinit var jellyfinServerUrlEditText: EditText
+    private lateinit var jellyfinUsernameEditText: EditText
+    private lateinit var jellyfinPasswordEditText: EditText
+    private lateinit var loginWithJellyfinButton: Button
+    private lateinit var clearJellyfinButton: Button
+    private lateinit var jellyfinValidationStatus: TextView
+
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     companion object {
@@ -67,6 +78,7 @@ class SettingsActivity : AppCompatActivity() {
         authManager = SpotifyAuthManager(this)
         libraryCache = LibraryCache.getInstance(this)
         gdriveAuthManager = GoogleDriveAuthManager(this)
+        jellyfinAuthManager = JellyfinAuthManager(this)
 
         // OAuth views
         clientIdEditText = findViewById(R.id.clientIdEditText)
@@ -152,6 +164,9 @@ class SettingsActivity : AppCompatActivity() {
 
         // Google Drive views
         setupGoogleDrive()
+
+        // Jellyfin views
+        setupJellyfin()
     }
 
     private fun setupGoogleDrive() {
@@ -328,6 +343,89 @@ class SettingsActivity : AppCompatActivity() {
                 getColor(android.R.color.holo_green_dark)
             else
                 getColor(android.R.color.holo_red_dark)
+        )
+    }
+
+    // ── Jellyfin Setup ────────────────────────────────────────────────
+
+    private fun setupJellyfin() {
+        jellyfinServerUrlEditText = findViewById(R.id.jellyfinServerUrlEditText)
+        jellyfinUsernameEditText = findViewById(R.id.jellyfinUsernameEditText)
+        jellyfinPasswordEditText = findViewById(R.id.jellyfinPasswordEditText)
+        loginWithJellyfinButton = findViewById(R.id.loginWithJellyfinButton)
+        clearJellyfinButton = findViewById(R.id.clearJellyfinButton)
+        jellyfinValidationStatus = findViewById(R.id.jellyfinValidationStatus)
+
+        // Load existing server URL and username
+        jellyfinAuthManager.getServerUrl()?.let { jellyfinServerUrlEditText.setText(it) }
+        jellyfinAuthManager.getUsername()?.let { jellyfinUsernameEditText.setText(it) }
+
+        // Show current status
+        if (jellyfinAuthManager.hasAccessToken()) {
+            updateJellyfinStatus("Connected to Jellyfin", true)
+            validateJellyfinToken()
+        }
+
+        loginWithJellyfinButton.setOnClickListener {
+            val serverUrl = jellyfinServerUrlEditText.text.toString().trim()
+            val username = jellyfinUsernameEditText.text.toString().trim()
+            val password = jellyfinPasswordEditText.text.toString().trim()
+
+            if (serverUrl.isEmpty()) {
+                Toast.makeText(this, "Please enter a server URL", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (username.isEmpty()) {
+                Toast.makeText(this, "Please enter a username", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            loginWithJellyfinButton.isEnabled = false
+            updateJellyfinStatus("Connecting...", false)
+
+            scope.launch {
+                val result = jellyfinAuthManager.authenticate(serverUrl, username, password)
+                result.onSuccess { displayName ->
+                    // Reset the API client singleton so it picks up the new server URL
+                    JellyfinApiClient.resetInstance()
+                    updateJellyfinStatus("Connected: $displayName", true)
+                    Toast.makeText(this@SettingsActivity, "Logged in as $displayName", Toast.LENGTH_SHORT).show()
+                }.onFailure { error ->
+                    updateJellyfinStatus("Login failed: ${error.message}", false)
+                    Toast.makeText(this@SettingsActivity, "Login failed: ${error.message}", Toast.LENGTH_LONG).show()
+                }
+                loginWithJellyfinButton.isEnabled = true
+            }
+        }
+
+        clearJellyfinButton.setOnClickListener {
+            jellyfinAuthManager.clearCredentials()
+            JellyfinApiClient.resetInstance()
+            jellyfinServerUrlEditText.setText("")
+            jellyfinUsernameEditText.setText("")
+            jellyfinPasswordEditText.setText("")
+            updateJellyfinStatus("", false)
+            Toast.makeText(this, "Jellyfin credentials cleared", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun validateJellyfinToken() {
+        scope.launch {
+            val result = jellyfinAuthManager.validateToken()
+            result.onSuccess { displayName ->
+                updateJellyfinStatus("Connected: $displayName", true)
+            }.onFailure {
+                updateJellyfinStatus("Session expired - please re-login", false)
+            }
+        }
+    }
+
+    private fun updateJellyfinStatus(message: String, isValid: Boolean) {
+        jellyfinValidationStatus.text = message
+        jellyfinValidationStatus.visibility = if (message.isEmpty()) View.GONE else View.VISIBLE
+        jellyfinValidationStatus.setTextColor(
+            if (isValid) getColor(android.R.color.holo_green_dark)
+            else getColor(android.R.color.holo_red_dark)
         )
     }
 

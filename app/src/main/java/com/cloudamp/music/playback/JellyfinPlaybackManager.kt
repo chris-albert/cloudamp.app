@@ -4,9 +4,11 @@ import android.content.Context
 import android.net.Uri
 import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
-import com.cloudamp.music.api.DriveFile
-import com.cloudamp.music.api.GoogleDriveApiClient
+import com.cloudamp.music.api.JellyfinApiClient
+import com.cloudamp.music.api.JellyfinItem
+import com.cloudamp.music.models.Album
 import com.cloudamp.music.models.Artist
+import com.cloudamp.music.models.Image
 import com.cloudamp.music.models.Track
 import com.google.android.exoplayer2.C
 import com.google.android.exoplayer2.ExoPlayer
@@ -19,29 +21,29 @@ import com.google.android.exoplayer2.source.DefaultMediaSourceFactory
 import com.google.android.exoplayer2.upstream.DataSource
 
 /**
- * Manages Google Drive audio playback using ExoPlayer.
- * Maintains its own queue of DriveFile objects and streams audio
- * directly from Drive via authenticated HTTP requests.
+ * Manages Jellyfin audio playback using ExoPlayer.
+ * Maintains its own queue of JellyfinItem objects and streams audio
+ * directly from the Jellyfin server via authenticated HTTP requests.
  */
-class GDrivePlaybackManager private constructor(
+class JellyfinPlaybackManager private constructor(
     private val context: Context
 ) {
 
     companion object {
-        private const val TAG = "GDrivePlayback"
+        private const val TAG = "JellyfinPlayback"
 
         @Volatile
-        private var instance: GDrivePlaybackManager? = null
+        private var instance: JellyfinPlaybackManager? = null
 
-        fun getInstance(context: Context): GDrivePlaybackManager {
+        fun getInstance(context: Context): JellyfinPlaybackManager {
             return instance ?: synchronized(this) {
-                instance ?: GDrivePlaybackManager(context.applicationContext).also {
+                instance ?: JellyfinPlaybackManager(context.applicationContext).also {
                     instance = it
                 }
             }
         }
 
-        /** Indicates whether the active provider is currently Google Drive */
+        /** Indicates whether the active provider is currently Jellyfin */
         var isActiveProvider = false
             private set
     }
@@ -50,10 +52,13 @@ class GDrivePlaybackManager private constructor(
     private var dataSourceFactory: DataSource.Factory? = null
     private var service: CloudAmpService? = null
 
-    private val queue = mutableListOf<DriveFile>()
+    private val queue = mutableListOf<JellyfinItem>()
     private var currentIndex = 0
 
-    fun getQueue(): List<DriveFile> = queue.toList()
+    // Cache album art URL for the current album
+    private var currentAlbumArtUrl: String? = null
+
+    fun getQueue(): List<JellyfinItem> = queue.toList()
     fun getCurrentIndex(): Int = currentIndex
 
     fun setService(cloudAmpService: CloudAmpService) {
@@ -62,8 +67,7 @@ class GDrivePlaybackManager private constructor(
 
     /**
      * Get or create the ExoPlayer instance.
-     * Uses OkHttpDataSource with Google Drive auth headers so all media
-     * requests include the Bearer token automatically.
+     * Uses OkHttpDataSource with Jellyfin auth headers.
      */
     private fun getPlayer(): ExoPlayer {
         if (exoPlayer == null) {
@@ -86,75 +90,62 @@ class GDrivePlaybackManager private constructor(
         return exoPlayer!!
     }
 
-    /**
-     * Get or create the DataSource.Factory with Google Drive auth headers.
-     * Uses a streaming-specific HTTP client WITHOUT body-level logging
-     * (which would buffer entire audio files into memory).
-     */
     private fun getDataSourceFactory(): DataSource.Factory {
         if (dataSourceFactory == null) {
-            val driveClient = GoogleDriveApiClient.getInstance(context)
-            val hasToken = driveClient.hasAccessToken()
-            Log.d(TAG, "Creating DataSource.Factory, hasAccessToken=$hasToken")
-            val streamingClient = driveClient.getStreamingHttpClient()
+            val jellyfinClient = JellyfinApiClient.getInstance(context)
+            Log.d(TAG, "Creating DataSource.Factory, hasAccessToken=${jellyfinClient.hasAccessToken()}")
+            val streamingClient = jellyfinClient.getStreamingHttpClient()
             dataSourceFactory = OkHttpDataSource.Factory(streamingClient)
         }
         return dataSourceFactory!!
     }
 
     /**
-     * Build a streaming URI for a Google Drive file.
+     * Build a streaming URI for a Jellyfin audio item.
      */
-    private fun buildStreamUri(fileId: String): Uri {
-        return Uri.parse("https://www.googleapis.com/drive/v3/files/$fileId?alt=media")
+    private fun buildStreamUri(itemId: String): Uri {
+        val client = JellyfinApiClient.getInstance(context)
+        val url = client.getStreamUrl(itemId)
+        Log.d(TAG, "Stream URI: $url")
+        return Uri.parse(url ?: "")
     }
 
     /**
-     * Play a list of Drive audio files starting from the given index.
-     * This sets GDrive as the active provider.
+     * Play a list of Jellyfin audio items starting from the given index.
      */
-    fun playFiles(files: List<DriveFile>, startIndex: Int = 0) {
-        Log.d(TAG, "playFiles called: ${files.size} files, startIndex=$startIndex")
+    fun playItems(items: List<JellyfinItem>, startIndex: Int = 0, albumArtUrl: String? = null) {
+        Log.d(TAG, "playItems called: ${items.size} items, startIndex=$startIndex")
 
-        // Pre-check: verify we have an access token before attempting playback
-        val driveClient = GoogleDriveApiClient.getInstance(context)
-        if (!driveClient.hasAccessToken()) {
-            Log.e(TAG, "playFiles: NO ACCESS TOKEN! Playback will fail. User needs to re-authenticate.")
+        val client = JellyfinApiClient.getInstance(context)
+        if (!client.hasAccessToken()) {
+            Log.e(TAG, "playItems: NO ACCESS TOKEN! Playback will fail.")
         }
 
-        // Deactivate Jellyfin if switching providers
-        if (JellyfinPlaybackManager.isActiveProvider) {
-            JellyfinPlaybackManager.getInstance(context).deactivate()
+        // Deactivate GDrive if switching providers
+        if (GDrivePlaybackManager.isActiveProvider) {
+            GDrivePlaybackManager.getInstance(context).deactivate()
         }
 
         isActiveProvider = true
         queue.clear()
-        queue.addAll(files)
+        queue.addAll(items)
         currentIndex = startIndex
+        currentAlbumArtUrl = albumArtUrl
 
         val player = getPlayer()
-        Log.d(TAG, "ExoPlayer obtained, state=${player.playbackState}")
-
-        // Clear and set the new playlist.
-        // ExoPlayer is configured with our OkHttpDataSource.Factory (via
-        // DefaultMediaSourceFactory), so all HTTP requests for these URIs
-        // will include the Google Drive Authorization header automatically.
         player.stop()
         player.clearMediaItems()
 
-        files.forEach { file ->
-            val uri = buildStreamUri(file.id)
-            Log.d(TAG, "Adding media item: ${file.name} -> $uri")
+        items.forEach { item ->
+            val uri = buildStreamUri(item.Id)
+            Log.d(TAG, "Adding media item: ${item.Name} -> $uri")
             player.addMediaItem(MediaItem.fromUri(uri))
         }
 
         player.seekTo(startIndex, 0)
-        Log.d(TAG, "Calling prepare()")
         player.prepare()
         player.playWhenReady = true
-        Log.d(TAG, "playWhenReady=true, playbackState=${player.playbackState}")
 
-        // Update media session metadata and queue
         updateServiceMetadata()
         updateServiceQueue()
         service?.updatePlaybackState(PlaybackStateCompat.STATE_BUFFERING)
@@ -203,38 +194,54 @@ class GDrivePlaybackManager private constructor(
     }
 
     /**
-     * Convert a DriveFile to a Track model for display in the media session,
+     * Convert a JellyfinItem to a Track model for display in the media session,
      * notifications, and NowPlayingActivity.
      */
-    fun driveFileToTrack(file: DriveFile): Track {
-        val nameWithoutExtension = file.name.substringBeforeLast('.')
+    fun jellyfinItemToTrack(item: JellyfinItem): Track {
+        val client = JellyfinApiClient.getInstance(context)
+        val artistName = item.ArtistItems?.firstOrNull()?.Name
+            ?: item.Artists?.firstOrNull()
+            ?: item.AlbumArtist
+            ?: "Unknown Artist"
+        val artistId = item.ArtistItems?.firstOrNull()?.Id ?: "jellyfin"
+
+        val albumImageUrl = if (item.AlbumId != null) {
+            client.getImageUrl(item.AlbumId)
+        } else if (item.hasPrimaryImage()) {
+            client.getImageUrl(item.Id)
+        } else {
+            currentAlbumArtUrl
+        }
+
+        val album = if (item.Album != null) {
+            Album(
+                id = item.AlbumId ?: item.Id,
+                name = item.Album,
+                artists = listOf(Artist(id = artistId, name = artistName, uri = "jellyfin:artist:$artistId")),
+                images = albumImageUrl?.let { listOf(Image(url = it, height = 300, width = 300)) },
+                uri = "jellyfin:album:${item.AlbumId ?: item.Id}"
+            )
+        } else null
+
         return Track(
-            id = file.id,
-            name = nameWithoutExtension,
-            artists = listOf(Artist(id = "gdrive", name = "Google Drive", uri = "gdrive:artist:gdrive")),
-            album = null,
-            uri = "gdrive:file:${file.id}",
-            durationMs = 0 // We don't know duration until ExoPlayer reads it
+            id = item.Id,
+            name = item.Name,
+            artists = listOf(Artist(id = artistId, name = artistName, uri = "jellyfin:artist:$artistId")),
+            album = album,
+            uri = "jellyfin:track:${item.Id}",
+            durationMs = item.getRunTimeMs(),
+            trackNumber = item.IndexNumber
         )
     }
 
-    /**
-     * Get the current queue as Track objects for NowPlayingActivity / QueueAdapter.
-     */
     fun getQueueAsTracks(): List<Track> {
-        return queue.map { driveFileToTrack(it) }
+        return queue.map { jellyfinItemToTrack(it) }
     }
 
-    /**
-     * Get the current position in milliseconds from ExoPlayer.
-     */
     fun getCurrentPosition(): Long {
         return exoPlayer?.currentPosition ?: 0
     }
 
-    /**
-     * Get the current track duration in milliseconds from ExoPlayer.
-     */
     fun getDuration(): Long {
         val duration = exoPlayer?.duration ?: 0
         return if (duration > 0) duration else 0
@@ -244,10 +251,6 @@ class GDrivePlaybackManager private constructor(
         return exoPlayer?.isPlaying ?: false
     }
 
-    /**
-     * Deactivates GDrive as the provider and releases the player.
-     * Called when the user switches back to Spotify.
-     */
     fun deactivate() {
         isActiveProvider = false
         exoPlayer?.stop()
@@ -264,16 +267,16 @@ class GDrivePlaybackManager private constructor(
 
     private fun updateServiceMetadata() {
         if (currentIndex in queue.indices) {
-            val file = queue[currentIndex]
-            val track = driveFileToTrack(file)
-            // Include actual duration from ExoPlayer when available
+            val item = queue[currentIndex]
+            val track = jellyfinItemToTrack(item)
             val duration = getDuration()
             val trackWithDuration = if (duration > 0) {
                 track.copy(durationMs = duration.toInt())
             } else {
                 track
             }
-            service?.updateMetadata(trackWithDuration, null)
+            val artUrl = track.album?.images?.firstOrNull()?.url
+            service?.updateMetadata(trackWithDuration, artUrl)
         }
     }
 
@@ -285,7 +288,7 @@ class GDrivePlaybackManager private constructor(
     private val playerListener = object : Player.Listener {
 
         override fun onPlaybackStateChanged(playbackState: Int) {
-            Log.d(TAG, "onPlaybackStateChanged: $playbackState (IDLE=1, BUFFERING=2, READY=3, ENDED=4)")
+            Log.d(TAG, "onPlaybackStateChanged: $playbackState")
             when (playbackState) {
                 Player.STATE_READY -> {
                     updateServiceMetadata()
@@ -318,8 +321,6 @@ class GDrivePlaybackManager private constructor(
 
         override fun onPlayerError(error: PlaybackException) {
             Log.e(TAG, "ExoPlayer error: ${error.errorCodeName} (${error.errorCode})", error)
-            Log.e(TAG, "  cause: ${error.cause?.message}")
-            // Walk the cause chain for more details (e.g., HTTP status codes)
             var cause: Throwable? = error.cause
             var depth = 1
             while (cause != null) {

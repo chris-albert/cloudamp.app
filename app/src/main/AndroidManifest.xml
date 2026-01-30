@@ -55,6 +55,12 @@
             android:exported="false"
             android:parentActivityName=".MainActivity" />
 
+        <!-- Jellyfin Library Activity -->
+        <activity
+            android:name=".JellyfinLibraryActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity" />
+
         <!-- Spotify OAuth Callback Activity -->
         <activity
             android:name=".auth.SpotifyCallbackActivity"

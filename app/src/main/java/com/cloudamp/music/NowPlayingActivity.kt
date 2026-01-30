@@ -13,6 +13,7 @@ import com.cloudamp.music.api.PlayRequest
 import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.models.Track
 import com.cloudamp.music.playback.GDrivePlaybackManager
+import com.cloudamp.music.playback.JellyfinPlaybackManager
 import com.cloudamp.music.playback.PlaybackManager
 import com.cloudamp.music.ui.QueueAdapter
 import kotlinx.coroutines.*
@@ -22,6 +23,7 @@ class NowPlayingActivity : AppCompatActivity() {
     private lateinit var spotifyClient: SpotifyApiClient
     private lateinit var playbackManager: PlaybackManager
     private lateinit var gdrivePlayback: GDrivePlaybackManager
+    private lateinit var jellyfinPlayback: JellyfinPlaybackManager
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private lateinit var trackTitleTextView: TextView
@@ -57,6 +59,9 @@ class NowPlayingActivity : AppCompatActivity() {
     private val isGDriveActive: Boolean
         get() = GDrivePlaybackManager.isActiveProvider
 
+    private val isJellyfinActive: Boolean
+        get() = JellyfinPlaybackManager.isActiveProvider
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_now_playing)
@@ -67,6 +72,7 @@ class NowPlayingActivity : AppCompatActivity() {
         spotifyClient = SpotifyApiClient.getInstance(this)
         playbackManager = PlaybackManager.getInstance(this)
         gdrivePlayback = GDrivePlaybackManager.getInstance(this)
+        jellyfinPlayback = JellyfinPlaybackManager.getInstance(this)
 
         initializeViews()
         setupControls()
@@ -100,7 +106,10 @@ class NowPlayingActivity : AppCompatActivity() {
 
     private fun setupControls() {
         previousButton.setOnClickListener {
-            if (isGDriveActive) {
+            if (isJellyfinActive) {
+                jellyfinPlayback.skipToPrevious()
+                updateJellyfinTrackInfo()
+            } else if (isGDriveActive) {
                 gdrivePlayback.skipToPrevious()
                 updateGDriveTrackInfo()
             } else {
@@ -117,7 +126,17 @@ class NowPlayingActivity : AppCompatActivity() {
         }
 
         playPauseButton.setOnClickListener {
-            if (isGDriveActive) {
+            if (isJellyfinActive) {
+                if (jellyfinPlayback.isPlaying()) {
+                    jellyfinPlayback.pause()
+                    isPlaying = false
+                    playPauseButton.setImageResource(R.drawable.ic_play)
+                } else {
+                    jellyfinPlayback.play()
+                    isPlaying = true
+                    playPauseButton.setImageResource(R.drawable.ic_pause)
+                }
+            } else if (isGDriveActive) {
                 if (gdrivePlayback.isPlaying()) {
                     gdrivePlayback.pause()
                     isPlaying = false
@@ -147,7 +166,14 @@ class NowPlayingActivity : AppCompatActivity() {
         }
 
         stopButton.setOnClickListener {
-            if (isGDriveActive) {
+            if (isJellyfinActive) {
+                jellyfinPlayback.stop()
+                isPlaying = false
+                currentPosition = 0
+                seekBar.progress = 0
+                currentTimeTextView.text = "0:00"
+                playPauseButton.setImageResource(R.drawable.ic_play)
+            } else if (isGDriveActive) {
                 gdrivePlayback.stop()
                 isPlaying = false
                 currentPosition = 0
@@ -171,7 +197,10 @@ class NowPlayingActivity : AppCompatActivity() {
         }
 
         nextButton.setOnClickListener {
-            if (isGDriveActive) {
+            if (isJellyfinActive) {
+                jellyfinPlayback.skipToNext()
+                updateJellyfinTrackInfo()
+            } else if (isGDriveActive) {
                 gdrivePlayback.skipToNext()
                 updateGDriveTrackInfo()
             } else {
@@ -198,7 +227,9 @@ class NowPlayingActivity : AppCompatActivity() {
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
 
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                if (isGDriveActive) {
+                if (isJellyfinActive) {
+                    jellyfinPlayback.seekTo(currentPosition)
+                } else if (isGDriveActive) {
                     gdrivePlayback.seekTo(currentPosition)
                 } else {
                     scope.launch {
@@ -214,7 +245,9 @@ class NowPlayingActivity : AppCompatActivity() {
     }
 
     private fun loadCurrentTrack() {
-        if (isGDriveActive) {
+        if (isJellyfinActive) {
+            updateJellyfinTrackInfo()
+        } else if (isGDriveActive) {
             updateGDriveTrackInfo()
         } else {
             loadSpotifyTrack()
@@ -272,6 +305,32 @@ class NowPlayingActivity : AppCompatActivity() {
         )
     }
 
+    private fun updateJellyfinTrackInfo() {
+        val queue = jellyfinPlayback.getQueue()
+        val index = jellyfinPlayback.getCurrentIndex()
+
+        if (index in queue.indices) {
+            val item = queue[index]
+            val track = jellyfinPlayback.jellyfinItemToTrack(item)
+            currentTrack = track
+            updateTrackInfo(track)
+        }
+
+        isPlaying = jellyfinPlayback.isPlaying()
+        currentPosition = jellyfinPlayback.getCurrentPosition()
+        totalDuration = jellyfinPlayback.getDuration()
+
+        if (totalDuration > 0) {
+            totalTimeTextView.text = formatTime(totalDuration)
+            seekBar.max = totalDuration.toInt()
+        }
+
+        playPauseButton.setImageResource(
+            if (isPlaying) R.drawable.ic_pause
+            else R.drawable.ic_play
+        )
+    }
+
     private fun updateTrackInfo(track: Track) {
         trackTitleTextView.text = track.name
         trackArtistTextView.text = track.artists.joinToString(", ") { it.name }
@@ -285,7 +344,9 @@ class NowPlayingActivity : AppCompatActivity() {
     }
 
     private fun updatePlaybackState() {
-        if (isGDriveActive) {
+        if (isJellyfinActive) {
+            updateJellyfinPlaybackState()
+        } else if (isGDriveActive) {
             updateGDrivePlaybackState()
         } else {
             updateSpotifyPlaybackState()
@@ -333,11 +394,46 @@ class NowPlayingActivity : AppCompatActivity() {
         )
     }
 
+    private fun updateJellyfinPlaybackState() {
+        currentPosition = jellyfinPlayback.getCurrentPosition()
+        isPlaying = jellyfinPlayback.isPlaying()
+
+        val newDuration = jellyfinPlayback.getDuration()
+        if (newDuration > 0 && newDuration != totalDuration) {
+            totalDuration = newDuration
+            totalTimeTextView.text = formatTime(totalDuration)
+            seekBar.max = totalDuration.toInt()
+        }
+
+        seekBar.progress = currentPosition.toInt()
+        currentTimeTextView.text = formatTime(currentPosition)
+
+        // Check if track changed
+        val currentIdx = jellyfinPlayback.getCurrentIndex()
+        val queue = jellyfinPlayback.getQueue()
+        if (currentIdx in queue.indices) {
+            val item = queue[currentIdx]
+            val track = jellyfinPlayback.jellyfinItemToTrack(item)
+            if (currentTrack?.id != track.id) {
+                currentTrack = track
+                updateTrackInfo(track)
+            }
+        }
+
+        playPauseButton.setImageResource(
+            if (isPlaying) R.drawable.ic_pause
+            else R.drawable.ic_play
+        )
+    }
+
     private fun updateQueueDisplay() {
         val queue: List<Track>
         val currentIndex: Int
 
-        if (isGDriveActive) {
+        if (isJellyfinActive) {
+            queue = jellyfinPlayback.getQueueAsTracks()
+            currentIndex = jellyfinPlayback.getCurrentIndex()
+        } else if (isGDriveActive) {
             queue = gdrivePlayback.getQueueAsTracks()
             currentIndex = gdrivePlayback.getCurrentIndex()
         } else {
