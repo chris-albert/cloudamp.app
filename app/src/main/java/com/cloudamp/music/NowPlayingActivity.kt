@@ -54,10 +54,12 @@ class NowPlayingActivity : AppCompatActivity() {
     private var currentPosition = 0L
     private var totalDuration = 0L
     private var eqAttached = false
+    private var eqVisualizerAttempts = 0
 
     companion object {
         private const val TAG = "NowPlayingActivity"
         private const val REQUEST_RECORD_AUDIO = 1001
+        private const val MAX_VISUALIZER_ATTEMPTS = 3
     }
 
     private val updateHandler = Handler(Looper.getMainLooper())
@@ -252,8 +254,9 @@ class NowPlayingActivity : AppCompatActivity() {
     private fun attachEqVisualizer() {
         if (eqAttached) return
         if (isGDriveActive) {
+            eqVisualizerAttempts++
             val sessionId = gdrivePlayback.getAudioSessionId()
-            Log.d(TAG, "GDrive audio session ID: $sessionId, isPlaying: ${gdrivePlayback.isPlaying()}")
+            Log.d(TAG, "Attaching EQ visualizer attempt $eqVisualizerAttempts: sessionId=$sessionId, isPlaying=${gdrivePlayback.isPlaying()}")
 
             // Try the ExoPlayer's audio session first
             if (sessionId != 0) {
@@ -273,7 +276,7 @@ class NowPlayingActivity : AppCompatActivity() {
             }
 
             // Both failed - use simulation
-            Log.w(TAG, "Visualizer unavailable, falling back to simulation")
+            Log.w(TAG, "Visualizer unavailable on attempt $eqVisualizerAttempts, falling back to simulation")
             eqMeterView.setPlaying(isPlaying)
         } else {
             eqMeterView.setPlaying(isPlaying)
@@ -385,9 +388,18 @@ class NowPlayingActivity : AppCompatActivity() {
     private fun updatePlaybackState() {
         if (isGDriveActive) {
             updateGDrivePlaybackState()
-            // Try to attach real visualizer if not yet connected
-            if (!eqAttached && hasRecordAudioPermission()) {
+            // If visualizer was attached but EqMeterView detected no data and
+            // auto-fell back to simulation, reset eqAttached so we can retry
+            if (eqAttached && !eqMeterView.isReceivingData()) {
+                Log.d(TAG, "Visualizer not receiving data, resetting (attempt $eqVisualizerAttempts/$MAX_VISUALIZER_ATTEMPTS)")
+                eqAttached = false
+            }
+            // Try to attach real visualizer if not yet connected and retries remain
+            if (!eqAttached && eqVisualizerAttempts < MAX_VISUALIZER_ATTEMPTS && hasRecordAudioPermission()) {
                 attachEqVisualizer()
+            } else if (!eqAttached && eqVisualizerAttempts >= MAX_VISUALIZER_ATTEMPTS) {
+                // Exhausted retries - stick with simulation
+                eqMeterView.setPlaying(isPlaying)
             }
         } else {
             updateSpotifyPlaybackState()

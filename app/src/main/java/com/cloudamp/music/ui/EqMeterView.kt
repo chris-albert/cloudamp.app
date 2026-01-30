@@ -5,13 +5,11 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.media.audiofx.Visualizer
+import android.os.SystemClock
 import android.util.AttributeSet
 import android.util.Log
 import android.view.View
-import kotlin.math.abs
 import kotlin.math.ln
-import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.sqrt
 
 /**
@@ -46,6 +44,9 @@ class EqMeterView @JvmOverloads constructor(
         private const val DECAY_RATE = 0.88f
         private const val PEAK_DECAY_RATE = 0.97f
         private const val PEAK_HOLD_FRAMES = 12
+
+        // If Visualizer is attached but no FFT data arrives within this time, fall back to simulation
+        private const val VISUALIZER_DATA_TIMEOUT_MS = 2000L
     }
 
     private val barPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -59,6 +60,8 @@ class EqMeterView @JvmOverloads constructor(
 
     private var visualizer: Visualizer? = null
     private var isVisualizerActive = false
+    private var visualizerAttachTime = 0L
+    private var fftDataReceived = false
 
     // Simulated levels for when no real audio session is available (Spotify)
     private var simulationActive = false
@@ -71,6 +74,7 @@ class EqMeterView @JvmOverloads constructor(
      */
     fun attachToAudioSession(audioSessionId: Int): Boolean {
         releaseVisualizer()
+        fftDataReceived = false
         return try {
             val viz = Visualizer(audioSessionId)
             viz.captureSize = Visualizer.getCaptureSizeRange()[1] // Max capture size
@@ -95,6 +99,7 @@ class EqMeterView @JvmOverloads constructor(
             visualizer = viz
             isVisualizerActive = true
             simulationActive = false
+            visualizerAttachTime = SystemClock.elapsedRealtime()
             Log.d(TAG, "Visualizer attached to session $audioSessionId, enabled=${viz.enabled}")
             true
         } catch (e: Exception) {
@@ -102,6 +107,11 @@ class EqMeterView @JvmOverloads constructor(
             false
         }
     }
+
+    /**
+     * Returns true if the Visualizer is attached AND has actually received FFT data.
+     */
+    fun isReceivingData(): Boolean = isVisualizerActive && fftDataReceived
 
     /**
      * Start simulated EQ animation (used for Spotify where we have no audio session).
@@ -158,6 +168,7 @@ class EqMeterView @JvmOverloads constructor(
      * FFT data is interleaved real/imaginary pairs.
      */
     private fun processFftData(fft: ByteArray) {
+        fftDataReceived = true
         val n = fft.size / 2
         if (n < BAR_COUNT) return
 
@@ -265,6 +276,17 @@ class EqMeterView @JvmOverloads constructor(
         canvas.drawRect(0f, 0f, w, h, bgPaint)
 
         if (w == 0f || h == 0f) return
+
+        // Auto-fallback: if Visualizer was attached but hasn't delivered any FFT data
+        // within the timeout, it's not actually capturing audio - switch to simulation
+        if (isVisualizerActive && !fftDataReceived) {
+            val elapsed = SystemClock.elapsedRealtime() - visualizerAttachTime
+            if (elapsed > VISUALIZER_DATA_TIMEOUT_MS) {
+                Log.w(TAG, "Visualizer attached but no FFT data after ${elapsed}ms, falling back to simulation")
+                releaseVisualizer()
+                simulationActive = true
+            }
+        }
 
         // Update simulation if active
         if (simulationActive) {
