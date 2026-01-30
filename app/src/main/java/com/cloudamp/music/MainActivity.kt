@@ -20,6 +20,7 @@ import com.cloudamp.music.models.Artist
 import com.cloudamp.music.models.Track
 import com.cloudamp.music.models.SimplifiedTrack
 import com.cloudamp.music.playback.PlaybackManager
+import com.cloudamp.music.ui.AlphabetSidebarView
 import com.cloudamp.music.ui.ExpandableLibraryAdapter
 import com.google.android.material.navigation.NavigationView
 import kotlinx.coroutines.*
@@ -38,6 +39,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     private lateinit var libraryRecyclerView: RecyclerView
     private lateinit var libraryAdapter: ExpandableLibraryAdapter
     private lateinit var loadingContainer: LinearLayout
+    private lateinit var alphabetSidebar: AlphabetSidebarView
 
     private var hasLoadedContent = false
 
@@ -118,12 +120,24 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         )
 
         libraryRecyclerView.adapter = libraryAdapter
+
+        alphabetSidebar = findViewById(R.id.alphabetSidebar)
+        alphabetSidebar.listener = object : AlphabetSidebarView.OnLetterSelectedListener {
+            override fun onLetterSelected(letter: String) {
+                val position = libraryAdapter.getLetterPosition(letter)
+                if (position >= 0) {
+                    (libraryRecyclerView.layoutManager as LinearLayoutManager)
+                        .scrollToPositionWithOffset(position, 0)
+                }
+            }
+        }
     }
 
     private fun checkSpotifyToken() {
         if (!spotifyClient.hasAccessToken()) {
             if (hasLoadedContent) {
                 libraryAdapter.setArtists(emptyList())
+                showAlphabetSidebar(false)
                 hasLoadedContent = false
             }
             Toast.makeText(this, "Please set your Spotify credentials in Settings", Toast.LENGTH_LONG).show()
@@ -138,6 +152,10 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         loadingContainer.visibility = if (show) View.VISIBLE else View.GONE
     }
 
+    private fun showAlphabetSidebar(show: Boolean) {
+        alphabetSidebar.visibility = if (show) View.VISIBLE else View.GONE
+    }
+
     private fun loadMyLibrary() {
         // Try to load from cache first
         if (libraryCache.hasCache()) {
@@ -147,6 +165,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             if (cachedArtists != null && cachedArtists.isNotEmpty()) {
                 libraryAdapter.setSavedAlbumIds(cachedSavedAlbumIds)
                 libraryAdapter.setArtists(cachedArtists)
+                showAlphabetSidebar(true)
                 hasLoadedContent = true
                 return
             }
@@ -160,6 +179,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         libraryCache.clearCache()
         hasLoadedContent = false
         libraryAdapter.setArtists(emptyList())
+        showAlphabetSidebar(false)
         loadLibraryFromApi()
     }
 
@@ -191,6 +211,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
 
                     libraryAdapter.setSavedAlbumIds(savedAlbumIds)
                     libraryAdapter.setArtists(artists)
+                    showAlphabetSidebar(artists.isNotEmpty())
                     hasLoadedContent = true
 
                     if (artists.isEmpty()) {
@@ -384,6 +405,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
 
                     if (artists.isNotEmpty()) {
                         libraryAdapter.setArtists(artists)
+                        showAlphabetSidebar(true)
                     } else {
                         Toast.makeText(this@MainActivity, "No results found", Toast.LENGTH_SHORT).show()
                     }

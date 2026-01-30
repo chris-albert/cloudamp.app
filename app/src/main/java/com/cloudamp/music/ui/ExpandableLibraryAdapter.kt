@@ -108,6 +108,10 @@ class ExpandableLibraryAdapter(
 
     override fun getItemCount() = items.size
 
+    fun getLetterPosition(letter: String): Int {
+        return items.indexOfFirst { it is LibraryItem.HeaderItem && it.title == letter }
+    }
+
     fun setArtists(artists: List<Artist>) {
         items.clear()
 
