@@ -1,6 +1,7 @@
 package com.cloudamp.music.playback
 
 import com.google.android.exoplayer2.C
+import com.google.android.exoplayer2.audio.AudioProcessor
 import com.google.android.exoplayer2.audio.BaseAudioProcessor
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -35,7 +36,7 @@ class SpectrumAudioProcessor : BaseAudioProcessor() {
     var spectrum = FloatArray(BAND_COUNT)
         private set
 
-    override fun onConfigure(inputAudioFormat: AudioFormat): AudioFormat {
+    override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         sampleRate = inputAudioFormat.sampleRate
         channelCount = inputAudioFormat.channelCount
         encoding = inputAudioFormat.encoding
