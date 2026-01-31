@@ -32,6 +32,7 @@ import com.cloudamp.music.api.Playlist
 import com.cloudamp.music.models.Album
 import com.cloudamp.music.models.Artist
 import com.cloudamp.music.models.Track
+import android.util.Log
 import kotlinx.coroutines.*
 
 class CloudAmpService : MediaBrowserServiceCompat() {
@@ -53,6 +54,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     var suppressPollingUpdates = false
 
     companion object {
+        private const val TAG = "CloudAmpService"
         const val ROOT_ID = "root"
         const val ARTISTS_ID = "artists"
         const val ALBUMS_ID = "albums"
@@ -336,9 +338,15 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
         mediaSession.setPlaybackState(stateBuilder.build())
 
-        // Update notification
-        val isPlaying = state == PlaybackStateCompat.STATE_PLAYING
-        updateNotification(isPlaying)
+        // Update notification — may fail when service is only bound (not started
+        // via startForegroundService), e.g., when Android Auto binds to us before
+        // the user has actively started playback through CloudAmp.
+        try {
+            val isPlaying = state == PlaybackStateCompat.STATE_PLAYING
+            updateNotification(isPlaying)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not update foreground notification: ${e.message}")
+        }
     }
 
     /**
@@ -351,7 +359,11 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             .setErrorMessage(errorCode, message)
 
         mediaSession.setPlaybackState(stateBuilder.build())
-        updateNotification(false)
+        try {
+            updateNotification(false)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not update foreground notification: ${e.message}")
+        }
     }
 
     /**
@@ -385,10 +397,17 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     private fun startPlaybackPolling() {
         playbackPollingJob?.cancel()
         playbackPollingJob = serviceScope.launch {
+            // Track whether we've detected active playback yet.
+            // Until we do, use a shorter poll interval so the "now playing"
+            // bar appears quickly when the user opens CloudAmp in Android Auto
+            // while Spotify is already playing.
+            var detectedPlayback = false
+
             while (isActive) {
                 try {
                     if (!suppressPollingUpdates) {
                         if (GDrivePlaybackManager.isActiveProvider) {
+                            detectedPlayback = true
                             // Poll ExoPlayer position for Google Drive playback
                             val position = gdrivePlaybackManager.getCurrentPosition()
                             val state = if (gdrivePlaybackManager.isPlaying()) {
@@ -402,10 +421,21 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                             if (response.isSuccessful) {
                                 val playback = response.body()
                                 if (playback != null) {
+                                    if (!detectedPlayback) {
+                                        Log.d(TAG, "Detected active Spotify playback: ${playback.item?.name}")
+                                    }
+                                    detectedPlayback = true
+
                                     val state = if (playback.isPlaying) {
                                         PlaybackStateCompat.STATE_PLAYING
                                     } else {
                                         PlaybackStateCompat.STATE_PAUSED
+                                    }
+
+                                    // Update metadata BEFORE playback state so that
+                                    // Android Auto has track info when the state changes.
+                                    playback.item?.let { track ->
+                                        updateMetadata(track, track.album?.images?.firstOrNull()?.url)
                                     }
 
                                     updatePlaybackState(
@@ -413,20 +443,23 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                                         playback.progressMs.toLong(),
                                         1.0f
                                     )
-
-                                    // Update metadata if track info available
-                                    playback.item?.let { track ->
-                                        updateMetadata(track, track.album?.images?.firstOrNull()?.url)
-                                    }
                                 }
+                            } else {
+                                Log.w(TAG, "Spotify playback poll failed: HTTP ${response.code()}")
                             }
                         }
                     }
                 } catch (e: Exception) {
-                    // Ignore polling errors
+                    Log.w(TAG, "Playback polling error: ${e.message}")
                 }
-                // Poll every 1s for GDrive (cheap local call), 3s for Spotify (network API)
-                delay(if (GDrivePlaybackManager.isActiveProvider) 1000 else 3000)
+                // Use a shorter interval until we first detect active playback,
+                // so the "now playing" bar appears promptly in Android Auto.
+                val delayMs = when {
+                    !detectedPlayback -> 1000L
+                    GDrivePlaybackManager.isActiveProvider -> 1000L
+                    else -> 3000L
+                }
+                delay(delayMs)
             }
         }
     }
