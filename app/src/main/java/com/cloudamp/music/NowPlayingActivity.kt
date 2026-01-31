@@ -53,13 +53,10 @@ class NowPlayingActivity : AppCompatActivity() {
     private var isPlaying = false
     private var currentPosition = 0L
     private var totalDuration = 0L
-    private var eqAttached = false
-    private var eqVisualizerAttempts = 0
 
     companion object {
         private const val TAG = "NowPlayingActivity"
         private const val REQUEST_RECORD_AUDIO = 1001
-        private const val MAX_VISUALIZER_ATTEMPTS = 3
     }
 
     private val updateHandler = Handler(Looper.getMainLooper())
@@ -234,53 +231,39 @@ class NowPlayingActivity : AppCompatActivity() {
 
     /**
      * Set up the EQ meter visualization.
-     * For GDrive playback: attaches to ExoPlayer's audio session for real FFT analysis.
+     * For GDrive playback: attempts to attach to ExoPlayer's audio session for
+     * real FFT analysis. EqMeterView has a built-in 2s timeout that auto-falls
+     * back to simulation if the Visualizer doesn't produce data.
      * For Spotify playback: uses simulated animation (Spotify plays remotely).
      */
     private fun setupEqMeter() {
-        if (isGDriveActive) {
-            // GDrive uses ExoPlayer locally - we can do real audio analysis
-            if (hasRecordAudioPermission()) {
-                attachEqVisualizer()
-            } else {
-                requestRecordAudioPermission()
-            }
-        } else {
-            // Spotify plays remotely - use simulated visualization
-            eqMeterView.setPlaying(isPlaying)
+        if (isGDriveActive && hasRecordAudioPermission()) {
+            tryAttachVisualizer()
+        } else if (isGDriveActive) {
+            requestRecordAudioPermission()
         }
+        // Always start simulation - EqMeterView ignores this if Visualizer is active,
+        // and it serves as the fallback when Visualizer times out or for Spotify
+        eqMeterView.setPlaying(isPlaying)
     }
 
-    private fun attachEqVisualizer() {
-        if (eqAttached) return
-        if (isGDriveActive) {
-            eqVisualizerAttempts++
-            val sessionId = gdrivePlayback.getAudioSessionId()
-            Log.d(TAG, "Attaching EQ visualizer attempt $eqVisualizerAttempts: sessionId=$sessionId, isPlaying=${gdrivePlayback.isPlaying()}")
+    private fun tryAttachVisualizer() {
+        val sessionId = gdrivePlayback.getAudioSessionId()
+        Log.d(TAG, "Trying EQ visualizer: sessionId=$sessionId, isPlaying=${gdrivePlayback.isPlaying()}")
 
-            // Try the ExoPlayer's audio session first
-            if (sessionId != 0) {
-                if (eqMeterView.attachToAudioSession(sessionId)) {
-                    Log.d(TAG, "EQ visualizer attached to ExoPlayer session $sessionId")
-                    eqAttached = true
-                    return
-                }
-                Log.w(TAG, "Failed to attach to ExoPlayer session $sessionId, trying global mix")
-            }
-
-            // Fall back to session 0 (global mix output) which captures all device audio
-            if (eqMeterView.attachToAudioSession(0)) {
-                Log.d(TAG, "EQ visualizer attached to global mix (session 0)")
-                eqAttached = true
-                return
-            }
-
-            // Both failed - use simulation
-            Log.w(TAG, "Visualizer unavailable on attempt $eqVisualizerAttempts, falling back to simulation")
-            eqMeterView.setPlaying(isPlaying)
-        } else {
-            eqMeterView.setPlaying(isPlaying)
+        // Try ExoPlayer's audio session
+        if (sessionId != 0 && eqMeterView.attachToAudioSession(sessionId)) {
+            Log.d(TAG, "EQ visualizer attached to ExoPlayer session $sessionId")
+            return
         }
+
+        // Try session 0 (global mix output)
+        if (eqMeterView.attachToAudioSession(0)) {
+            Log.d(TAG, "EQ visualizer attached to global mix (session 0)")
+            return
+        }
+
+        Log.w(TAG, "Visualizer unavailable, will use simulation")
     }
 
     private fun hasRecordAudioPermission(): Boolean {
@@ -305,11 +288,9 @@ class NowPlayingActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_RECORD_AUDIO) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                attachEqVisualizer()
+                tryAttachVisualizer()
             } else {
-                // Permission denied - use simulation instead
                 Log.d(TAG, "RECORD_AUDIO permission denied, using simulation")
-                eqMeterView.setPlaying(isPlaying)
             }
         }
     }
@@ -388,23 +369,14 @@ class NowPlayingActivity : AppCompatActivity() {
     private fun updatePlaybackState() {
         if (isGDriveActive) {
             updateGDrivePlaybackState()
-            // If visualizer was attached but EqMeterView detected no data and
-            // auto-fell back to simulation, reset eqAttached so we can retry
-            if (eqAttached && !eqMeterView.isReceivingData()) {
-                Log.d(TAG, "Visualizer not receiving data, resetting (attempt $eqVisualizerAttempts/$MAX_VISUALIZER_ATTEMPTS)")
-                eqAttached = false
-            }
-            // Try to attach real visualizer if not yet connected and retries remain
-            if (!eqAttached && eqVisualizerAttempts < MAX_VISUALIZER_ATTEMPTS && hasRecordAudioPermission()) {
-                attachEqVisualizer()
-            } else if (!eqAttached && eqVisualizerAttempts >= MAX_VISUALIZER_ATTEMPTS) {
-                // Exhausted retries - stick with simulation
-                eqMeterView.setPlaying(isPlaying)
-            }
         } else {
             updateSpotifyPlaybackState()
-            eqMeterView.setPlaying(isPlaying)
         }
+        // Keep EQ meter simulation in sync with playback state.
+        // If the Visualizer is active and producing data, setPlaying is a no-op.
+        // If the Visualizer timed out (no FFT data), EqMeterView auto-fell back
+        // to simulation and this keeps it in sync with play/pause.
+        eqMeterView.setPlaying(isPlaying)
         updateQueueDisplay()
     }
 

@@ -101,6 +101,7 @@ class EqMeterView @JvmOverloads constructor(
             simulationActive = false
             visualizerAttachTime = SystemClock.elapsedRealtime()
             Log.d(TAG, "Visualizer attached to session $audioSessionId, enabled=${viz.enabled}")
+            postInvalidateOnAnimation() // Start draw loop for timeout detection
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create Visualizer for session $audioSessionId: ${e.message}", e)
