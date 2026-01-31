@@ -438,7 +438,10 @@ class PlaybackManager private constructor(
         override fun onPlayFromMediaId(mediaId: String, extras: Bundle?) {
             scope.launch {
                 try {
-                    if (mediaId.startsWith("gdrive_file_")) {
+                    if (mediaId.startsWith("saved_queue_")) {
+                        val queueId = mediaId.removePrefix("saved_queue_")
+                        service?.playSavedQueue(queueId)
+                    } else if (mediaId.startsWith("gdrive_file_")) {
                         val fileId = mediaId.removePrefix("gdrive_file_")
                         val parentId = extras?.getString("gdrive_parent_id")
                         service?.playGDriveFromMediaId(fileId, parentId)
@@ -512,6 +515,30 @@ class PlaybackManager private constructor(
             when (action) {
                 "previous" -> onSkipToPrevious()
                 "next" -> onSkipToNext()
+                CloudAmpService.CUSTOM_ACTION_SAVE_QUEUE -> {
+                    val saved = service?.saveCurrentQueue() ?: false
+                    if (saved) {
+                        service?.updateStatusMetadata("Queue saved!")
+                        scope.launch {
+                            delay(2000)
+                            // Restore current track metadata
+                            val queue = if (GDrivePlaybackManager.isActiveProvider) {
+                                GDrivePlaybackManager.getInstance(context).getQueueAsTracks()
+                            } else {
+                                currentQueue.toList()
+                            }
+                            val idx = if (GDrivePlaybackManager.isActiveProvider) {
+                                GDrivePlaybackManager.getInstance(context).getCurrentIndex()
+                            } else {
+                                currentIndex
+                            }
+                            if (idx in queue.indices) {
+                                val track = queue[idx]
+                                service?.updateMetadata(track, track.album?.images?.firstOrNull()?.url)
+                            }
+                        }
+                    }
+                }
             }
         }
 
