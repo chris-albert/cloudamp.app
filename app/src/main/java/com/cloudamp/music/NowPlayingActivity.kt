@@ -1,17 +1,12 @@
 package com.cloudamp.music
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.widget.ImageButton
 import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.cloudamp.music.api.PlayRequest
@@ -56,7 +51,6 @@ class NowPlayingActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "NowPlayingActivity"
-        private const val REQUEST_RECORD_AUDIO = 1001
     }
 
     private val updateHandler = Handler(Looper.getMainLooper())
@@ -231,67 +225,16 @@ class NowPlayingActivity : AppCompatActivity() {
 
     /**
      * Set up the EQ meter visualization.
-     * For GDrive playback: attempts to attach to ExoPlayer's audio session for
-     * real FFT analysis. EqMeterView has a built-in 2s timeout that auto-falls
-     * back to simulation if the Visualizer doesn't produce data.
-     * For Spotify playback: uses simulated animation (Spotify plays remotely).
+     * For GDrive: uses SpectrumAudioProcessor in ExoPlayer's pipeline for real FFT.
+     * For Spotify: uses simulated animation (Spotify plays remotely, no local audio).
      */
     private fun setupEqMeter() {
-        if (isGDriveActive && hasRecordAudioPermission()) {
-            tryAttachVisualizer()
-        } else if (isGDriveActive) {
-            requestRecordAudioPermission()
-        }
-        // Always start simulation - EqMeterView ignores this if Visualizer is active,
-        // and it serves as the fallback when Visualizer times out or for Spotify
-        eqMeterView.setPlaying(isPlaying)
-    }
-
-    private fun tryAttachVisualizer() {
-        val sessionId = gdrivePlayback.getAudioSessionId()
-        Log.d(TAG, "Trying EQ visualizer: sessionId=$sessionId, isPlaying=${gdrivePlayback.isPlaying()}")
-
-        // Try ExoPlayer's audio session
-        if (sessionId != 0 && eqMeterView.attachToAudioSession(sessionId)) {
-            Log.d(TAG, "EQ visualizer attached to ExoPlayer session $sessionId")
-            return
-        }
-
-        // Try session 0 (global mix output)
-        if (eqMeterView.attachToAudioSession(0)) {
-            Log.d(TAG, "EQ visualizer attached to global mix (session 0)")
-            return
-        }
-
-        Log.w(TAG, "Visualizer unavailable, will use simulation")
-    }
-
-    private fun hasRecordAudioPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            this, Manifest.permission.RECORD_AUDIO
-        ) == PackageManager.PERMISSION_GRANTED
-    }
-
-    private fun requestRecordAudioPermission() {
-        ActivityCompat.requestPermissions(
-            this,
-            arrayOf(Manifest.permission.RECORD_AUDIO),
-            REQUEST_RECORD_AUDIO
-        )
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQUEST_RECORD_AUDIO) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                tryAttachVisualizer()
-            } else {
-                Log.d(TAG, "RECORD_AUDIO permission denied, using simulation")
-            }
+        if (isGDriveActive) {
+            // Wire the spectrum provider to ExoPlayer's audio processor
+            eqMeterView.setSpectrumProvider { gdrivePlayback.getSpectrum() }
+        } else {
+            // Spotify plays remotely - use simulation
+            eqMeterView.setPlaying(isPlaying)
         }
     }
 
@@ -372,10 +315,8 @@ class NowPlayingActivity : AppCompatActivity() {
         } else {
             updateSpotifyPlaybackState()
         }
-        // Keep EQ meter simulation in sync with playback state.
-        // If the Visualizer is active and producing data, setPlaying is a no-op.
-        // If the Visualizer timed out (no FFT data), EqMeterView auto-fell back
-        // to simulation and this keeps it in sync with play/pause.
+        // For Spotify simulation: keep in sync with play/pause state.
+        // For GDrive: setPlaying is a no-op when spectrum provider is active.
         eqMeterView.setPlaying(isPlaying)
         updateQueueDisplay()
     }
@@ -455,7 +396,7 @@ class NowPlayingActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         updateHandler.removeCallbacks(updateRunnable)
-        eqMeterView.releaseVisualizer()
+        eqMeterView.stopVisualization()
         scope.cancel()
         super.onDestroy()
     }

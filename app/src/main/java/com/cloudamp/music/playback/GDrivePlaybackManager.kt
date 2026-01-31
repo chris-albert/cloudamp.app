@@ -9,11 +9,15 @@ import com.cloudamp.music.api.GoogleDriveApiClient
 import com.cloudamp.music.models.Artist
 import com.cloudamp.music.models.Track
 import com.google.android.exoplayer2.C
+import com.google.android.exoplayer2.DefaultRenderersFactory
 import com.google.android.exoplayer2.ExoPlayer
 import com.google.android.exoplayer2.MediaItem
 import com.google.android.exoplayer2.PlaybackException
 import com.google.android.exoplayer2.Player
 import com.google.android.exoplayer2.audio.AudioAttributes
+import com.google.android.exoplayer2.audio.AudioCapabilities
+import com.google.android.exoplayer2.audio.AudioSink
+import com.google.android.exoplayer2.audio.DefaultAudioSink
 import com.google.android.exoplayer2.ext.okhttp.OkHttpDataSource
 import com.google.android.exoplayer2.source.DefaultMediaSourceFactory
 import com.google.android.exoplayer2.upstream.DataSource
@@ -49,6 +53,7 @@ class GDrivePlaybackManager private constructor(
     private var exoPlayer: ExoPlayer? = null
     private var dataSourceFactory: DataSource.Factory? = null
     private var service: CloudAmpService? = null
+    private val spectrumProcessor = SpectrumAudioProcessor()
 
     private val queue = mutableListOf<DriveFile>()
     private var currentIndex = 0
@@ -75,7 +80,25 @@ class GDrivePlaybackManager private constructor(
                 .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
                 .build()
 
-            exoPlayer = ExoPlayer.Builder(context)
+            // Custom renderers factory that injects our SpectrumAudioProcessor
+            // into the audio pipeline for real-time FFT analysis
+            val renderersFactory = object : DefaultRenderersFactory(context) {
+                override fun buildAudioSink(
+                    context: Context,
+                    enableFloatOutput: Boolean,
+                    enableAudioTrackPlaybackParams: Boolean,
+                    enableOffload: Boolean
+                ): AudioSink {
+                    return DefaultAudioSink.Builder()
+                        .setAudioCapabilities(AudioCapabilities.getCapabilities(context))
+                        .setEnableFloatOutput(enableFloatOutput)
+                        .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                        .setAudioProcessors(arrayOf(spectrumProcessor))
+                        .build()
+                }
+            }
+
+            exoPlayer = ExoPlayer.Builder(context, renderersFactory)
                 .setMediaSourceFactory(mediaSourceFactory)
                 .setAudioAttributes(audioAttributes, true)
                 .build()
@@ -240,12 +263,10 @@ class GDrivePlaybackManager private constructor(
     }
 
     /**
-     * Get the ExoPlayer audio session ID for attaching a Visualizer.
-     * Returns 0 if the player is not initialized.
+     * Get the current 20-band frequency spectrum from the audio processor.
+     * Returns null if the player is not initialized.
      */
-    fun getAudioSessionId(): Int {
-        return exoPlayer?.audioSessionId ?: 0
-    }
+    fun getSpectrum(): FloatArray = spectrumProcessor.spectrum
 
     /**
      * Deactivates GDrive as the provider and releases the player.

@@ -4,18 +4,18 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.media.audiofx.Visualizer
-import android.os.SystemClock
 import android.util.AttributeSet
-import android.util.Log
 import android.view.View
-import kotlin.math.ln
-import kotlin.math.sqrt
 
 /**
  * Real-time EQ spectrum meter display styled after the CloudAmp icon.
  * Displays 20 vertical bars with green/yellow/red segments that react
- * to audio frequency data via Android's Visualizer API.
+ * to audio frequency data.
+ *
+ * Two modes of operation:
+ * 1. Spectrum provider: polls a FloatArray(20) from an external source
+ *    (e.g., SpectrumAudioProcessor in ExoPlayer's pipeline) each frame.
+ * 2. Simulation: generates a fake animated EQ pattern (for Spotify, etc.).
  */
 class EqMeterView @JvmOverloads constructor(
     context: Context,
@@ -24,7 +24,6 @@ class EqMeterView @JvmOverloads constructor(
 ) : View(context, attrs, defStyleAttr) {
 
     companion object {
-        private const val TAG = "EqMeterView"
         private const val BAR_COUNT = 20
         private const val SEGMENTS_PER_BAR = 24
 
@@ -44,9 +43,6 @@ class EqMeterView @JvmOverloads constructor(
         private const val DECAY_RATE = 0.88f
         private const val PEAK_DECAY_RATE = 0.97f
         private const val PEAK_HOLD_FRAMES = 12
-
-        // If Visualizer is attached but no FFT data arrives within this time, fall back to simulation
-        private const val VISUALIZER_DATA_TIMEOUT_MS = 2000L
     }
 
     private val barPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -58,69 +54,31 @@ class EqMeterView @JvmOverloads constructor(
     private val peakLevels = FloatArray(BAR_COUNT)
     private val peakHoldCounters = IntArray(BAR_COUNT)
 
-    private var visualizer: Visualizer? = null
-    private var isVisualizerActive = false
-    private var visualizerAttachTime = 0L
-    private var fftDataReceived = false
+    // External spectrum data provider (e.g., from SpectrumAudioProcessor)
+    private var spectrumProvider: (() -> FloatArray?)? = null
 
-    // Simulated levels for when no real audio session is available (Spotify)
+    // Simulated levels for when no real audio data is available (Spotify)
     private var simulationActive = false
     private var simulationPhase = 0f
 
     /**
-     * Attach to an audio session for real-time FFT analysis.
-     * Pass audioSessionId = 0 for mix output (requires RECORD_AUDIO permission).
-     * Returns true if the Visualizer was successfully created and enabled.
+     * Set an external spectrum data provider. When set, the view polls this
+     * function each frame to get a FloatArray of band levels (0.0 to 1.0).
+     * Pass null to clear the provider and revert to simulation mode.
      */
-    fun attachToAudioSession(audioSessionId: Int): Boolean {
-        releaseVisualizer()
-        fftDataReceived = false
-        return try {
-            val viz = Visualizer(audioSessionId)
-            viz.captureSize = Visualizer.getCaptureSizeRange()[1] // Max capture size
-            viz.setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
-                override fun onWaveFormDataCapture(
-                    visualizer: Visualizer?,
-                    waveform: ByteArray?,
-                    samplingRate: Int
-                ) {
-                    // Not used - we use FFT data
-                }
-
-                override fun onFftDataCapture(
-                    visualizer: Visualizer?,
-                    fft: ByteArray?,
-                    samplingRate: Int
-                ) {
-                    fft?.let { processFftData(it) }
-                }
-            }, Visualizer.getMaxCaptureRate(), false, true)
-            viz.enabled = true
-            visualizer = viz
-            isVisualizerActive = true
+    fun setSpectrumProvider(provider: (() -> FloatArray?)?) {
+        spectrumProvider = provider
+        if (provider != null) {
             simulationActive = false
-            visualizerAttachTime = SystemClock.elapsedRealtime()
-            Log.d(TAG, "Visualizer attached to session $audioSessionId, enabled=${viz.enabled}")
-            postInvalidateOnAnimation() // Start draw loop for timeout detection
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to create Visualizer for session $audioSessionId: ${e.message}", e)
-            false
+            postInvalidateOnAnimation()
         }
     }
 
     /**
-     * Returns true if the Visualizer is attached AND has actually received FFT data.
-     */
-    fun isReceivingData(): Boolean = isVisualizerActive && fftDataReceived
-
-    /**
-     * Start simulated EQ animation (used for Spotify where we have no audio session).
+     * Start simulated EQ animation (used for Spotify where we have no audio data).
      */
     fun startSimulation() {
         simulationActive = true
-        isVisualizerActive = false
-        releaseVisualizer()
         postInvalidateOnAnimation()
     }
 
@@ -129,8 +87,7 @@ class EqMeterView @JvmOverloads constructor(
      */
     fun stopVisualization() {
         simulationActive = false
-        isVisualizerActive = false
-        releaseVisualizer()
+        spectrumProvider = null
         for (i in barLevels.indices) {
             barLevels[i] = 0f
             peakLevels[i] = 0f
@@ -141,95 +98,40 @@ class EqMeterView @JvmOverloads constructor(
 
     /**
      * Set whether playback is active (controls simulation animation).
+     * No-op when a spectrum provider is active.
      */
     fun setPlaying(playing: Boolean) {
-        if (!isVisualizerActive) {
-            if (playing) {
-                startSimulation()
-            } else {
-                simulationActive = false
-                invalidate()
-            }
+        if (spectrumProvider != null) return
+        if (playing) {
+            startSimulation()
+        } else {
+            simulationActive = false
+            invalidate()
         }
-    }
-
-    fun releaseVisualizer() {
-        try {
-            visualizer?.enabled = false
-            visualizer?.release()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error releasing visualizer: ${e.message}")
-        }
-        visualizer = null
-        isVisualizerActive = false
     }
 
     /**
-     * Process raw FFT data from the Visualizer into 20 frequency band levels.
-     * FFT data is interleaved real/imaginary pairs.
+     * Update bar levels from the external spectrum provider.
      */
-    private fun processFftData(fft: ByteArray) {
-        fftDataReceived = true
-        val n = fft.size / 2
-        if (n < BAR_COUNT) return
-
-        // Calculate magnitudes from FFT complex pairs
-        val magnitudes = FloatArray(n)
-        for (i in 0 until n) {
-            val real = fft[2 * i].toFloat()
-            val imag = fft[2 * i + 1].toFloat()
-            magnitudes[i] = sqrt(real * real + imag * imag)
-        }
-
-        // Map frequency bins to 20 bars using logarithmic scale
-        // This gives more resolution to lower frequencies (more musical detail)
-        val newLevels = FloatArray(BAR_COUNT)
-        val minBin = 1 // Skip DC
-        val maxBin = n - 1
-        val logMin = ln(minBin.toFloat())
-        val logMax = ln(maxBin.toFloat())
-
-        for (bar in 0 until BAR_COUNT) {
-            val logStart = logMin + (logMax - logMin) * bar / BAR_COUNT
-            val logEnd = logMin + (logMax - logMin) * (bar + 1) / BAR_COUNT
-            val binStart = Math.exp(logStart.toDouble()).toInt().coerceIn(minBin, maxBin)
-            val binEnd = Math.exp(logEnd.toDouble()).toInt().coerceIn(binStart, maxBin)
-
-            var sum = 0f
-            var count = 0
-            for (bin in binStart..binEnd) {
-                sum += magnitudes[bin]
-                count++
+    private fun updateFromProvider(spectrum: FloatArray) {
+        val count = minOf(spectrum.size, BAR_COUNT)
+        for (i in 0 until count) {
+            val value = spectrum[i].coerceIn(0f, 1f)
+            if (value > barLevels[i]) {
+                barLevels[i] = value
+            } else {
+                barLevels[i] *= DECAY_RATE
             }
-            val avg = if (count > 0) sum / count else 0f
 
-            // Convert to dB-like scale (0.0 to 1.0)
-            // Reference level tuned for typical music dynamics
-            val db = if (avg > 0) 20f * Math.log10(avg.toDouble()).toFloat() else -60f
-            val normalized = ((db + 40f) / 50f).coerceIn(0f, 1f)
-            newLevels[bar] = normalized
-        }
-
-        // Apply levels with smooth decay on the UI thread
-        post {
-            for (i in 0 until BAR_COUNT) {
-                if (newLevels[i] > barLevels[i]) {
-                    barLevels[i] = newLevels[i]
-                } else {
-                    barLevels[i] = barLevels[i] * DECAY_RATE
-                }
-
-                // Peak hold
-                if (barLevels[i] > peakLevels[i]) {
-                    peakLevels[i] = barLevels[i]
-                    peakHoldCounters[i] = PEAK_HOLD_FRAMES
-                } else if (peakHoldCounters[i] > 0) {
-                    peakHoldCounters[i]--
-                } else {
-                    peakLevels[i] *= PEAK_DECAY_RATE
-                }
+            // Peak hold
+            if (barLevels[i] > peakLevels[i]) {
+                peakLevels[i] = barLevels[i]
+                peakHoldCounters[i] = PEAK_HOLD_FRAMES
+            } else if (peakHoldCounters[i] > 0) {
+                peakHoldCounters[i]--
+            } else {
+                peakLevels[i] *= PEAK_DECAY_RATE
             }
-            invalidate()
         }
     }
 
@@ -278,19 +180,14 @@ class EqMeterView @JvmOverloads constructor(
 
         if (w == 0f || h == 0f) return
 
-        // Auto-fallback: if Visualizer was attached but hasn't delivered any FFT data
-        // within the timeout, it's not actually capturing audio - switch to simulation
-        if (isVisualizerActive && !fftDataReceived) {
-            val elapsed = SystemClock.elapsedRealtime() - visualizerAttachTime
-            if (elapsed > VISUALIZER_DATA_TIMEOUT_MS) {
-                Log.w(TAG, "Visualizer attached but no FFT data after ${elapsed}ms, falling back to simulation")
-                releaseVisualizer()
-                simulationActive = true
+        // Update from provider or simulation
+        val provider = spectrumProvider
+        if (provider != null) {
+            val spectrum = provider()
+            if (spectrum != null) {
+                updateFromProvider(spectrum)
             }
-        }
-
-        // Update simulation if active
-        if (simulationActive) {
+        } else if (simulationActive) {
             updateSimulation()
         }
 
@@ -346,13 +243,8 @@ class EqMeterView @JvmOverloads constructor(
         }
 
         // Request next frame if animating
-        if (simulationActive || isVisualizerActive) {
+        if (spectrumProvider != null || simulationActive) {
             postInvalidateOnAnimation()
         }
-    }
-
-    override fun onDetachedFromWindow() {
-        super.onDetachedFromWindow()
-        releaseVisualizer()
     }
 }
