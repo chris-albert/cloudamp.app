@@ -54,8 +54,9 @@ class SavedQueuesManager private constructor(context: Context) {
     /**
      * Save the current playback queue with the given name.
      * Captures the current state from the active PlaybackManager.
+     * @param positionMs explicit position in ms within the current track (used when caller already knows it)
      */
-    fun saveCurrentQueue(name: String): SavedQueue? {
+    fun saveCurrentQueue(name: String, positionMs: Long? = null): SavedQueue? {
         val isGDrive = GDrivePlaybackManager.isActiveProvider
 
         val queue = if (isGDrive) {
@@ -70,7 +71,7 @@ class SavedQueuesManager private constructor(context: Context) {
                 tracks = emptyList(),
                 driveFiles = files,
                 currentIndex = gdrive.getCurrentIndex(),
-                currentPositionMs = gdrive.getCurrentPosition(),
+                currentPositionMs = positionMs ?: gdrive.getCurrentPosition(),
                 createdAt = System.currentTimeMillis(),
                 lastPlayedAt = System.currentTimeMillis()
             )
@@ -86,7 +87,7 @@ class SavedQueuesManager private constructor(context: Context) {
                 tracks = tracks,
                 driveFiles = emptyList(),
                 currentIndex = playback.getCurrentIndex(),
-                currentPositionMs = 0, // Spotify position is managed by Spotify
+                currentPositionMs = positionMs ?: 0,
                 createdAt = System.currentTimeMillis(),
                 lastPlayedAt = System.currentTimeMillis()
             )

@@ -15,17 +15,21 @@ import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.cache.SavedQueuesManager
 import com.cloudamp.music.models.SavedQueue
 import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.playback.PlaybackManager
 import com.cloudamp.music.ui.SavedQueuesAdapter
 import com.google.android.material.navigation.NavigationView
+import kotlinx.coroutines.*
 
 class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelectedListener {
 
     private lateinit var savedQueuesManager: SavedQueuesManager
     private lateinit var playbackManager: PlaybackManager
+    private lateinit var spotifyClient: SpotifyApiClient
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private lateinit var drawerLayout: DrawerLayout
     private lateinit var navigationView: NavigationView
@@ -41,6 +45,7 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
 
         savedQueuesManager = SavedQueuesManager.getInstance(this)
         playbackManager = PlaybackManager.getInstance(this)
+        spotifyClient = SpotifyApiClient.getInstance(this)
 
         setupDrawer()
         setupRecyclerView()
@@ -112,6 +117,14 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
 
         playbackManager.playTracks(queue.tracks, queue.currentIndex)
 
+        // Seek to saved position within the track after playback starts
+        if (queue.currentPositionMs > 0) {
+            scope.launch {
+                delay(2000)
+                try { spotifyClient.api.seek(queue.currentPositionMs) } catch (_: Exception) { }
+            }
+        }
+
         // Update last played time
         savedQueuesManager.updateQueuePosition(
             queue.id, queue.currentIndex, queue.currentPositionMs
@@ -135,6 +148,14 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
 
         val gdrive = GDrivePlaybackManager.getInstance(this)
         gdrive.playFiles(queue.driveFiles, queue.currentIndex)
+
+        // Seek to saved position within the track after buffering
+        if (queue.currentPositionMs > 0) {
+            scope.launch {
+                delay(1500)
+                gdrive.seekTo(queue.currentPositionMs)
+            }
+        }
 
         // Update last played time
         savedQueuesManager.updateQueuePosition(
@@ -241,5 +262,10 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
         } else {
             super.onBackPressed()
         }
+    }
+
+    override fun onDestroy() {
+        scope.cancel()
+        super.onDestroy()
     }
 }

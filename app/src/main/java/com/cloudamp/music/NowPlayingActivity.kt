@@ -142,7 +142,7 @@ class NowPlayingActivity : AppCompatActivity() {
             .setPositiveButton("Save") { _, _ ->
                 val name = editText.text.toString().trim()
                 if (name.isNotEmpty()) {
-                    val saved = savedQueuesManager.saveCurrentQueue(name)
+                    val saved = savedQueuesManager.saveCurrentQueue(name, currentPosition)
                     if (saved != null) {
                         Toast.makeText(
                             this,

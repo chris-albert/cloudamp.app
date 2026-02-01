@@ -1037,6 +1037,13 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             com.cloudamp.music.models.SavedQueue.PROVIDER_SPOTIFY -> {
                 if (queue.tracks.isEmpty()) return
                 playbackManager.playTracks(queue.tracks, queue.currentIndex)
+                // Seek to saved position within the track after playback starts
+                if (queue.currentPositionMs > 0) {
+                    serviceScope.launch {
+                        delay(2000)
+                        try { spotifyClient.api.seek(queue.currentPositionMs) } catch (_: Exception) { }
+                    }
+                }
             }
             com.cloudamp.music.models.SavedQueue.PROVIDER_GDRIVE -> {
                 if (queue.driveFiles.isEmpty()) return
@@ -1063,7 +1070,14 @@ class CloudAmpService : MediaBrowserServiceCompat() {
      */
     fun saveCurrentQueue(): Boolean {
         val name = buildAutoSaveName()
-        return savedQueuesManager.saveCurrentQueue(name) != null
+        // Get current position from the active provider
+        val positionMs = if (GDrivePlaybackManager.isActiveProvider) {
+            gdrivePlaybackManager.getCurrentPosition()
+        } else {
+            // Get from last polled Spotify state
+            mediaSession.controller.playbackState?.position ?: 0L
+        }
+        return savedQueuesManager.saveCurrentQueue(name, positionMs) != null
     }
 
     private fun buildAutoSaveName(): String {
