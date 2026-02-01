@@ -1,5 +1,6 @@
 package com.cloudamp.music.playback
 
+import android.util.Log
 import com.google.android.exoplayer2.C
 import com.google.android.exoplayer2.audio.AudioProcessor
 import com.google.android.exoplayer2.audio.BaseAudioProcessor
@@ -19,6 +20,7 @@ import kotlin.math.sqrt
 class SpectrumAudioProcessor : BaseAudioProcessor() {
 
     companion object {
+        private const val TAG = "SpectrumProcessor"
         private const val BAND_COUNT = 20
         private const val FFT_SIZE = 1024
     }
@@ -40,25 +42,38 @@ class SpectrumAudioProcessor : BaseAudioProcessor() {
         sampleRate = inputAudioFormat.sampleRate
         channelCount = inputAudioFormat.channelCount
         encoding = inputAudioFormat.encoding
+        Log.d(TAG, "onConfigure: rate=$sampleRate, ch=$channelCount, enc=$encoding")
         return inputAudioFormat // Pass through unchanged
     }
 
-    override fun queueInput(inputBuffer: ByteBuffer) {
-        // Read PCM samples for analysis (don't consume the buffer)
-        val pos = inputBuffer.position()
-        val lim = inputBuffer.limit()
-        val order = inputBuffer.order()
-        inputBuffer.order(ByteOrder.nativeOrder())
-        extractSamples(inputBuffer)
-        inputBuffer.position(pos)
-        inputBuffer.limit(lim)
-        inputBuffer.order(order)
+    override fun onFlush() {
+        super.onFlush()
+        sampleIndex = 0
+    }
 
-        // Pass audio through unchanged
+    override fun onReset() {
+        super.onReset()
+        sampleIndex = 0
+        spectrum = FloatArray(BAND_COUNT)
+    }
+
+    override fun queueInput(inputBuffer: ByteBuffer) {
+        // CRITICAL: Audio must always pass through, even if analysis fails.
+        // Copy input to output first, then analyze from the output copy.
         val size = inputBuffer.remaining()
         val output = replaceOutputBuffer(size)
         output.put(inputBuffer)
         output.flip()
+
+        // Now analyze from the output buffer (without consuming it)
+        try {
+            val pos = output.position()
+            output.order(ByteOrder.nativeOrder())
+            extractSamples(output)
+            output.position(pos)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error analyzing audio", e)
+        }
     }
 
     private fun extractSamples(buffer: ByteBuffer) {
