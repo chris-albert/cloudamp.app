@@ -28,6 +28,7 @@ import com.cloudamp.music.api.DriveFile
 import com.cloudamp.music.api.GoogleDriveApiClient
 import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.cache.LibraryCache
+import com.cloudamp.music.cache.SavedQueuesManager
 import com.cloudamp.music.api.Playlist
 import com.cloudamp.music.models.Album
 import com.cloudamp.music.models.Artist
@@ -43,6 +44,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     private lateinit var gdrivePlaybackManager: GDrivePlaybackManager
     private lateinit var gdriveClient: GoogleDriveApiClient
     private lateinit var libraryCache: LibraryCache
+    private lateinit var savedQueuesManager: SavedQueuesManager
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var currentAlbumArt: Bitmap? = null
     private var playbackPollingJob: Job? = null
@@ -65,7 +67,9 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         const val LIBRARY_ID = "library"
         const val PLAYLISTS_ID = "playlists"
         const val GDRIVE_ID = "gdrive"
+        const val SAVED_QUEUES_ID = "saved_queues"
         const val SEARCH_ID = "search"
+        const val CUSTOM_ACTION_SAVE_QUEUE = "save_queue"
 
         private const val CHANNEL_ID = "cloudamp_playback"
         private const val NOTIFICATION_ID = 1
@@ -81,6 +85,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         gdrivePlaybackManager = GDrivePlaybackManager.getInstance(this)
         gdriveClient = GoogleDriveApiClient.getInstance(this)
         libraryCache = LibraryCache.getInstance(this)
+        savedQueuesManager = SavedQueuesManager.getInstance(this)
 
         // Create MediaSession
         mediaSession = MediaSessionCompat(this, "CloudAmpService").apply {
@@ -336,6 +341,17 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             )
         }
 
+        // Add save queue action when there's an active queue
+        if (queue.isNotEmpty()) {
+            stateBuilder.addCustomAction(
+                PlaybackStateCompat.CustomAction.Builder(
+                    CUSTOM_ACTION_SAVE_QUEUE,
+                    "Save Queue",
+                    R.drawable.ic_save
+                ).build()
+            )
+        }
+
         mediaSession.setPlaybackState(stateBuilder.build())
 
         // Update notification — may fail when service is only bound (not started
@@ -488,6 +504,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     mediaItems.add(createBrowsableItem(LIBRARY_ID, "Library", "Your followed artists"))
                     mediaItems.add(createBrowsableItem(PLAYLISTS_ID, "Playlists", "Your playlists"))
                     mediaItems.add(createBrowsableItem(GDRIVE_ID, "Google Drive", "Browse your Drive music"))
+                    mediaItems.add(createBrowsableItem(SAVED_QUEUES_ID, "Saved Queues", "Resume where you left off"))
                 }
 
                 TOP_TRACKS_ID -> {
@@ -514,6 +531,10 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     loadGDriveFolder("root", mediaItems)
                 }
 
+                SAVED_QUEUES_ID -> {
+                    loadSavedQueues(mediaItems)
+                }
+
                 ARTISTS_ID -> {
                     loadTopArtists(mediaItems)
                 }
@@ -521,8 +542,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 else -> {
                     // Handle dynamic IDs
                     when {
-                        parentId == "gdrive_no_auth" -> {
-                            // No-op: placeholder item when GDrive is not connected
+                        parentId == "gdrive_no_auth" || parentId == "saved_queues_empty" -> {
+                            // No-op: placeholder items
                         }
                         parentId.startsWith("gdrive_folder_") -> {
                             val folderId = parentId.removePrefix("gdrive_folder_")
@@ -1009,6 +1030,107 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             .build()
 
         return MediaBrowserCompat.MediaItem(description, MediaBrowserCompat.MediaItem.FLAG_PLAYABLE)
+    }
+
+    // ── Saved Queues browsing ──────────────────────────────────────────
+
+    private fun loadSavedQueues(items: MutableList<MediaBrowserCompat.MediaItem>) {
+        val queues = savedQueuesManager.getSavedQueues()
+
+        if (queues.isEmpty()) {
+            items.add(createBrowsableItem(
+                "saved_queues_empty",
+                "No Saved Queues",
+                "Save a queue from Now Playing"
+            ))
+            return
+        }
+
+        for (queue in queues) {
+            val trackCount = queue.getTrackCount()
+            val currentTrackName = queue.getCurrentTrackName() ?: ""
+            val subtitle = "${queue.getDisplayProvider()} · $trackCount tracks · $currentTrackName"
+
+            items.add(createPlayableItem(
+                "saved_queue_${queue.id}",
+                queue.name,
+                subtitle
+            ))
+        }
+    }
+
+    /**
+     * Called by PlaybackManager when a saved queue is selected from Android Auto.
+     * Loads the queue into the appropriate provider and resumes from the saved position.
+     */
+    fun playSavedQueue(queueId: String) {
+        val queue = savedQueuesManager.getQueue(queueId) ?: return
+
+        when (queue.provider) {
+            com.cloudamp.music.models.SavedQueue.PROVIDER_SPOTIFY -> {
+                if (queue.tracks.isEmpty()) return
+                playbackManager.playTracks(queue.tracks, queue.currentIndex)
+                // Seek to saved position within the track after playback starts
+                if (queue.currentPositionMs > 0) {
+                    serviceScope.launch {
+                        delay(2000)
+                        try { spotifyClient.api.seek(queue.currentPositionMs) } catch (_: Exception) { }
+                    }
+                }
+            }
+            com.cloudamp.music.models.SavedQueue.PROVIDER_GDRIVE -> {
+                if (queue.driveFiles.isEmpty()) return
+                gdrivePlaybackManager.playFiles(queue.driveFiles, queue.currentIndex)
+                // Seek to saved position within the track after a brief delay for buffering
+                if (queue.currentPositionMs > 0) {
+                    serviceScope.launch {
+                        delay(1500)
+                        gdrivePlaybackManager.seekTo(queue.currentPositionMs)
+                    }
+                }
+            }
+        }
+
+        // Update last played time
+        savedQueuesManager.updateQueuePosition(
+            queueId, queue.currentIndex, queue.currentPositionMs
+        )
+    }
+
+    /**
+     * Saves the current playback queue with an auto-generated name.
+     * Called from the save_queue custom action.
+     */
+    fun saveCurrentQueue(): Boolean {
+        val name = buildAutoSaveName()
+        // Get current position from the active provider
+        val positionMs = if (GDrivePlaybackManager.isActiveProvider) {
+            gdrivePlaybackManager.getCurrentPosition()
+        } else {
+            // Get from last polled Spotify state
+            mediaSession.controller.playbackState?.position ?: 0L
+        }
+        return savedQueuesManager.saveCurrentQueue(name, positionMs) != null
+    }
+
+    private fun buildAutoSaveName(): String {
+        return if (GDrivePlaybackManager.isActiveProvider) {
+            val queue = gdrivePlaybackManager.getQueue()
+            val idx = gdrivePlaybackManager.getCurrentIndex()
+            if (idx in queue.indices) {
+                queue[idx].name.substringBeforeLast('.')
+            } else {
+                "Queue"
+            }
+        } else {
+            val queue = playbackManager.getCurrentQueue()
+            val idx = playbackManager.getCurrentIndex()
+            if (idx in queue.indices) {
+                queue[idx].album?.name ?: queue[idx].name
+            } else {
+                "Queue"
+            }
+        }
     }
 
     override fun onSearch(query: String, extras: Bundle?, result: Result<MutableList<MediaBrowserCompat.MediaItem>>) {

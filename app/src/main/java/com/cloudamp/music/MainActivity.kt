@@ -98,6 +98,9 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             R.id.nav_gdrive_library -> {
                 startActivity(Intent(this, GDriveLibraryActivity::class.java))
             }
+            R.id.nav_saved_queues -> {
+                startActivity(Intent(this, SavedQueuesActivity::class.java))
+            }
         }
         drawerLayout.closeDrawer(GravityCompat.START)
         return true

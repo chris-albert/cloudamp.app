@@ -251,17 +251,35 @@
         android:layout_marginTop="8dp">
 
         <!-- Queue Header -->
-        <TextView
-            android:id="@+id/queueInfoTextView"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="#1a1a1a"
-            android:padding="4dp"
-            android:text="PLAYLIST"
-            android:textColor="@color/winamp_text"
-            android:textSize="10sp"
-            android:fontFamily="monospace"
-            android:textStyle="bold"/>
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="4dp">
+
+            <TextView
+                android:id="@+id/queueInfoTextView"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="PLAYLIST"
+                android:textColor="@color/winamp_text"
+                android:textSize="10sp"
+                android:fontFamily="monospace"
+                android:textStyle="bold"/>
+
+            <ImageButton
+                android:id="@+id/saveQueueButton"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:src="@drawable/ic_save"
+                android:background="#2a2a2a"
+                android:scaleType="centerInside"
+                android:contentDescription="Save Queue"
+                android:padding="4dp"/>
+        </LinearLayout>
 
         <!-- Queue Track List -->
         <androidx.recyclerview.widget.RecyclerView
