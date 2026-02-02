@@ -12,20 +12,17 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.cloudamp.music.api.PlayRequest
 import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.cache.SavedQueuesManager
 import com.cloudamp.music.models.Track
+import com.cloudamp.music.playback.ActivePlayback
 import com.cloudamp.music.playback.GDrivePlaybackManager
-import com.cloudamp.music.playback.PlaybackManager
 import com.cloudamp.music.ui.QueueAdapter
 import kotlinx.coroutines.*
 
 class NowPlayingActivity : AppCompatActivity() {
 
     private lateinit var spotifyClient: SpotifyApiClient
-    private lateinit var playbackManager: PlaybackManager
-    private lateinit var gdrivePlayback: GDrivePlaybackManager
     private lateinit var savedQueuesManager: SavedQueuesManager
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
@@ -60,9 +57,6 @@ class NowPlayingActivity : AppCompatActivity() {
         }
     }
 
-    private val isGDriveActive: Boolean
-        get() = GDrivePlaybackManager.isActiveProvider
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_now_playing)
@@ -71,8 +65,6 @@ class NowPlayingActivity : AppCompatActivity() {
         supportActionBar?.title = "NOW PLAYING"
 
         spotifyClient = SpotifyApiClient.getInstance(this)
-        playbackManager = PlaybackManager.getInstance(this)
-        gdrivePlayback = GDrivePlaybackManager.getInstance(this)
         savedQueuesManager = SavedQueuesManager.getInstance(this)
 
         initializeViews()
@@ -112,11 +104,7 @@ class NowPlayingActivity : AppCompatActivity() {
 
     private fun showSaveQueueDialog() {
         // Check if there's an active queue to save
-        val hasQueue = if (isGDriveActive) {
-            gdrivePlayback.getQueue().isNotEmpty()
-        } else {
-            playbackManager.getCurrentQueue().isNotEmpty()
-        }
+        val hasQueue = ActivePlayback.provider?.getQueueAsTracks()?.isNotEmpty() ?: false
 
         if (!hasQueue) {
             Toast.makeText(this, "No queue to save", Toast.LENGTH_SHORT).show()
@@ -160,89 +148,62 @@ class NowPlayingActivity : AppCompatActivity() {
 
     private fun setupControls() {
         previousButton.setOnClickListener {
-            if (isGDriveActive) {
-                gdrivePlayback.skipToPrevious()
-                updateGDriveTrackInfo()
-            } else {
-                scope.launch {
-                    try {
-                        spotifyClient.api.previous()
-                        delay(500)
-                        loadCurrentTrack()
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
+            scope.launch {
+                try {
+                    val active = ActivePlayback.provider ?: return@launch
+                    active.skipToPrevious()
+                    delay(500)
+                    loadCurrentTrack()
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
             }
         }
 
         playPauseButton.setOnClickListener {
-            if (isGDriveActive) {
-                if (gdrivePlayback.isPlaying()) {
-                    gdrivePlayback.pause()
-                    isPlaying = false
-                    playPauseButton.setImageResource(R.drawable.ic_play)
-                } else {
-                    gdrivePlayback.play()
-                    isPlaying = true
-                    playPauseButton.setImageResource(R.drawable.ic_pause)
-                }
-            } else {
-                scope.launch {
-                    try {
-                        if (isPlaying) {
-                            spotifyClient.api.pause()
-                            isPlaying = false
-                            playPauseButton.setImageResource(R.drawable.ic_play)
-                        } else {
-                            spotifyClient.api.play(PlayRequest())
-                            isPlaying = true
-                            playPauseButton.setImageResource(R.drawable.ic_pause)
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
+            scope.launch {
+                try {
+                    val active = ActivePlayback.provider ?: return@launch
+                    if (active.isPlaying()) {
+                        active.pause()
+                        isPlaying = false
+                        playPauseButton.setImageResource(R.drawable.ic_play)
+                    } else {
+                        active.play()
+                        isPlaying = true
+                        playPauseButton.setImageResource(R.drawable.ic_pause)
                     }
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
             }
         }
 
         stopButton.setOnClickListener {
-            if (isGDriveActive) {
-                gdrivePlayback.stop()
-                isPlaying = false
-                currentPosition = 0
-                seekBar.progress = 0
-                currentTimeTextView.text = "0:00"
-                playPauseButton.setImageResource(R.drawable.ic_play)
-            } else {
-                scope.launch {
-                    try {
-                        spotifyClient.api.pause()
-                        isPlaying = false
-                        currentPosition = 0
-                        seekBar.progress = 0
-                        currentTimeTextView.text = "0:00"
-                        playPauseButton.setImageResource(R.drawable.ic_play)
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
+            scope.launch {
+                try {
+                    val active = ActivePlayback.provider ?: return@launch
+                    active.stop()
+                    isPlaying = false
+                    currentPosition = 0
+                    seekBar.progress = 0
+                    currentTimeTextView.text = "0:00"
+                    playPauseButton.setImageResource(R.drawable.ic_play)
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
             }
         }
 
         nextButton.setOnClickListener {
-            if (isGDriveActive) {
-                gdrivePlayback.skipToNext()
-                updateGDriveTrackInfo()
-            } else {
-                scope.launch {
-                    try {
-                        spotifyClient.api.next()
-                        delay(500)
-                        loadCurrentTrack()
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
+            scope.launch {
+                try {
+                    val active = ActivePlayback.provider ?: return@launch
+                    active.skipToNext()
+                    delay(500)
+                    loadCurrentTrack()
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
             }
         }
@@ -258,15 +219,11 @@ class NowPlayingActivity : AppCompatActivity() {
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
 
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                if (isGDriveActive) {
-                    gdrivePlayback.seekTo(currentPosition)
-                } else {
-                    scope.launch {
-                        try {
-                            spotifyClient.api.seek(currentPosition)
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
+                scope.launch {
+                    try {
+                        ActivePlayback.provider?.seekTo(currentPosition)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
                     }
                 }
             }
@@ -274,8 +231,9 @@ class NowPlayingActivity : AppCompatActivity() {
     }
 
     private fun loadCurrentTrack() {
-        if (isGDriveActive) {
-            updateGDriveTrackInfo()
+        val active = ActivePlayback.provider
+        if (active is GDrivePlaybackManager) {
+            updateGDriveTrackInfo(active)
         } else {
             loadSpotifyTrack()
         }
@@ -306,20 +264,18 @@ class NowPlayingActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateGDriveTrackInfo() {
-        val queue = gdrivePlayback.getQueue()
-        val index = gdrivePlayback.getCurrentIndex()
+    private fun updateGDriveTrackInfo(active: GDrivePlaybackManager) {
+        val queueTracks = active.getQueueAsTracks()
+        val index = active.getCurrentIndex()
 
-        if (index in queue.indices) {
-            val file = queue[index]
-            val track = gdrivePlayback.driveFileToTrack(file)
-            currentTrack = track
-            updateTrackInfo(track)
+        if (index in queueTracks.indices) {
+            currentTrack = queueTracks[index]
+            updateTrackInfo(queueTracks[index])
         }
 
-        isPlaying = gdrivePlayback.isPlaying()
-        currentPosition = gdrivePlayback.getCurrentPosition()
-        totalDuration = gdrivePlayback.getDuration()
+        isPlaying = active.isPlaying()
+        currentPosition = active.getCurrentPosition()
+        totalDuration = active.getDuration()
 
         if (totalDuration > 0) {
             totalTimeTextView.text = formatTime(totalDuration)
@@ -327,8 +283,7 @@ class NowPlayingActivity : AppCompatActivity() {
         }
 
         playPauseButton.setImageResource(
-            if (isPlaying) R.drawable.ic_pause
-            else R.drawable.ic_play
+            if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
         )
     }
 
@@ -345,8 +300,9 @@ class NowPlayingActivity : AppCompatActivity() {
     }
 
     private fun updatePlaybackState() {
-        if (isGDriveActive) {
-            updateGDrivePlaybackState()
+        val active = ActivePlayback.provider
+        if (active is GDrivePlaybackManager) {
+            updateGDrivePlaybackState(active)
         } else {
             updateSpotifyPlaybackState()
         }
@@ -361,11 +317,11 @@ class NowPlayingActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateGDrivePlaybackState() {
-        currentPosition = gdrivePlayback.getCurrentPosition()
-        isPlaying = gdrivePlayback.isPlaying()
+    private fun updateGDrivePlaybackState(active: GDrivePlaybackManager) {
+        currentPosition = active.getCurrentPosition()
+        isPlaying = active.isPlaying()
 
-        val newDuration = gdrivePlayback.getDuration()
+        val newDuration = active.getDuration()
         if (newDuration > 0 && newDuration != totalDuration) {
             totalDuration = newDuration
             totalTimeTextView.text = formatTime(totalDuration)
@@ -376,11 +332,10 @@ class NowPlayingActivity : AppCompatActivity() {
         currentTimeTextView.text = formatTime(currentPosition)
 
         // Check if track changed
-        val currentIdx = gdrivePlayback.getCurrentIndex()
-        val queue = gdrivePlayback.getQueue()
-        if (currentIdx in queue.indices) {
-            val file = queue[currentIdx]
-            val track = gdrivePlayback.driveFileToTrack(file)
+        val queueTracks = active.getQueueAsTracks()
+        val currentIdx = active.getCurrentIndex()
+        if (currentIdx in queueTracks.indices) {
+            val track = queueTracks[currentIdx]
             if (currentTrack?.id != track.id) {
                 currentTrack = track
                 updateTrackInfo(track)
@@ -394,16 +349,9 @@ class NowPlayingActivity : AppCompatActivity() {
     }
 
     private fun updateQueueDisplay() {
-        val queue: List<Track>
-        val currentIndex: Int
-
-        if (isGDriveActive) {
-            queue = gdrivePlayback.getQueueAsTracks()
-            currentIndex = gdrivePlayback.getCurrentIndex()
-        } else {
-            queue = playbackManager.getCurrentQueue()
-            currentIndex = playbackManager.getCurrentIndex()
-        }
+        val active = ActivePlayback.provider
+        val queue: List<Track> = active?.getQueueAsTracks() ?: emptyList()
+        val currentIndex: Int = active?.getCurrentIndex() ?: 0
 
         if (queue.isEmpty()) {
             queueInfoTextView.text = "PLAYLIST"

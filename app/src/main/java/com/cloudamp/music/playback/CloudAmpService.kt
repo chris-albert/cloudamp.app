@@ -52,6 +52,9 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     // Cache of audio files per GDrive folder for building playback queues
     private val gdriveAudioFilesByFolder = mutableMapOf<String, List<DriveFile>>()
 
+    // Cache of tracks per Spotify playlist, populated when browsing playlists
+    private val playlistTracksCache = mutableMapOf<String, List<Track>>()
+
     // When true, playback polling skips state updates (e.g., during Spotify wake flow)
     var suppressPollingUpdates = false
 
@@ -306,15 +309,9 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             .setActions(getAvailableActions())
 
         // Add queue navigation - use the correct provider's queue
-        val queue: List<Track>
-        val currentIndex: Int
-        if (GDrivePlaybackManager.isActiveProvider) {
-            queue = gdrivePlaybackManager.getQueueAsTracks()
-            currentIndex = gdrivePlaybackManager.getCurrentIndex()
-        } else {
-            queue = playbackManager.getCurrentQueue()
-            currentIndex = playbackManager.getCurrentIndex()
-        }
+        val active = ActivePlayback.provider
+        val queue: List<Track> = active?.getQueueAsTracks() ?: emptyList()
+        val currentIndex: Int = active?.getCurrentIndex() ?: 0
 
         // Set active queue item ID for Android Auto to highlight current track
         if (queue.isNotEmpty() && currentIndex in queue.indices) {
@@ -422,17 +419,19 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             while (isActive) {
                 try {
                     if (!suppressPollingUpdates) {
-                        if (GDrivePlaybackManager.isActiveProvider) {
+                        val active = ActivePlayback.provider
+                        if (active is GDrivePlaybackManager) {
                             detectedPlayback = true
                             // Poll ExoPlayer position for Google Drive playback
-                            val position = gdrivePlaybackManager.getCurrentPosition()
-                            val state = if (gdrivePlaybackManager.isPlaying()) {
+                            val position = active.getCurrentPosition()
+                            val state = if (active.isPlaying()) {
                                 PlaybackStateCompat.STATE_PLAYING
                             } else {
                                 PlaybackStateCompat.STATE_PAUSED
                             }
                             updatePlaybackState(state, position, 1.0f)
                         } else {
+                            // Spotify: must poll remote API for metadata
                             val response = spotifyClient.api.getCurrentPlayback()
                             if (response.isSuccessful) {
                                 val playback = response.body()
@@ -447,6 +446,13 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                                     } else {
                                         PlaybackStateCompat.STATE_PAUSED
                                     }
+
+                                    // Feed state into PlaybackManager for the interface
+                                    playbackManager.updateSpotifyState(
+                                        playback.progressMs.toLong(),
+                                        playback.item?.durationMs?.toLong() ?: 0L,
+                                        playback.isPlaying
+                                    )
 
                                     // Update metadata BEFORE playback state so that
                                     // Android Auto has track info when the state changes.
@@ -472,7 +478,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 // so the "now playing" bar appears promptly in Android Auto.
                 val delayMs = when {
                     !detectedPlayback -> 1000L
-                    GDrivePlaybackManager.isActiveProvider -> 1000L
+                    ActivePlayback.provider is GDrivePlaybackManager -> 1000L
                     else -> 3000L
                 }
                 delay(delayMs)
@@ -747,17 +753,20 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         try {
             val response = spotifyClient.api.getPlaylistTracks(playlistId)
             if (response.isSuccessful) {
-                response.body()?.items?.forEach { playlistTrack ->
-                    val track = playlistTrack.track
-                    if (track != null) {
-                        items.add(createPlayableItem(
-                            track.uri,
-                            track.name,
-                            track.artists.joinToString(", ") { it.name },
-                            track.album?.images?.firstOrNull()?.url,
-                            playlistId
-                        ))
-                    }
+                val tracks = response.body()?.items?.mapNotNull { it.track } ?: emptyList()
+
+                // Cache tracks so playback can build the full queue
+                playlistTracksCache[playlistId] = tracks
+
+                for (track in tracks) {
+                    items.add(createPlayableItem(
+                        track.uri,
+                        track.name,
+                        track.artists.joinToString(", ") { it.name },
+                        track.album?.images?.firstOrNull()?.url,
+                        albumId = null,
+                        playlistId = playlistId
+                    ))
                 }
             }
         } catch (e: Exception) {
@@ -993,6 +1002,22 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     }
 
     /**
+     * Called by PlaybackManager when a playlist track is selected from Android Auto.
+     * Looks up the cached playlist contents to build the playback queue,
+     * converging on the same playTracks() path used by the mobile app.
+     */
+    fun playPlaylistFromMediaId(playlistId: String, trackUri: String) {
+        val tracks = playlistTracksCache[playlistId]
+        if (tracks.isNullOrEmpty()) {
+            playbackManager.playTrack(trackUri)
+            return
+        }
+
+        val startIndex = tracks.indexOfFirst { it.uri == trackUri }.takeIf { it >= 0 } ?: 0
+        playbackManager.playTracks(tracks, startIndex)
+    }
+
+    /**
      * Called by PlaybackManager when a Google Drive file is selected from Android Auto.
      * Looks up the cached folder contents to build the playback queue.
      */
@@ -1103,34 +1128,17 @@ class CloudAmpService : MediaBrowserServiceCompat() {
      */
     fun saveCurrentQueue(): Boolean {
         val name = buildAutoSaveName()
-        // Get current position from the active provider
-        val positionMs = if (GDrivePlaybackManager.isActiveProvider) {
-            gdrivePlaybackManager.getCurrentPosition()
-        } else {
-            // Get from last polled Spotify state
-            mediaSession.controller.playbackState?.position ?: 0L
-        }
+        val positionMs = ActivePlayback.provider?.getCurrentPosition() ?: 0L
         return savedQueuesManager.saveCurrentQueue(name, positionMs) != null
     }
 
     private fun buildAutoSaveName(): String {
-        return if (GDrivePlaybackManager.isActiveProvider) {
-            val queue = gdrivePlaybackManager.getQueue()
-            val idx = gdrivePlaybackManager.getCurrentIndex()
-            if (idx in queue.indices) {
-                queue[idx].name.substringBeforeLast('.')
-            } else {
-                "Queue"
-            }
-        } else {
-            val queue = playbackManager.getCurrentQueue()
-            val idx = playbackManager.getCurrentIndex()
-            if (idx in queue.indices) {
-                queue[idx].album?.name ?: queue[idx].name
-            } else {
-                "Queue"
-            }
-        }
+        val active = ActivePlayback.provider ?: return "Queue"
+        val queue = active.getQueueAsTracks()
+        val idx = active.getCurrentIndex()
+        if (idx !in queue.indices) return "Queue"
+        val track = queue[idx]
+        return track.album?.name ?: track.name
     }
 
     override fun onSearch(query: String, extras: Bundle?, result: Result<MutableList<MediaBrowserCompat.MediaItem>>) {
@@ -1229,10 +1237,12 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         title: String,
         subtitle: String,
         iconUri: String? = null,
-        albumId: String? = null
+        albumId: String? = null,
+        playlistId: String? = null
     ): MediaBrowserCompat.MediaItem {
         val extras = Bundle().apply {
             albumId?.let { putString("album_id", it) }
+            playlistId?.let { putString("playlist_id", it) }
         }
 
         val description = MediaDescriptionCompat.Builder()

@@ -5,8 +5,8 @@ import android.content.SharedPreferences
 import com.cloudamp.music.api.DriveFile
 import com.cloudamp.music.models.SavedQueue
 import com.cloudamp.music.models.Track
+import com.cloudamp.music.playback.ActivePlayback
 import com.cloudamp.music.playback.GDrivePlaybackManager
-import com.cloudamp.music.playback.PlaybackManager
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.util.UUID
@@ -57,11 +57,12 @@ class SavedQueuesManager private constructor(context: Context) {
      * @param positionMs explicit position in ms within the current track (used when caller already knows it)
      */
     fun saveCurrentQueue(name: String, positionMs: Long? = null): SavedQueue? {
-        val isGDrive = GDrivePlaybackManager.isActiveProvider
+        val active = ActivePlayback.provider ?: return null
 
-        val queue = if (isGDrive) {
-            val gdrive = GDrivePlaybackManager.getInstance(appContext)
-            val files = gdrive.getQueue()
+        // Serialization still needs to know the concrete type to store
+        // driveFiles vs tracks in SavedQueue
+        val queue = if (active is GDrivePlaybackManager) {
+            val files = active.getQueue()
             if (files.isEmpty()) return null
 
             SavedQueue(
@@ -70,14 +71,13 @@ class SavedQueuesManager private constructor(context: Context) {
                 provider = SavedQueue.PROVIDER_GDRIVE,
                 tracks = emptyList(),
                 driveFiles = files,
-                currentIndex = gdrive.getCurrentIndex(),
-                currentPositionMs = positionMs ?: gdrive.getCurrentPosition(),
+                currentIndex = active.getCurrentIndex(),
+                currentPositionMs = positionMs ?: active.getCurrentPosition(),
                 createdAt = System.currentTimeMillis(),
                 lastPlayedAt = System.currentTimeMillis()
             )
         } else {
-            val playback = PlaybackManager.getInstance(appContext)
-            val tracks = playback.getCurrentQueue()
+            val tracks = active.getQueueAsTracks()
             if (tracks.isEmpty()) return null
 
             SavedQueue(
@@ -86,8 +86,8 @@ class SavedQueuesManager private constructor(context: Context) {
                 provider = SavedQueue.PROVIDER_SPOTIFY,
                 tracks = tracks,
                 driveFiles = emptyList(),
-                currentIndex = playback.getCurrentIndex(),
-                currentPositionMs = positionMs ?: 0,
+                currentIndex = active.getCurrentIndex(),
+                currentPositionMs = positionMs ?: active.getCurrentPosition(),
                 createdAt = System.currentTimeMillis(),
                 lastPlayedAt = System.currentTimeMillis()
             )
