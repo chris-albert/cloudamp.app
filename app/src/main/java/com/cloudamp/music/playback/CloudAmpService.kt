@@ -534,9 +534,9 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     // Root menu - main categories
                     mediaItems.add(createBrowsableItem(LIBRARY_ID, "Library", "Your followed artists"))
                     mediaItems.add(createBrowsableItem(PLAYLISTS_ID, "Playlists", "Your playlists"))
-                    mediaItems.add(createBrowsableItem(GDRIVE_ID, "Google Drive", "Browse your Drive music"))
+                    mediaItems.add(createBrowsableItem(GDRIVE_ID, "Drive", "Browse your Drive music"))
                     mediaItems.add(createBrowsableItem(JELLYFIN_ID, "Jellyfin", "Browse your Jellyfin library"))
-                    mediaItems.add(createBrowsableItem(SAVED_QUEUES_ID, "Saved Queues", "Resume where you left off"))
+                    mediaItems.add(createBrowsableItem(SAVED_QUEUES_ID, "Queues", "Resume where you left off"))
                 }
 
                 TOP_TRACKS_ID -> {
