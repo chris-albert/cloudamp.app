@@ -91,12 +91,13 @@ class JellyfinPlaybackManager private constructor(
 
     /**
      * Build a streaming URI for a Jellyfin audio item.
+     * Authentication is handled via the Authorization header in OkHttpDataSource,
+     * so no api_key query param is needed.
      */
     private fun buildStreamUri(itemId: String): Uri {
         val client = JellyfinApiClient.getInstance(context)
         val serverUrl = client.getServerUrl()?.trimEnd('/') ?: return Uri.EMPTY
-        val apiKey = client.getApiKey() ?: return Uri.EMPTY
-        return Uri.parse("$serverUrl/Audio/$itemId/universal?api_key=$apiKey&audioCodec=aac")
+        return Uri.parse("$serverUrl/Audio/$itemId/universal?audioCodec=aac&container=mp3,aac,opus,flac|aac,flac")
     }
 
     /**
