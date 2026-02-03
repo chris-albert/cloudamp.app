@@ -5,6 +5,12 @@ import retrofit2.http.*
 
 interface JellyfinApiService {
 
+    /** Authenticate with username and password, returns user info + access token. */
+    @POST("Users/AuthenticateByName")
+    suspend fun authenticateByName(
+        @Body request: JellyfinAuthRequest
+    ): Response<JellyfinAuthResult>
+
     /** Validate credentials and retrieve the authenticated user. */
     @GET("Users/Me")
     suspend fun getCurrentUser(): Response<JellyfinUser>

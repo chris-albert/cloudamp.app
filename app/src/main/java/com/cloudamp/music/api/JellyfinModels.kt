@@ -61,3 +61,16 @@ data class JellyfinNameIdPair(
     val Name: String,
     val Id: String
 )
+
+/** Request body for authenticating by username/password. */
+data class JellyfinAuthRequest(
+    @SerializedName("Username") val username: String,
+    @SerializedName("Pw") val password: String
+)
+
+/** Response from AuthenticateByName — contains user info and access token. */
+data class JellyfinAuthResult(
+    val User: JellyfinUser,
+    val AccessToken: String,
+    val ServerId: String? = null
+)

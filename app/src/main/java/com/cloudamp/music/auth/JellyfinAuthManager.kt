@@ -3,8 +3,8 @@ package com.cloudamp.music.auth
 import android.content.Context
 
 /**
- * Manages Jellyfin server URL + API key persistence.
- * Much simpler than OAuth managers — no token refresh needed.
+ * Manages Jellyfin server URL + access token persistence.
+ * Uses username/password authentication to obtain an access token.
  */
 class JellyfinAuthManager(context: Context) {
 
@@ -16,11 +16,15 @@ class JellyfinAuthManager(context: Context) {
         prefs.edit().putString("server_url", url).apply()
     }
 
-    fun getApiKey(): String? = prefs.getString("api_key", null)
+    /** Access token obtained from AuthenticateByName. */
+    fun getAccessToken(): String? = prefs.getString("access_token", null)
 
-    fun setApiKey(key: String) {
-        prefs.edit().putString("api_key", key).apply()
+    fun setAccessToken(token: String) {
+        prefs.edit().putString("access_token", token).apply()
     }
+
+    /** For backward compatibility, also check old "api_key" field. */
+    fun getApiKey(): String? = getAccessToken() ?: prefs.getString("api_key", null)
 
     fun getUserId(): String? = prefs.getString("user_id", null)
 
@@ -28,8 +32,18 @@ class JellyfinAuthManager(context: Context) {
         prefs.edit().putString("user_id", id).apply()
     }
 
+    fun getUsername(): String? = prefs.getString("username", null)
+
+    fun setUsername(username: String) {
+        prefs.edit().putString("username", username).apply()
+    }
+
     fun isConfigured(): Boolean {
-        return !getServerUrl().isNullOrEmpty() && !getApiKey().isNullOrEmpty()
+        return !getServerUrl().isNullOrEmpty() && !getAccessToken().isNullOrEmpty()
+    }
+
+    fun hasServerUrl(): Boolean {
+        return !getServerUrl().isNullOrEmpty()
     }
 
     fun clearAll() {

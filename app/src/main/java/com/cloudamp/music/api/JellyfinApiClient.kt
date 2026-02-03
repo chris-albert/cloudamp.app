@@ -46,22 +46,28 @@ class JellyfinApiClient private constructor(private val context: Context) {
 
     /**
      * Auth interceptor: adds the Jellyfin MediaBrowser authorization header.
+     * The header is required even for auth requests, but Token is optional for login.
      */
     private val authInterceptor = Interceptor { chain ->
-        val apiKey = authManager.getApiKey()
-        val request = if (apiKey != null) {
-            val authValue = "MediaBrowser Client=\"CloudAmp\", " +
-                    "Device=\"$deviceName\", " +
-                    "DeviceId=\"$deviceId\", " +
-                    "Version=\"1.0\", " +
-                    "Token=\"$apiKey\""
-            chain.request().newBuilder()
-                .addHeader("Authorization", authValue)
-                .build()
-        } else {
-            Log.w(TAG, "Auth interceptor: NO API key available")
-            chain.request()
+        val accessToken = authManager.getAccessToken()
+
+        // Always add MediaBrowser header with client info
+        // Token is only included if we have one (not for initial login)
+        val authValueBuilder = StringBuilder()
+        authValueBuilder.append("MediaBrowser Client=\"CloudAmp\", ")
+        authValueBuilder.append("Device=\"$deviceName\", ")
+        authValueBuilder.append("DeviceId=\"$deviceId\", ")
+        authValueBuilder.append("Version=\"1.0\"")
+
+        if (accessToken != null) {
+            authValueBuilder.append(", Token=\"$accessToken\"")
         }
+
+        val request = chain.request().newBuilder()
+            .addHeader("Authorization", authValueBuilder.toString())
+            .addHeader("Content-Type", "application/json")
+            .build()
+
         chain.proceed(request)
     }
 

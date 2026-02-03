@@ -287,7 +287,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="1. Open your Jellyfin server dashboard\n\n2. Go to API Keys and create a new key\n\n3. Enter your server URL and API key below"
+            android:text="Enter your Jellyfin server URL and login credentials."
             android:textColor="@color/winamp_display_text"
             android:textSize="12sp"
             android:fontFamily="monospace"
@@ -307,10 +307,23 @@
             android:layout_marginBottom="8dp"/>
 
         <EditText
-            android:id="@+id/jellyfinApiKeyEditText"
+            android:id="@+id/jellyfinUsernameEditText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="API Key"
+            android:hint="Username"
+            android:textColor="@color/winamp_text"
+            android:textColorHint="@color/winamp_display_text"
+            android:background="@color/winamp_list_background"
+            android:padding="12dp"
+            android:fontFamily="monospace"
+            android:inputType="text"
+            android:layout_marginBottom="8dp"/>
+
+        <EditText
+            android:id="@+id/jellyfinPasswordEditText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Password"
             android:textColor="@color/winamp_text"
             android:textColorHint="@color/winamp_display_text"
             android:background="@color/winamp_list_background"
@@ -320,10 +333,10 @@
             android:layout_marginBottom="12dp"/>
 
         <Button
-            android:id="@+id/saveJellyfinButton"
+            android:id="@+id/loginJellyfinButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="SAVE &amp; VALIDATE"
+            android:text="LOGIN TO JELLYFIN"
             android:textColor="@color/winamp_text"
             android:background="@color/winamp_button"
             android:fontFamily="monospace"

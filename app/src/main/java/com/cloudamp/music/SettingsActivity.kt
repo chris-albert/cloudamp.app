@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.cloudamp.music.api.GoogleDriveApiClient
 import com.cloudamp.music.api.JellyfinApiClient
+import com.cloudamp.music.api.JellyfinAuthRequest
 import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.auth.GoogleDriveAuthManager
 import com.cloudamp.music.auth.JellyfinAuthManager
@@ -46,8 +47,9 @@ class SettingsActivity : AppCompatActivity() {
     // Jellyfin fields
     private lateinit var jellyfinAuthManager: JellyfinAuthManager
     private lateinit var jellyfinServerUrlEditText: EditText
-    private lateinit var jellyfinApiKeyEditText: EditText
-    private lateinit var saveJellyfinButton: Button
+    private lateinit var jellyfinUsernameEditText: EditText
+    private lateinit var jellyfinPasswordEditText: EditText
+    private lateinit var loginJellyfinButton: Button
     private lateinit var clearJellyfinButton: Button
     private lateinit var jellyfinValidationStatus: TextView
 
@@ -170,63 +172,86 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun setupJellyfin() {
         jellyfinServerUrlEditText = findViewById(R.id.jellyfinServerUrlEditText)
-        jellyfinApiKeyEditText = findViewById(R.id.jellyfinApiKeyEditText)
-        saveJellyfinButton = findViewById(R.id.saveJellyfinButton)
+        jellyfinUsernameEditText = findViewById(R.id.jellyfinUsernameEditText)
+        jellyfinPasswordEditText = findViewById(R.id.jellyfinPasswordEditText)
+        loginJellyfinButton = findViewById(R.id.loginJellyfinButton)
         clearJellyfinButton = findViewById(R.id.clearJellyfinButton)
         jellyfinValidationStatus = findViewById(R.id.jellyfinValidationStatus)
 
-        // Load existing credentials
+        // Load existing server URL and username (not password)
         jellyfinAuthManager.getServerUrl()?.let { jellyfinServerUrlEditText.setText(it) }
-        jellyfinAuthManager.getApiKey()?.let { jellyfinApiKeyEditText.setText(it) }
+        jellyfinAuthManager.getUsername()?.let { jellyfinUsernameEditText.setText(it) }
 
-        // Show current status
+        // Show current status if already logged in
         if (jellyfinAuthManager.isConfigured()) {
-            updateJellyfinStatus("Configured", true)
-            validateJellyfinConnection()
+            val username = jellyfinAuthManager.getUsername() ?: "User"
+            updateJellyfinStatus("Connected: $username", true)
         }
 
-        saveJellyfinButton.setOnClickListener {
+        loginJellyfinButton.setOnClickListener {
             val serverUrl = jellyfinServerUrlEditText.text.toString().trim()
-            val apiKey = jellyfinApiKeyEditText.text.toString().trim()
+            val username = jellyfinUsernameEditText.text.toString().trim()
+            val password = jellyfinPasswordEditText.text.toString()
 
-            if (serverUrl.isNotEmpty() && apiKey.isNotEmpty()) {
-                jellyfinAuthManager.setServerUrl(serverUrl)
-                jellyfinAuthManager.setApiKey(apiKey)
-                Toast.makeText(this, "Jellyfin credentials saved", Toast.LENGTH_SHORT).show()
-                validateJellyfinConnection()
-            } else {
-                Toast.makeText(this, "Please enter both Server URL and API Key", Toast.LENGTH_SHORT).show()
+            if (serverUrl.isEmpty() || username.isEmpty()) {
+                Toast.makeText(this, "Please enter Server URL and Username", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
             }
+
+            // Save server URL first (needed for API client)
+            jellyfinAuthManager.setServerUrl(serverUrl)
+            loginToJellyfin(username, password)
         }
 
         clearJellyfinButton.setOnClickListener {
             jellyfinAuthManager.clearAll()
             jellyfinServerUrlEditText.setText("")
-            jellyfinApiKeyEditText.setText("")
+            jellyfinUsernameEditText.setText("")
+            jellyfinPasswordEditText.setText("")
             updateJellyfinStatus("", false)
             Toast.makeText(this, "Jellyfin credentials cleared", Toast.LENGTH_SHORT).show()
         }
     }
 
-    private fun validateJellyfinConnection() {
+    private fun loginToJellyfin(username: String, password: String) {
         scope.launch {
             try {
-                updateJellyfinStatus("Validating...", false)
+                updateJellyfinStatus("Logging in...", false)
+                loginJellyfinButton.isEnabled = false
+
                 val client = JellyfinApiClient.getInstance(this@SettingsActivity)
-                val response = client.api.getCurrentUser()
+                val authRequest = JellyfinAuthRequest(username, password)
+                val response = withContext(Dispatchers.IO) {
+                    client.api.authenticateByName(authRequest)
+                }
+
                 if (response.isSuccessful) {
-                    val user = response.body()
-                    if (user != null) {
-                        jellyfinAuthManager.setUserId(user.Id)
-                        updateJellyfinStatus("Connected: ${user.Name}", true)
+                    val result = response.body()
+                    if (result != null) {
+                        // Save credentials
+                        jellyfinAuthManager.setAccessToken(result.AccessToken)
+                        jellyfinAuthManager.setUserId(result.User.Id)
+                        jellyfinAuthManager.setUsername(result.User.Name)
+
+                        // Clear password field
+                        jellyfinPasswordEditText.setText("")
+
+                        updateJellyfinStatus("Connected: ${result.User.Name}", true)
+                        Toast.makeText(this@SettingsActivity, "Logged in to Jellyfin!", Toast.LENGTH_SHORT).show()
                     } else {
-                        updateJellyfinStatus("Connected but no user info", false)
+                        updateJellyfinStatus("Login failed: empty response", false)
                     }
                 } else {
-                    updateJellyfinStatus("Connection failed (${response.code()})", false)
+                    val errorMsg = when (response.code()) {
+                        401 -> "Invalid username or password"
+                        else -> "Login failed (${response.code()})"
+                    }
+                    updateJellyfinStatus(errorMsg, false)
                 }
             } catch (e: Exception) {
                 updateJellyfinStatus("Connection error: ${e.message}", false)
+            } finally {
+                loginJellyfinButton.isEnabled = true
             }
         }
     }
