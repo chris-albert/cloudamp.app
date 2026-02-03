@@ -25,7 +25,7 @@ import com.google.android.exoplayer2.upstream.DataSource
  */
 class GDrivePlaybackManager private constructor(
     private val context: Context
-) {
+) : PlaybackProvider {
 
     companion object {
         private const val TAG = "GDrivePlayback"
@@ -40,10 +40,6 @@ class GDrivePlaybackManager private constructor(
                 }
             }
         }
-
-        /** Indicates whether the active provider is currently Google Drive */
-        var isActiveProvider = false
-            private set
     }
 
     private var exoPlayer: ExoPlayer? = null
@@ -53,8 +49,10 @@ class GDrivePlaybackManager private constructor(
     private val queue = mutableListOf<DriveFile>()
     private var currentIndex = 0
 
+    override val providerName: String = "Google Drive"
+
     fun getQueue(): List<DriveFile> = queue.toList()
-    fun getCurrentIndex(): Int = currentIndex
+    override fun getCurrentIndex(): Int = currentIndex
 
     fun setService(cloudAmpService: CloudAmpService) {
         service = cloudAmpService
@@ -122,7 +120,7 @@ class GDrivePlaybackManager private constructor(
             Log.e(TAG, "playFiles: NO ACCESS TOKEN! Playback will fail. User needs to re-authenticate.")
         }
 
-        isActiveProvider = true
+        ActivePlayback.activate(this)
         queue.clear()
         queue.addAll(files)
         currentIndex = startIndex
@@ -155,23 +153,23 @@ class GDrivePlaybackManager private constructor(
         service?.updatePlaybackState(PlaybackStateCompat.STATE_BUFFERING)
     }
 
-    fun play() {
+    override suspend fun play() {
         getPlayer().play()
     }
 
-    fun pause() {
+    override suspend fun pause() {
         getPlayer().pause()
     }
 
-    fun stop() {
+    override suspend fun stop() {
         getPlayer().stop()
     }
 
-    fun seekTo(positionMs: Long) {
+    override suspend fun seekTo(positionMs: Long) {
         getPlayer().seekTo(positionMs)
     }
 
-    fun skipToNext() {
+    override suspend fun skipToNext() {
         val player = getPlayer()
         if (currentIndex < queue.size - 1) {
             currentIndex++
@@ -180,7 +178,7 @@ class GDrivePlaybackManager private constructor(
         }
     }
 
-    fun skipToPrevious() {
+    override suspend fun skipToPrevious() {
         val player = getPlayer()
         if (currentIndex > 0) {
             currentIndex--
@@ -189,7 +187,7 @@ class GDrivePlaybackManager private constructor(
         }
     }
 
-    fun skipToQueueItem(index: Int) {
+    override suspend fun skipToQueueItem(index: Int) {
         if (index in queue.indices) {
             currentIndex = index
             getPlayer().seekTo(index, 0)
@@ -216,26 +214,26 @@ class GDrivePlaybackManager private constructor(
     /**
      * Get the current queue as Track objects for NowPlayingActivity / QueueAdapter.
      */
-    fun getQueueAsTracks(): List<Track> {
+    override fun getQueueAsTracks(): List<Track> {
         return queue.map { driveFileToTrack(it) }
     }
 
     /**
      * Get the current position in milliseconds from ExoPlayer.
      */
-    fun getCurrentPosition(): Long {
+    override fun getCurrentPosition(): Long {
         return exoPlayer?.currentPosition ?: 0
     }
 
     /**
      * Get the current track duration in milliseconds from ExoPlayer.
      */
-    fun getDuration(): Long {
+    override fun getDuration(): Long {
         val duration = exoPlayer?.duration ?: 0
         return if (duration > 0) duration else 0
     }
 
-    fun isPlaying(): Boolean {
+    override fun isPlaying(): Boolean {
         return exoPlayer?.isPlaying ?: false
     }
 
@@ -244,12 +242,13 @@ class GDrivePlaybackManager private constructor(
      * Called when the user switches back to Spotify.
      */
     fun deactivate() {
-        isActiveProvider = false
         exoPlayer?.stop()
     }
 
     fun release() {
-        isActiveProvider = false
+        if (ActivePlayback.provider === this) {
+            ActivePlayback.clear()
+        }
         exoPlayer?.release()
         exoPlayer = null
         dataSourceFactory = null

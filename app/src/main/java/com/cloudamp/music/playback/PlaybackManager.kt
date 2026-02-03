@@ -34,7 +34,7 @@ private sealed class PendingPlayback {
 class PlaybackManager private constructor(
     private val context: Context,
     private val spotifyClient: SpotifyApiClient
-) {
+) : PlaybackProvider {
 
     companion object {
         @Volatile
@@ -50,6 +50,8 @@ class PlaybackManager private constructor(
         }
     }
 
+    override val providerName: String = "Spotify"
+
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var currentQueue = mutableListOf<Track>()
     private var currentIndex = 0
@@ -59,9 +61,27 @@ class PlaybackManager private constructor(
     // Pending playback request for retry after failed Spotify wake
     private var pendingPlayback: PendingPlayback? = null
 
+    // State tracking for PlaybackProvider interface — updated by CloudAmpService polling
+    @Volatile var lastKnownPosition: Long = 0L
+    @Volatile var lastKnownDuration: Long = 0L
+    @Volatile var lastKnownIsPlaying: Boolean = false
+
+    /** Called from CloudAmpService polling loop to feed Spotify state. */
+    fun updateSpotifyState(position: Long, duration: Long, isPlaying: Boolean) {
+        lastKnownPosition = position
+        lastKnownDuration = duration
+        lastKnownIsPlaying = isPlaying
+    }
+
     // Expose queue for UI
     fun getCurrentQueue(): List<Track> = currentQueue.toList()
-    fun getCurrentIndex(): Int = currentIndex
+    override fun getCurrentIndex(): Int = currentIndex
+
+    // PlaybackProvider state queries
+    override fun getQueueAsTracks(): List<Track> = currentQueue.toList()
+    override fun getCurrentPosition(): Long = lastKnownPosition
+    override fun getDuration(): Long = lastKnownDuration
+    override fun isPlaying(): Boolean = lastKnownIsPlaying
 
     fun setMediaSession(session: MediaSessionCompat) {
         mediaSession = session
@@ -344,33 +364,23 @@ class PlaybackManager private constructor(
         override fun onPlay() {
             scope.launch {
                 try {
-                    // Route to GDrive if it's the active provider
-                    if (GDrivePlaybackManager.isActiveProvider) {
-                        val gdrive = GDrivePlaybackManager.getInstance(context)
-                        gdrive.play()
-                        service?.updatePlaybackState(PlaybackStateCompat.STATE_PLAYING, gdrive.getCurrentPosition())
-                        return@launch
-                    }
+                    val active = ActivePlayback.provider
 
-                    // Check for a pending playback to retry
-                    val pending = pendingPlayback
-                    if (pending != null) {
-                        when (pending) {
-                            is PendingPlayback.SingleTrack -> playTrackFromMediaId(pending.trackUri)
-                            is PendingPlayback.TrackList -> playTracks(pending.tracks, pending.startIndex)
+                    // Spotify-specific: check for a pending playback to retry
+                    if (active == null || active is PlaybackManager) {
+                        val pending = pendingPlayback
+                        if (pending != null) {
+                            when (pending) {
+                                is PendingPlayback.SingleTrack -> playTrackFromMediaId(pending.trackUri)
+                                is PendingPlayback.TrackList -> playTracks(pending.tracks, pending.startIndex)
+                            }
+                            return@launch
                         }
-                        return@launch
                     }
 
-                    // Normal resume
-                    val deviceId = findActiveDevice()
-                    val response = if (deviceId != null) {
-                        spotifyClient.api.play(PlayRequest(), deviceId)
-                    } else {
-                        spotifyClient.api.play(PlayRequest())
-                    }
-                    if (response.isSuccessful) {
-                        service?.updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
+                    if (active != null) {
+                        active.play()
+                        service?.updatePlaybackState(PlaybackStateCompat.STATE_PLAYING, active.getCurrentPosition())
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -381,14 +391,9 @@ class PlaybackManager private constructor(
         override fun onPause() {
             scope.launch {
                 try {
-                    if (GDrivePlaybackManager.isActiveProvider) {
-                        val gdrive = GDrivePlaybackManager.getInstance(context)
-                        gdrive.pause()
-                        service?.updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, gdrive.getCurrentPosition())
-                        return@launch
-                    }
-                    spotifyClient.api.pause()
-                    service?.updatePlaybackState(PlaybackStateCompat.STATE_PAUSED)
+                    val active = ActivePlayback.provider ?: return@launch
+                    active.pause()
+                    service?.updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, active.getCurrentPosition())
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
@@ -398,16 +403,8 @@ class PlaybackManager private constructor(
         override fun onSkipToNext() {
             scope.launch {
                 try {
-                    if (GDrivePlaybackManager.isActiveProvider) {
-                        GDrivePlaybackManager.getInstance(context).skipToNext()
-                        return@launch
-                    }
-                    if (currentIndex < currentQueue.size - 1) {
-                        currentIndex++
-                        playTrackAtIndex(currentIndex)
-                    } else {
-                        spotifyClient.api.next()
-                    }
+                    val active = ActivePlayback.provider ?: return@launch
+                    active.skipToNext()
                     service?.updatePlaybackState(PlaybackStateCompat.STATE_SKIPPING_TO_NEXT)
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -418,16 +415,8 @@ class PlaybackManager private constructor(
         override fun onSkipToPrevious() {
             scope.launch {
                 try {
-                    if (GDrivePlaybackManager.isActiveProvider) {
-                        GDrivePlaybackManager.getInstance(context).skipToPrevious()
-                        return@launch
-                    }
-                    if (currentIndex > 0) {
-                        currentIndex--
-                        playTrackAtIndex(currentIndex)
-                    } else {
-                        spotifyClient.api.previous()
-                    }
+                    val active = ActivePlayback.provider ?: return@launch
+                    active.skipToPrevious()
                     service?.updatePlaybackState(PlaybackStateCompat.STATE_SKIPPING_TO_PREVIOUS)
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -446,8 +435,11 @@ class PlaybackManager private constructor(
                         val parentId = extras?.getString("gdrive_parent_id")
                         service?.playGDriveFromMediaId(fileId, parentId)
                     } else if (mediaId.startsWith("spotify:track:")) {
+                        val playlistId = extras?.getString("playlist_id")
                         val albumId = extras?.getString("album_id")
-                        if (albumId != null) {
+                        if (playlistId != null) {
+                            service?.playPlaylistFromMediaId(playlistId, mediaId)
+                        } else if (albumId != null) {
                             playAlbumFromTrack(albumId, mediaId)
                         } else {
                             playTrackFromMediaId(mediaId)
@@ -484,12 +476,8 @@ class PlaybackManager private constructor(
         override fun onStop() {
             scope.launch {
                 try {
-                    if (GDrivePlaybackManager.isActiveProvider) {
-                        GDrivePlaybackManager.getInstance(context).stop()
-                        service?.updatePlaybackState(PlaybackStateCompat.STATE_STOPPED)
-                        return@launch
-                    }
-                    spotifyClient.api.pause()
+                    val active = ActivePlayback.provider ?: return@launch
+                    active.stop()
                     service?.updatePlaybackState(PlaybackStateCompat.STATE_STOPPED)
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -500,11 +488,8 @@ class PlaybackManager private constructor(
         override fun onSeekTo(pos: Long) {
             scope.launch {
                 try {
-                    if (GDrivePlaybackManager.isActiveProvider) {
-                        GDrivePlaybackManager.getInstance(context).seekTo(pos)
-                        return@launch
-                    }
-                    spotifyClient.api.seek(pos)
+                    val active = ActivePlayback.provider ?: return@launch
+                    active.seekTo(pos)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
@@ -522,16 +507,9 @@ class PlaybackManager private constructor(
                         scope.launch {
                             delay(2000)
                             // Restore current track metadata
-                            val queue = if (GDrivePlaybackManager.isActiveProvider) {
-                                GDrivePlaybackManager.getInstance(context).getQueueAsTracks()
-                            } else {
-                                currentQueue.toList()
-                            }
-                            val idx = if (GDrivePlaybackManager.isActiveProvider) {
-                                GDrivePlaybackManager.getInstance(context).getCurrentIndex()
-                            } else {
-                                currentIndex
-                            }
+                            val active = ActivePlayback.provider ?: return@launch
+                            val queue = active.getQueueAsTracks()
+                            val idx = active.getCurrentIndex()
                             if (idx in queue.indices) {
                                 val track = queue[idx]
                                 service?.updateMetadata(track, track.album?.images?.firstOrNull()?.url)
@@ -545,16 +523,9 @@ class PlaybackManager private constructor(
         override fun onSkipToQueueItem(id: Long) {
             scope.launch {
                 try {
-                    if (GDrivePlaybackManager.isActiveProvider) {
-                        GDrivePlaybackManager.getInstance(context).skipToQueueItem(id.toInt())
-                        return@launch
-                    }
-                    val index = id.toInt()
-                    if (index in currentQueue.indices) {
-                        currentIndex = index
-                        playTrackAtIndex(index)
-                        service?.updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
-                    }
+                    val active = ActivePlayback.provider ?: return@launch
+                    active.skipToQueueItem(id.toInt())
+                    service?.updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
@@ -607,10 +578,7 @@ class PlaybackManager private constructor(
 
     private suspend fun playTrackFromMediaId(trackUri: String) {
         try {
-            // Deactivate GDrive if switching back to Spotify
-            if (GDrivePlaybackManager.isActiveProvider) {
-                GDrivePlaybackManager.getInstance(context).deactivate()
-            }
+            ActivePlayback.activate(this)
             val request = PlayRequest(uris = listOf(trackUri))
             val pending = PendingPlayback.SingleTrack(trackUri)
             val response = playWithDeviceActivation(request, pending)
@@ -652,10 +620,7 @@ class PlaybackManager private constructor(
     fun playTracks(tracks: List<Track>, startIndex: Int = 0) {
         scope.launch {
             try {
-                // Deactivate GDrive if switching back to Spotify
-                if (GDrivePlaybackManager.isActiveProvider) {
-                    GDrivePlaybackManager.getInstance(context).deactivate()
-                }
+                ActivePlayback.activate(this@PlaybackManager)
                 setQueue(tracks)
                 currentIndex = startIndex
                 service?.updateQueue(tracks, currentIndex)
@@ -708,6 +673,60 @@ class PlaybackManager private constructor(
         if (index in currentQueue.indices) {
             val track = currentQueue[index]
             playTrackWithMetadata(track)
+        }
+    }
+
+    // ── PlaybackProvider transport controls ─────────────────────────────
+
+    override suspend fun play() {
+        val deviceId = findActiveDevice()
+        val response = if (deviceId != null) {
+            spotifyClient.api.play(PlayRequest(), deviceId)
+        } else {
+            spotifyClient.api.play(PlayRequest())
+        }
+        if (response.isSuccessful) {
+            lastKnownIsPlaying = true
+        }
+    }
+
+    override suspend fun pause() {
+        spotifyClient.api.pause()
+        lastKnownIsPlaying = false
+    }
+
+    override suspend fun stop() {
+        spotifyClient.api.pause()
+        lastKnownIsPlaying = false
+    }
+
+    override suspend fun seekTo(positionMs: Long) {
+        spotifyClient.api.seek(positionMs)
+        lastKnownPosition = positionMs
+    }
+
+    override suspend fun skipToNext() {
+        if (currentIndex < currentQueue.size - 1) {
+            currentIndex++
+            playTrackAtIndex(currentIndex)
+        } else {
+            spotifyClient.api.next()
+        }
+    }
+
+    override suspend fun skipToPrevious() {
+        if (currentIndex > 0) {
+            currentIndex--
+            playTrackAtIndex(currentIndex)
+        } else {
+            spotifyClient.api.previous()
+        }
+    }
+
+    override suspend fun skipToQueueItem(index: Int) {
+        if (index in currentQueue.indices) {
+            currentIndex = index
+            playTrackAtIndex(index)
         }
     }
 
