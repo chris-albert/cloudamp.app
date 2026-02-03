@@ -25,6 +25,7 @@ import com.cloudamp.music.api.JellyfinApiClient
 import com.cloudamp.music.api.JellyfinItem
 import com.cloudamp.music.auth.JellyfinAuthManager
 import com.cloudamp.music.playback.JellyfinPlaybackManager
+import com.cloudamp.music.ui.AlphabetSidebarView
 import com.cloudamp.music.ui.JellyfinLibraryAdapter
 import com.cloudamp.music.ui.JellyfinLibraryItem
 import com.google.android.material.navigation.NavigationView
@@ -47,14 +48,17 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
     private lateinit var emptyTextView: TextView
     private lateinit var pathTextView: TextView
     private lateinit var settingsButton: Button
+    private lateinit var alphabetSidebar: AlphabetSidebarView
 
     private lateinit var searchBarContainer: LinearLayout
     private lateinit var searchEditText: EditText
     private lateinit var searchCloseButton: ImageView
     private var isSearchVisible = false
 
-    // Navigation stack: pairs of (level, name) where level is "root", "artists", "artist_<id>", "album_<id>", etc.
-    private val navStack = mutableListOf<Pair<String, String>>()
+    private var hasLoadedContent = false
+
+    // Playlist navigation: track if we're viewing a playlist's tracks
+    private var currentPlaylist: JellyfinItem? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -100,14 +104,30 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
 
         adapter = JellyfinLibraryAdapter(
             serverUrl = serverUrl,
-            onArtistClick = { artist -> navigateToArtist(artist) },
-            onAlbumClick = { album -> navigateToAlbum(album) },
-            onTrackClick = { track, allTracks, position -> onTrackClicked(track, allTracks, position) },
-            onPlaylistClick = { playlist -> navigateToPlaylist(playlist) },
-            onBackClick = { navigateBack() }
+            onArtistExpand = { artist, position ->
+                loadArtistAlbums(artist, position)
+            },
+            onAlbumExpand = { album, artistId, position ->
+                loadAlbumTracks(album, position)
+            },
+            onTrackClick = { track, allTracks, position ->
+                onTrackClicked(track, allTracks, position)
+            },
+            onPlaylistClick = { playlist -> navigateToPlaylist(playlist) }
         )
 
         recyclerView.adapter = adapter
+
+        alphabetSidebar = findViewById(R.id.alphabetSidebar)
+        alphabetSidebar.listener = object : AlphabetSidebarView.OnLetterSelectedListener {
+            override fun onLetterSelected(letter: String) {
+                val position = adapter.getLetterPosition(letter)
+                if (position >= 0) {
+                    (recyclerView.layoutManager as LinearLayoutManager)
+                        .scrollToPositionWithOffset(position, 0)
+                }
+            }
+        }
     }
 
     private fun setupEmptyState() {
@@ -130,7 +150,7 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
             showEmptyState("Connect Jellyfin in Settings\nto browse your music library")
         } else {
             hideEmptyState()
-            if (navStack.isEmpty()) {
+            if (!hasLoadedContent && currentPlaylist == null) {
                 loadRoot()
             }
         }
@@ -140,6 +160,7 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
         emptyContainer.visibility = View.VISIBLE
         emptyTextView.text = message
         recyclerView.visibility = View.GONE
+        showAlphabetSidebar(false)
     }
 
     private fun hideEmptyState() {
@@ -151,19 +172,22 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
         loadingContainer.visibility = if (show) View.VISIBLE else View.GONE
     }
 
+    private fun showAlphabetSidebar(show: Boolean) {
+        alphabetSidebar.visibility = if (show) View.VISIBLE else View.GONE
+    }
+
     private fun updatePath() {
-        if (navStack.isEmpty()) {
-            pathTextView.text = "JELLYFIN"
+        if (currentPlaylist != null) {
+            pathTextView.text = "JELLYFIN / ${currentPlaylist!!.Name}"
         } else {
-            val path = "JELLYFIN / " + navStack.joinToString(" > ") { it.second }
-            pathTextView.text = path
+            pathTextView.text = "JELLYFIN"
         }
     }
 
-    // ── Navigation ──────────────────────────────────────────────────────
+    // ── Data Loading ────────────────────────────────────────────────────
 
     private fun loadRoot() {
-        navStack.clear()
+        currentPlaylist = null
         updatePath()
         showLoading(true)
 
@@ -182,23 +206,19 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 val artistsResponse = artistsDeferred.await()
                 val playlistsResponse = playlistsDeferred.await()
 
-                val items = mutableListOf<JellyfinLibraryItem>()
+                val artists = if (artistsResponse.isSuccessful) {
+                    artistsResponse.body()?.Items ?: emptyList()
+                } else emptyList()
 
-                // Add artists
-                if (artistsResponse.isSuccessful) {
-                    val artists = artistsResponse.body()?.Items ?: emptyList()
-                    items.addAll(artists.map { JellyfinLibraryItem.ArtistItem(it) })
-                }
+                val playlists = if (playlistsResponse.isSuccessful) {
+                    playlistsResponse.body()?.Items ?: emptyList()
+                } else emptyList()
 
-                // Add playlists at the end
-                if (playlistsResponse.isSuccessful) {
-                    val playlists = playlistsResponse.body()?.Items ?: emptyList()
-                    items.addAll(playlists.map { JellyfinLibraryItem.PlaylistItem(it) })
-                }
+                adapter.setArtists(artists, playlists)
+                hasLoadedContent = true
+                showAlphabetSidebar(artists.isNotEmpty())
 
-                adapter.setItems(items)
-
-                if (items.isEmpty()) {
+                if (artists.isEmpty() && playlists.isEmpty()) {
                     showEmptyState("No music found in your Jellyfin library")
                 }
             } catch (e: Exception) {
@@ -210,103 +230,59 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
         }
     }
 
-    private fun navigateToArtist(artist: JellyfinItem) {
-        if (isSearchVisible) hideSearchBar()
-        navStack.add(Pair("artist_${artist.Id}", artist.Name))
-        updatePath()
-        loadArtistAlbums(artist.Id)
-    }
-
-    private fun navigateToAlbum(album: JellyfinItem) {
-        if (isSearchVisible) hideSearchBar()
-        navStack.add(Pair("album_${album.Id}", album.Name))
-        updatePath()
-        loadAlbumTracks(album.Id)
-    }
-
-    private fun navigateToPlaylist(playlist: JellyfinItem) {
-        if (isSearchVisible) hideSearchBar()
-        navStack.add(Pair("playlist_${playlist.Id}", playlist.Name))
-        updatePath()
-        loadPlaylistItems(playlist.Id)
-    }
-
-    private fun navigateBack() {
-        if (isSearchVisible) hideSearchBar()
-        if (navStack.isNotEmpty()) {
-            navStack.removeAt(navStack.size - 1)
-            updatePath()
-
-            if (navStack.isEmpty()) {
-                loadRoot()
-            } else {
-                val current = navStack.last()
-                when {
-                    current.first.startsWith("artist_") -> {
-                        val artistId = current.first.removePrefix("artist_")
-                        loadArtistAlbums(artistId)
-                    }
-                    current.first.startsWith("album_") -> {
-                        val albumId = current.first.removePrefix("album_")
-                        loadAlbumTracks(albumId)
-                    }
-                    current.first.startsWith("playlist_") -> {
-                        val playlistId = current.first.removePrefix("playlist_")
-                        loadPlaylistItems(playlistId)
-                    }
-                }
-            }
-        }
-    }
-
-    private fun loadArtistAlbums(artistId: String) {
-        showLoading(true)
+    private fun loadArtistAlbums(artist: JellyfinItem, position: Int) {
         scope.launch {
             try {
                 val userId = authManager.getUserId() ?: return@launch
-                val response = jellyfinClient.api.getArtistAlbums(userId, artistId)
+                val response = jellyfinClient.api.getArtistAlbums(userId, artist.Id)
 
                 if (response.isSuccessful) {
                     val albums = response.body()?.Items ?: emptyList()
-                    val items = mutableListOf<JellyfinLibraryItem>()
-                    items.add(JellyfinLibraryItem.BackItem)
-                    items.addAll(albums.map { JellyfinLibraryItem.AlbumItem(it) })
-                    adapter.setItems(items)
+                    adapter.setArtistAlbums(position, albums)
                 } else {
                     handleApiError(response.code())
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
                 Toast.makeText(this@JellyfinLibraryActivity, "Error loading albums: ${e.message}", Toast.LENGTH_LONG).show()
-            } finally {
-                showLoading(false)
             }
         }
     }
 
-    private fun loadAlbumTracks(albumId: String) {
-        showLoading(true)
+    private fun loadAlbumTracks(album: JellyfinItem, position: Int) {
         scope.launch {
             try {
                 val userId = authManager.getUserId() ?: return@launch
-                val response = jellyfinClient.api.getAlbumTracks(userId, albumId)
+                val response = jellyfinClient.api.getAlbumTracks(userId, album.Id)
 
                 if (response.isSuccessful) {
                     val tracks = response.body()?.Items ?: emptyList()
-                    val items = mutableListOf<JellyfinLibraryItem>()
-                    items.add(JellyfinLibraryItem.BackItem)
-                    items.addAll(tracks.map { JellyfinLibraryItem.TrackItem(it) })
-                    adapter.setItems(items)
+                    adapter.setAlbumTracks(position, tracks)
                 } else {
                     handleApiError(response.code())
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
                 Toast.makeText(this@JellyfinLibraryActivity, "Error loading tracks: ${e.message}", Toast.LENGTH_LONG).show()
-            } finally {
-                showLoading(false)
             }
         }
+    }
+
+    // ── Playlist Navigation ─────────────────────────────────────────────
+
+    private fun navigateToPlaylist(playlist: JellyfinItem) {
+        if (isSearchVisible) hideSearchBar()
+        currentPlaylist = playlist
+        updatePath()
+        showAlphabetSidebar(false)
+        loadPlaylistItems(playlist.Id)
+    }
+
+    private fun navigateBackFromPlaylist() {
+        if (isSearchVisible) hideSearchBar()
+        currentPlaylist = null
+        hasLoadedContent = false
+        loadRoot()
     }
 
     private fun loadPlaylistItems(playlistId: String) {
@@ -319,9 +295,8 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 if (response.isSuccessful) {
                     val tracks = response.body()?.Items ?: emptyList()
                     val items = mutableListOf<JellyfinLibraryItem>()
-                    items.add(JellyfinLibraryItem.BackItem)
-                    items.addAll(tracks.map { JellyfinLibraryItem.TrackItem(it) })
-                    adapter.setItems(items)
+                    items.addAll(tracks.map { JellyfinLibraryItem.TrackItem(it, playlistId) })
+                    adapter.setPlaylistTracks(items)
                 } else {
                     handleApiError(response.code())
                 }
@@ -333,6 +308,8 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
             }
         }
     }
+
+    // ── Track Playback ──────────────────────────────────────────────────
 
     private fun onTrackClicked(track: JellyfinItem, allTracks: List<JellyfinItem>, position: Int) {
         val jellyfinPlayback = JellyfinPlaybackManager.getInstance(this)
@@ -419,8 +396,8 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
             drawerLayout.closeDrawer(GravityCompat.START)
         } else if (isSearchVisible) {
             hideSearchBar()
-        } else if (navStack.isNotEmpty()) {
-            navigateBack()
+        } else if (currentPlaylist != null) {
+            navigateBackFromPlaylist()
         } else {
             super.onBackPressed()
         }
@@ -438,6 +415,8 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
                 adapter.filterItems(s?.toString() ?: "")
+                // Hide alphabet sidebar during search
+                showAlphabetSidebar(s.isNullOrEmpty() && hasLoadedContent && currentPlaylist == null)
             }
         })
 
@@ -457,6 +436,7 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
         searchEditText.requestFocus()
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         imm.showSoftInput(searchEditText, InputMethodManager.SHOW_IMPLICIT)
+        showAlphabetSidebar(false)
     }
 
     private fun hideSearchBar() {
@@ -466,6 +446,7 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
         adapter.clearFilter()
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         imm.hideSoftInputFromWindow(searchEditText.windowToken, 0)
+        showAlphabetSidebar(hasLoadedContent && currentPlaylist == null)
     }
 
     override fun onDestroy() {

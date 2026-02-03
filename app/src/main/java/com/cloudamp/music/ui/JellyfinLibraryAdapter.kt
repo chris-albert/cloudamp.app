@@ -11,100 +11,147 @@ import com.cloudamp.music.R
 import com.cloudamp.music.api.JellyfinItem
 
 sealed class JellyfinLibraryItem {
-    data class ArtistItem(val item: JellyfinItem) : JellyfinLibraryItem()
-    data class AlbumItem(val item: JellyfinItem) : JellyfinLibraryItem()
-    data class TrackItem(val item: JellyfinItem) : JellyfinLibraryItem()
+    data class HeaderItem(val title: String) : JellyfinLibraryItem()
+
+    data class ArtistItem(
+        val item: JellyfinItem,
+        var isExpanded: Boolean = false,
+        var albums: List<JellyfinItem> = emptyList(),
+        var isLoadingAlbums: Boolean = false
+    ) : JellyfinLibraryItem()
+
+    data class AlbumItem(
+        val item: JellyfinItem,
+        val parentArtistId: String,
+        var isExpanded: Boolean = false,
+        var tracks: List<JellyfinItem> = emptyList(),
+        var isLoadingTracks: Boolean = false
+    ) : JellyfinLibraryItem()
+
+    data class TrackItem(
+        val item: JellyfinItem,
+        val parentAlbumId: String
+    ) : JellyfinLibraryItem()
+
     data class PlaylistItem(val item: JellyfinItem) : JellyfinLibraryItem()
-    object BackItem : JellyfinLibraryItem()
+
+    data class FooterItem(val parentId: String) : JellyfinLibraryItem()
 }
 
 class JellyfinLibraryAdapter(
     private val serverUrl: String,
-    private val onArtistClick: (JellyfinItem) -> Unit,
-    private val onAlbumClick: (JellyfinItem) -> Unit,
+    private val onArtistExpand: (JellyfinItem, Int) -> Unit,
+    private val onAlbumExpand: (JellyfinItem, String, Int) -> Unit,
     private val onTrackClick: (JellyfinItem, List<JellyfinItem>, Int) -> Unit,
-    private val onPlaylistClick: (JellyfinItem) -> Unit,
-    private val onBackClick: () -> Unit
+    private val onPlaylistClick: (JellyfinItem) -> Unit
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private val items = mutableListOf<JellyfinLibraryItem>()
-    private var allItems: List<JellyfinLibraryItem> = emptyList()
+    private var allArtists: List<JellyfinItem> = emptyList()
+    private var allPlaylists: List<JellyfinItem> = emptyList()
     private var currentFilter: String = ""
 
     companion object {
-        private const val TYPE_BACK = 0
+        private const val TYPE_HEADER = 0
         private const val TYPE_ARTIST = 1
         private const val TYPE_ALBUM = 2
         private const val TYPE_TRACK = 3
         private const val TYPE_PLAYLIST = 4
+        private const val TYPE_FOOTER = 5
     }
 
     override fun getItemViewType(position: Int): Int {
         return when (items[position]) {
-            is JellyfinLibraryItem.BackItem -> TYPE_BACK
+            is JellyfinLibraryItem.HeaderItem -> TYPE_HEADER
             is JellyfinLibraryItem.ArtistItem -> TYPE_ARTIST
             is JellyfinLibraryItem.AlbumItem -> TYPE_ALBUM
             is JellyfinLibraryItem.TrackItem -> TYPE_TRACK
             is JellyfinLibraryItem.PlaylistItem -> TYPE_PLAYLIST
+            is JellyfinLibraryItem.FooterItem -> TYPE_FOOTER
         }
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         val inflater = LayoutInflater.from(parent.context)
         return when (viewType) {
-            TYPE_BACK -> BackViewHolder(inflater.inflate(R.layout.item_gdrive_folder, parent, false))
+            TYPE_HEADER -> HeaderViewHolder(inflater.inflate(R.layout.item_section_header, parent, false))
             TYPE_ARTIST -> ArtistViewHolder(inflater.inflate(R.layout.item_artist, parent, false))
             TYPE_ALBUM -> AlbumViewHolder(inflater.inflate(R.layout.item_album, parent, false))
             TYPE_TRACK -> TrackViewHolder(inflater.inflate(R.layout.item_track, parent, false))
             TYPE_PLAYLIST -> PlaylistViewHolder(inflater.inflate(R.layout.item_gdrive_folder, parent, false))
+            TYPE_FOOTER -> FooterViewHolder(inflater.inflate(R.layout.item_section_footer, parent, false))
             else -> throw IllegalArgumentException("Unknown view type: $viewType")
         }
     }
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         when (val item = items[position]) {
-            is JellyfinLibraryItem.BackItem -> (holder as BackViewHolder).bind()
+            is JellyfinLibraryItem.HeaderItem -> (holder as HeaderViewHolder).bind(item)
             is JellyfinLibraryItem.ArtistItem -> (holder as ArtistViewHolder).bind(item)
             is JellyfinLibraryItem.AlbumItem -> (holder as AlbumViewHolder).bind(item)
             is JellyfinLibraryItem.TrackItem -> (holder as TrackViewHolder).bind(item)
             is JellyfinLibraryItem.PlaylistItem -> (holder as PlaylistViewHolder).bind(item)
+            is JellyfinLibraryItem.FooterItem -> { /* Footer is just a visual separator */ }
         }
     }
 
     override fun getItemCount() = items.size
 
-    fun setItems(newItems: List<JellyfinLibraryItem>) {
-        allItems = newItems
+    fun getLetterPosition(letter: String): Int {
+        return items.indexOfFirst { it is JellyfinLibraryItem.HeaderItem && it.title == letter }
+    }
+
+    fun setArtists(artists: List<JellyfinItem>, playlists: List<JellyfinItem>) {
+        allArtists = artists
+        allPlaylists = playlists
         currentFilter = ""
+        rebuildItems(artists, playlists)
+    }
+
+    private fun rebuildItems(artists: List<JellyfinItem>, playlists: List<JellyfinItem>) {
         items.clear()
-        items.addAll(newItems)
+
+        // Group artists by first letter and add section headers
+        var currentLetter: Char? = null
+        for (artist in artists) {
+            val firstLetter = artist.Name.firstOrNull()?.uppercaseChar() ?: '#'
+            val letter = if (firstLetter.isLetter()) firstLetter else '#'
+
+            if (letter != currentLetter) {
+                currentLetter = letter
+                items.add(JellyfinLibraryItem.HeaderItem(letter.toString()))
+            }
+            items.add(JellyfinLibraryItem.ArtistItem(artist))
+        }
+
+        // Add playlists under a "PLAYLISTS" header
+        if (playlists.isNotEmpty()) {
+            items.add(JellyfinLibraryItem.HeaderItem("PLAYLISTS"))
+            items.addAll(playlists.map { JellyfinLibraryItem.PlaylistItem(it) })
+        }
+
         notifyDataSetChanged()
     }
 
     fun filterItems(query: String) {
         currentFilter = query
         if (query.isEmpty()) {
-            items.clear()
-            items.addAll(allItems)
-        } else {
-            items.clear()
-            items.addAll(allItems.filter { item ->
-                when (item) {
-                    is JellyfinLibraryItem.ArtistItem -> fuzzyMatch(item.item.Name, query)
-                    is JellyfinLibraryItem.AlbumItem -> fuzzyMatch(item.item.Name, query)
-                    is JellyfinLibraryItem.TrackItem -> fuzzyMatch(item.item.Name, query)
-                    is JellyfinLibraryItem.PlaylistItem -> fuzzyMatch(item.item.Name, query)
-                    is JellyfinLibraryItem.BackItem -> true
-                }
-            })
+            rebuildItems(allArtists, allPlaylists)
+            return
         }
-        notifyDataSetChanged()
+        val filteredArtists = allArtists.filter { fuzzyMatch(it.Name, query) }
+        val filteredPlaylists = allPlaylists.filter { fuzzyMatch(it.Name, query) }
+        rebuildItems(filteredArtists, filteredPlaylists)
     }
 
     fun clearFilter() {
         currentFilter = ""
+        rebuildItems(allArtists, allPlaylists)
+    }
+
+    fun setPlaylistTracks(trackItems: List<JellyfinLibraryItem>) {
         items.clear()
-        items.addAll(allItems)
+        items.addAll(trackItems)
         notifyDataSetChanged()
     }
 
@@ -121,8 +168,87 @@ class JellyfinLibraryAdapter(
         return true
     }
 
-    private fun getAllTrackItems(): List<JellyfinItem> {
-        return items.filterIsInstance<JellyfinLibraryItem.TrackItem>().map { it.item }
+    fun toggleArtist(position: Int) {
+        val item = items[position] as? JellyfinLibraryItem.ArtistItem ?: return
+
+        if (item.isExpanded) {
+            // Collapse: remove albums, their tracks, headers, and footers
+            val itemsToRemove = items.drop(position + 1).takeWhile {
+                it is JellyfinLibraryItem.HeaderItem ||
+                it is JellyfinLibraryItem.AlbumItem && it.parentArtistId == item.item.Id ||
+                it is JellyfinLibraryItem.TrackItem ||
+                it is JellyfinLibraryItem.FooterItem
+            }.size
+            repeat(itemsToRemove) {
+                items.removeAt(position + 1)
+            }
+            item.isExpanded = false
+            notifyItemChanged(position)
+            notifyItemRangeRemoved(position + 1, itemsToRemove)
+        } else {
+            // Expand: trigger loading
+            item.isExpanded = true
+            notifyItemChanged(position)
+            onArtistExpand(item.item, position)
+        }
+    }
+
+    fun setArtistAlbums(position: Int, albums: List<JellyfinItem>) {
+        val item = items[position] as? JellyfinLibraryItem.ArtistItem ?: return
+        item.albums = albums
+        item.isLoadingAlbums = false
+
+        if (item.isExpanded && albums.isNotEmpty()) {
+            val itemsToAdd = mutableListOf<JellyfinLibraryItem>()
+
+            // For Jellyfin, albums are sorted by year (newest first) — no categorization
+            itemsToAdd.addAll(albums.map { JellyfinLibraryItem.AlbumItem(it, item.item.Id) })
+
+            // Add footer at the end
+            itemsToAdd.add(JellyfinLibraryItem.FooterItem(item.item.Id))
+
+            items.addAll(position + 1, itemsToAdd)
+            notifyItemChanged(position)
+            notifyItemRangeInserted(position + 1, itemsToAdd.size)
+        }
+    }
+
+    fun toggleAlbum(position: Int) {
+        val item = items[position] as? JellyfinLibraryItem.AlbumItem ?: return
+
+        if (item.isExpanded) {
+            // Collapse: remove tracks and footer
+            val itemsToRemove = items.drop(position + 1).takeWhile {
+                it is JellyfinLibraryItem.TrackItem && it.parentAlbumId == item.item.Id ||
+                it is JellyfinLibraryItem.FooterItem && it.parentId == item.item.Id
+            }.size
+            repeat(itemsToRemove) {
+                items.removeAt(position + 1)
+            }
+            item.isExpanded = false
+            notifyItemChanged(position)
+            notifyItemRangeRemoved(position + 1, itemsToRemove)
+        } else {
+            // Expand: trigger loading
+            item.isExpanded = true
+            notifyItemChanged(position)
+            onAlbumExpand(item.item, item.parentArtistId, position)
+        }
+    }
+
+    fun setAlbumTracks(position: Int, tracks: List<JellyfinItem>) {
+        val item = items[position] as? JellyfinLibraryItem.AlbumItem ?: return
+        item.tracks = tracks
+        item.isLoadingTracks = false
+
+        if (item.isExpanded && tracks.isNotEmpty()) {
+            val itemsToAdd = mutableListOf<JellyfinLibraryItem>()
+            itemsToAdd.addAll(tracks.map { JellyfinLibraryItem.TrackItem(it, item.item.Id) })
+            itemsToAdd.add(JellyfinLibraryItem.FooterItem(item.item.Id))
+            items.addAll(position + 1, itemsToAdd)
+            notifyItemChanged(position)
+            notifyItemRangeInserted(position + 1, itemsToAdd.size)
+        }
     }
 
     private fun formatDuration(ms: Long): String {
@@ -132,12 +258,13 @@ class JellyfinLibraryAdapter(
         return String.format("%d:%02d", minutes, seconds)
     }
 
-    inner class BackViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        private val nameTextView: TextView = itemView.findViewById(R.id.folderNameTextView)
+    // ── ViewHolders ─────────────────────────────────────────────────────
 
-        fun bind() {
-            nameTextView.text = ".. (Back)"
-            itemView.setOnClickListener { onBackClick() }
+    inner class HeaderViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val headerTextView: TextView = itemView.findViewById(R.id.sectionHeaderTextView)
+
+        fun bind(item: JellyfinLibraryItem.HeaderItem) {
+            headerTextView.text = item.title
         }
     }
 
@@ -148,7 +275,7 @@ class JellyfinLibraryAdapter(
 
         fun bind(item: JellyfinLibraryItem.ArtistItem) {
             nameTextView.text = item.item.Name
-            expandIcon.text = "▶"
+            expandIcon.text = if (item.isExpanded) "▼" else "▶"
 
             val imageUrl = item.item.getPrimaryImageUrl(serverUrl)
             if (imageUrl != null) {
@@ -157,7 +284,9 @@ class JellyfinLibraryAdapter(
                 imageView.setImageResource(R.drawable.ic_artist_placeholder)
             }
 
-            itemView.setOnClickListener { onArtistClick(item.item) }
+            itemView.setOnClickListener {
+                toggleArtist(bindingAdapterPosition)
+            }
         }
     }
 
@@ -174,7 +303,7 @@ class JellyfinLibraryAdapter(
             artistTextView.text = item.item.getArtistDisplay()
             releaseDateTextView.text = item.item.Year?.toString() ?: ""
             trackCountTextView.text = if (item.item.ChildCount != null) "${item.item.ChildCount} tracks" else ""
-            expandIcon.text = "▶"
+            expandIcon.text = if (item.isExpanded) "▼" else "▶"
 
             val imageUrl = item.item.getPrimaryImageUrl(serverUrl)
             if (imageUrl != null) {
@@ -183,7 +312,9 @@ class JellyfinLibraryAdapter(
                 imageView.setImageResource(R.drawable.ic_album_placeholder)
             }
 
-            itemView.setOnClickListener { onAlbumClick(item.item) }
+            itemView.setOnClickListener {
+                toggleAlbum(bindingAdapterPosition)
+            }
         }
     }
 
@@ -200,9 +331,21 @@ class JellyfinLibraryAdapter(
             numberTextView.text = item.item.TrackNumber?.toString() ?: ""
 
             itemView.setOnClickListener {
-                val allTracks = getAllTrackItems()
-                val position = allTracks.indexOf(item.item)
-                onTrackClick(item.item, allTracks, position)
+                // Find all tracks from the same album
+                val albumTracks = mutableListOf<JellyfinItem>()
+                var trackPosition = 0
+
+                for (i in items.indices) {
+                    val currentItem = items[i]
+                    if (currentItem is JellyfinLibraryItem.TrackItem && currentItem.parentAlbumId == item.parentAlbumId) {
+                        albumTracks.add(currentItem.item)
+                        if (currentItem.item.Id == item.item.Id) {
+                            trackPosition = albumTracks.size - 1
+                        }
+                    }
+                }
+
+                onTrackClick(item.item, albumTracks, trackPosition)
             }
         }
     }
@@ -216,4 +359,6 @@ class JellyfinLibraryAdapter(
             itemView.setOnClickListener { onPlaylistClick(item.item) }
         }
     }
+
+    inner class FooterViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView)
 }
