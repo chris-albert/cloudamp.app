@@ -24,6 +24,16 @@
             </group>
         </menu>
     </item>
+    <item android:title="Jellyfin">
+        <menu>
+            <group android:checkableBehavior="single">
+                <item
+                    android:id="@+id/nav_jellyfin_library"
+                    android:icon="@drawable/ic_jellyfin"
+                    android:title="Jellyfin Library" />
+            </group>
+        </menu>
+    </item>
     <item android:title="Queues">
         <menu>
             <group android:checkableBehavior="single">

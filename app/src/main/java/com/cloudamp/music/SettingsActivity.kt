@@ -11,8 +11,10 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.cloudamp.music.api.GoogleDriveApiClient
+import com.cloudamp.music.api.JellyfinApiClient
 import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.auth.GoogleDriveAuthManager
+import com.cloudamp.music.auth.JellyfinAuthManager
 import com.cloudamp.music.auth.SpotifyAuthManager
 import com.cloudamp.music.cache.LibraryCache
 import kotlinx.coroutines.*
@@ -41,6 +43,14 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var lastLoadedText: TextView
     private lateinit var reloadLibraryButton: Button
 
+    // Jellyfin fields
+    private lateinit var jellyfinAuthManager: JellyfinAuthManager
+    private lateinit var jellyfinServerUrlEditText: EditText
+    private lateinit var jellyfinApiKeyEditText: EditText
+    private lateinit var saveJellyfinButton: Button
+    private lateinit var clearJellyfinButton: Button
+    private lateinit var jellyfinValidationStatus: TextView
+
     // Google Drive fields
     private lateinit var gdriveAuthManager: GoogleDriveAuthManager
     private lateinit var gdriveClientIdEditText: EditText
@@ -67,6 +77,7 @@ class SettingsActivity : AppCompatActivity() {
         authManager = SpotifyAuthManager(this)
         libraryCache = LibraryCache.getInstance(this)
         gdriveAuthManager = GoogleDriveAuthManager(this)
+        jellyfinAuthManager = JellyfinAuthManager(this)
 
         // OAuth views
         clientIdEditText = findViewById(R.id.clientIdEditText)
@@ -150,8 +161,83 @@ class SettingsActivity : AppCompatActivity() {
             finish()
         }
 
+        // Jellyfin views
+        setupJellyfin()
+
         // Google Drive views
         setupGoogleDrive()
+    }
+
+    private fun setupJellyfin() {
+        jellyfinServerUrlEditText = findViewById(R.id.jellyfinServerUrlEditText)
+        jellyfinApiKeyEditText = findViewById(R.id.jellyfinApiKeyEditText)
+        saveJellyfinButton = findViewById(R.id.saveJellyfinButton)
+        clearJellyfinButton = findViewById(R.id.clearJellyfinButton)
+        jellyfinValidationStatus = findViewById(R.id.jellyfinValidationStatus)
+
+        // Load existing credentials
+        jellyfinAuthManager.getServerUrl()?.let { jellyfinServerUrlEditText.setText(it) }
+        jellyfinAuthManager.getApiKey()?.let { jellyfinApiKeyEditText.setText(it) }
+
+        // Show current status
+        if (jellyfinAuthManager.isConfigured()) {
+            updateJellyfinStatus("Configured", true)
+            validateJellyfinConnection()
+        }
+
+        saveJellyfinButton.setOnClickListener {
+            val serverUrl = jellyfinServerUrlEditText.text.toString().trim()
+            val apiKey = jellyfinApiKeyEditText.text.toString().trim()
+
+            if (serverUrl.isNotEmpty() && apiKey.isNotEmpty()) {
+                jellyfinAuthManager.setServerUrl(serverUrl)
+                jellyfinAuthManager.setApiKey(apiKey)
+                Toast.makeText(this, "Jellyfin credentials saved", Toast.LENGTH_SHORT).show()
+                validateJellyfinConnection()
+            } else {
+                Toast.makeText(this, "Please enter both Server URL and API Key", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        clearJellyfinButton.setOnClickListener {
+            jellyfinAuthManager.clearAll()
+            jellyfinServerUrlEditText.setText("")
+            jellyfinApiKeyEditText.setText("")
+            updateJellyfinStatus("", false)
+            Toast.makeText(this, "Jellyfin credentials cleared", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun validateJellyfinConnection() {
+        scope.launch {
+            try {
+                updateJellyfinStatus("Validating...", false)
+                val client = JellyfinApiClient.getInstance(this@SettingsActivity)
+                val response = client.api.getCurrentUser()
+                if (response.isSuccessful) {
+                    val user = response.body()
+                    if (user != null) {
+                        jellyfinAuthManager.setUserId(user.Id)
+                        updateJellyfinStatus("Connected: ${user.Name}", true)
+                    } else {
+                        updateJellyfinStatus("Connected but no user info", false)
+                    }
+                } else {
+                    updateJellyfinStatus("Connection failed (${response.code()})", false)
+                }
+            } catch (e: Exception) {
+                updateJellyfinStatus("Connection error: ${e.message}", false)
+            }
+        }
+    }
+
+    private fun updateJellyfinStatus(message: String, isValid: Boolean) {
+        jellyfinValidationStatus.text = message
+        jellyfinValidationStatus.visibility = if (message.isEmpty()) View.GONE else View.VISIBLE
+        jellyfinValidationStatus.setTextColor(
+            if (isValid) getColor(android.R.color.holo_green_dark)
+            else getColor(android.R.color.holo_red_dark)
+        )
     }
 
     private fun setupGoogleDrive() {

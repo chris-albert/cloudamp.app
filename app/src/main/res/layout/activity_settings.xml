@@ -259,6 +259,117 @@
             android:background="@color/winamp_text"
             android:layout_marginBottom="16dp"/>
 
+        <!-- Jellyfin Section Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="16dp">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_jellyfin"
+                android:layout_marginEnd="8dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="JELLYFIN"
+                android:textColor="@color/winamp_text"
+                android:textSize="20sp"
+                android:fontFamily="monospace"
+                android:textStyle="bold"/>
+
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="1. Open your Jellyfin server dashboard\n\n2. Go to API Keys and create a new key\n\n3. Enter your server URL and API key below"
+            android:textColor="@color/winamp_display_text"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="16dp"/>
+
+        <EditText
+            android:id="@+id/jellyfinServerUrlEditText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Server URL (e.g. https://jellyfin.example.com)"
+            android:textColor="@color/winamp_text"
+            android:textColorHint="@color/winamp_display_text"
+            android:background="@color/winamp_list_background"
+            android:padding="12dp"
+            android:fontFamily="monospace"
+            android:inputType="textUri"
+            android:layout_marginBottom="8dp"/>
+
+        <EditText
+            android:id="@+id/jellyfinApiKeyEditText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="API Key"
+            android:textColor="@color/winamp_text"
+            android:textColorHint="@color/winamp_display_text"
+            android:background="@color/winamp_list_background"
+            android:padding="12dp"
+            android:fontFamily="monospace"
+            android:inputType="textPassword"
+            android:layout_marginBottom="12dp"/>
+
+        <Button
+            android:id="@+id/saveJellyfinButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="SAVE &amp; VALIDATE"
+            android:textColor="@color/winamp_text"
+            android:background="@color/winamp_button"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="8dp"/>
+
+        <Button
+            android:id="@+id/clearJellyfinButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="CLEAR JELLYFIN"
+            android:textColor="@color/winamp_text"
+            android:background="@color/winamp_button"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:id="@+id/jellyfinValidationStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:visibility="gone"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="\nNote: Jellyfin provides access to your\nself-hosted music library."
+            android:textColor="@color/winamp_display_text"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:layout_marginTop="16dp"/>
+
+        <!-- Double Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="2dp"
+            android:background="@color/winamp_text"
+            android:layout_marginVertical="16dp"/>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="2dp"
+            android:background="@color/winamp_text"
+            android:layout_marginBottom="16dp"/>
+
         <!-- Google Drive Section Header -->
         <LinearLayout
             android:layout_width="match_parent"
