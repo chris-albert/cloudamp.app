@@ -1060,6 +1060,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     // ── Saved Queues browsing ──────────────────────────────────────────
 
     private fun loadSavedQueues(items: MutableList<MediaBrowserCompat.MediaItem>) {
+        // Persist live playback position so the list shows the current track
+        savedQueuesManager.saveActiveQueuePosition()
         val queues = savedQueuesManager.getSavedQueues()
 
         if (queues.isEmpty()) {
@@ -1091,6 +1093,9 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     fun playSavedQueue(queueId: String) {
         val queue = savedQueuesManager.getQueue(queueId) ?: return
 
+        // Save position of the currently active queue before switching
+        savedQueuesManager.saveActiveQueuePosition()
+
         when (queue.provider) {
             com.cloudamp.music.models.SavedQueue.PROVIDER_SPOTIFY -> {
                 if (queue.tracks.isEmpty()) return
@@ -1116,7 +1121,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             }
         }
 
-        // Update last played time
+        // Mark this queue as active and update last played time
+        savedQueuesManager.setActiveQueue(queueId)
         savedQueuesManager.updateQueuePosition(
             queueId, queue.currentIndex, queue.currentPositionMs
         )

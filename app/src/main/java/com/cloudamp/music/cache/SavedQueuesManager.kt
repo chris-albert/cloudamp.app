@@ -22,6 +22,11 @@ class SavedQueuesManager private constructor(context: Context) {
     private val gson = Gson()
     private val appContext = context.applicationContext
 
+    /** ID of the saved queue that corresponds to the current playback, or null. */
+    @Volatile
+    var activeQueueId: String? = null
+        private set
+
     companion object {
         private const val PREFS_NAME = "saved_queues"
         private const val KEY_QUEUES = "queues"
@@ -34,6 +39,24 @@ class SavedQueuesManager private constructor(context: Context) {
                 instance ?: SavedQueuesManager(context.applicationContext).also { instance = it }
             }
         }
+    }
+
+    /**
+     * Sets which saved queue is currently being played.
+     */
+    fun setActiveQueue(queueId: String?) {
+        activeQueueId = queueId
+    }
+
+    /**
+     * Persists the current playback position to the active saved queue (if any).
+     * Call before switching queues or before displaying the saved queues list
+     * so the stored index and position reflect reality.
+     */
+    fun saveActiveQueuePosition() {
+        val queueId = activeQueueId ?: return
+        val active = ActivePlayback.provider ?: return
+        updateQueuePosition(queueId, active.getCurrentIndex(), active.getCurrentPosition())
     }
 
     /**
@@ -96,6 +119,7 @@ class SavedQueuesManager private constructor(context: Context) {
         val queues = getSavedQueues().toMutableList()
         queues.add(queue)
         persistQueues(queues)
+        activeQueueId = queue.id
         return queue
     }
 
