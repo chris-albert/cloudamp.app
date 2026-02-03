@@ -65,12 +65,14 @@ class PlaybackManager private constructor(
     @Volatile var lastKnownPosition: Long = 0L
     @Volatile var lastKnownDuration: Long = 0L
     @Volatile var lastKnownIsPlaying: Boolean = false
+    @Volatile private var lastPositionTimestamp: Long = 0L
 
     /** Called from CloudAmpService polling loop to feed Spotify state. */
     fun updateSpotifyState(position: Long, duration: Long, isPlaying: Boolean) {
         lastKnownPosition = position
         lastKnownDuration = duration
         lastKnownIsPlaying = isPlaying
+        lastPositionTimestamp = System.currentTimeMillis()
     }
 
     // Expose queue for UI
@@ -79,7 +81,17 @@ class PlaybackManager private constructor(
 
     // PlaybackProvider state queries
     override fun getQueueAsTracks(): List<Track> = currentQueue.toList()
-    override fun getCurrentPosition(): Long = lastKnownPosition
+    override fun getCurrentPosition(): Long {
+        // Interpolate: estimate real position from elapsed time since last update.
+        // This keeps the position accurate between polling intervals and when
+        // the CloudAmpService polling loop isn't running (mobile-only usage).
+        if (lastKnownIsPlaying && lastPositionTimestamp > 0) {
+            val elapsed = System.currentTimeMillis() - lastPositionTimestamp
+            val estimated = lastKnownPosition + elapsed
+            return if (lastKnownDuration > 0) minOf(estimated, lastKnownDuration) else estimated
+        }
+        return lastKnownPosition
+    }
     override fun getDuration(): Long = lastKnownDuration
     override fun isPlaying(): Boolean = lastKnownIsPlaying
 
@@ -634,6 +646,9 @@ class PlaybackManager private constructor(
                 val response = playWithDeviceActivation(request, pending)
 
                 if (response.isSuccessful) {
+                    lastKnownPosition = 0
+                    lastKnownIsPlaying = true
+                    lastPositionTimestamp = System.currentTimeMillis()
                     if (startIndex in tracks.indices) {
                         val currentTrack = tracks[startIndex]
                         service?.updateMetadata(currentTrack, currentTrack.album?.images?.firstOrNull()?.url)
@@ -687,27 +702,36 @@ class PlaybackManager private constructor(
         }
         if (response.isSuccessful) {
             lastKnownIsPlaying = true
+            lastPositionTimestamp = System.currentTimeMillis()
         }
     }
 
     override suspend fun pause() {
+        // Freeze the interpolated position before marking as paused
+        lastKnownPosition = getCurrentPosition()
         spotifyClient.api.pause()
         lastKnownIsPlaying = false
+        lastPositionTimestamp = System.currentTimeMillis()
     }
 
     override suspend fun stop() {
         spotifyClient.api.pause()
+        lastKnownPosition = 0
         lastKnownIsPlaying = false
+        lastPositionTimestamp = 0
     }
 
     override suspend fun seekTo(positionMs: Long) {
         spotifyClient.api.seek(positionMs)
         lastKnownPosition = positionMs
+        lastPositionTimestamp = System.currentTimeMillis()
     }
 
     override suspend fun skipToNext() {
         if (currentIndex < currentQueue.size - 1) {
             currentIndex++
+            lastKnownPosition = 0
+            lastPositionTimestamp = System.currentTimeMillis()
             playTrackAtIndex(currentIndex)
         } else {
             spotifyClient.api.next()
@@ -717,6 +741,8 @@ class PlaybackManager private constructor(
     override suspend fun skipToPrevious() {
         if (currentIndex > 0) {
             currentIndex--
+            lastKnownPosition = 0
+            lastPositionTimestamp = System.currentTimeMillis()
             playTrackAtIndex(currentIndex)
         } else {
             spotifyClient.api.previous()
@@ -726,6 +752,8 @@ class PlaybackManager private constructor(
     override suspend fun skipToQueueItem(index: Int) {
         if (index in currentQueue.indices) {
             currentIndex = index
+            lastKnownPosition = 0
+            lastPositionTimestamp = System.currentTimeMillis()
             playTrackAtIndex(index)
         }
     }

@@ -59,7 +59,8 @@ class SavedQueuesAdapter(
         val currentTrack = queue.getCurrentTrackName()
         if (currentTrack != null) {
             holder.currentTrackTextView.visibility = View.VISIBLE
-            holder.currentTrackTextView.text = "\u25B6 ${queue.currentIndex + 1}/${trackCount}: $currentTrack"
+            val time = formatTime(queue.currentPositionMs)
+            holder.currentTrackTextView.text = "\u25B6 ${queue.currentIndex + 1}/${trackCount} $time | $currentTrack"
         } else {
             holder.currentTrackTextView.visibility = View.GONE
         }
@@ -75,6 +76,13 @@ class SavedQueuesAdapter(
     fun setQueues(newQueues: List<SavedQueue>) {
         queues = newQueues
         notifyDataSetChanged()
+    }
+
+    private fun formatTime(milliseconds: Long): String {
+        val totalSeconds = milliseconds / 1000
+        val minutes = totalSeconds / 60
+        val seconds = totalSeconds % 60
+        return String.format("%d:%02d", minutes, seconds)
     }
 
     private fun formatTimestamp(timestamp: Long): String {

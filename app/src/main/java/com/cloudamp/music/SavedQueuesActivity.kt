@@ -53,6 +53,8 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
 
     override fun onResume() {
         super.onResume()
+        // Persist live playback position so the list shows the current track
+        savedQueuesManager.saveActiveQueuePosition()
         loadSavedQueues()
     }
 
@@ -115,6 +117,9 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
             return
         }
 
+        // Save position of the currently active queue before switching
+        savedQueuesManager.saveActiveQueuePosition()
+
         playbackManager.playTracks(queue.tracks, queue.currentIndex)
 
         // Seek to saved position within the track after playback starts
@@ -125,7 +130,8 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
             }
         }
 
-        // Update last played time
+        // Mark this queue as active and update last played time
+        savedQueuesManager.setActiveQueue(queue.id)
         savedQueuesManager.updateQueuePosition(
             queue.id, queue.currentIndex, queue.currentPositionMs
         )
@@ -146,6 +152,9 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
             return
         }
 
+        // Save position of the currently active queue before switching
+        savedQueuesManager.saveActiveQueuePosition()
+
         val gdrive = GDrivePlaybackManager.getInstance(this)
         gdrive.playFiles(queue.driveFiles, queue.currentIndex)
 
@@ -157,7 +166,8 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
             }
         }
 
-        // Update last played time
+        // Mark this queue as active and update last played time
+        savedQueuesManager.setActiveQueue(queue.id)
         savedQueuesManager.updateQueuePosition(
             queue.id, queue.currentIndex, queue.currentPositionMs
         )
