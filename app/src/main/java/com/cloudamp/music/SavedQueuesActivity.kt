@@ -185,7 +185,8 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
     }
 
     private fun loadJellyfinQueue(queue: SavedQueue) {
-        if (queue.jellyfinItems.isEmpty()) {
+        val items = queue.jellyfinItems.orEmpty()
+        if (items.isEmpty()) {
             Toast.makeText(this, "Queue is empty", Toast.LENGTH_SHORT).show()
             return
         }
@@ -194,7 +195,7 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
         savedQueuesManager.saveActiveQueuePosition()
 
         val jellyfin = JellyfinPlaybackManager.getInstance(this)
-        jellyfin.playItems(queue.jellyfinItems, queue.currentIndex)
+        jellyfin.playItems(items, queue.currentIndex)
 
         // Seek to saved position within the track after buffering
         if (queue.currentPositionMs > 0) {

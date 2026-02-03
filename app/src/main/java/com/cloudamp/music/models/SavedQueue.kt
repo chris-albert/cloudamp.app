@@ -13,7 +13,7 @@ data class SavedQueue(
     val provider: String, // "spotify", "gdrive", or "jellyfin"
     val tracks: List<Track>, // Spotify tracks (empty for other providers)
     val driveFiles: List<DriveFile>, // GDrive files (empty for other providers)
-    val jellyfinItems: List<JellyfinItem> = emptyList(), // Jellyfin items (empty for other providers)
+    val jellyfinItems: List<JellyfinItem>? = null, // Jellyfin items (empty for other providers)
     val currentIndex: Int,
     val currentPositionMs: Long,
     val createdAt: Long,
@@ -28,7 +28,7 @@ data class SavedQueue(
     fun getTrackCount(): Int {
         return when (provider) {
             PROVIDER_GDRIVE -> driveFiles.size
-            PROVIDER_JELLYFIN -> jellyfinItems.size
+            PROVIDER_JELLYFIN -> jellyfinItems?.size ?: 0
             else -> tracks.size
         }
     }
@@ -49,8 +49,9 @@ data class SavedQueue(
                 } else null
             }
             PROVIDER_JELLYFIN -> {
-                if (currentIndex in jellyfinItems.indices) {
-                    jellyfinItems[currentIndex].Name
+                val items = jellyfinItems ?: emptyList()
+                if (currentIndex in items.indices) {
+                    items[currentIndex].Name
                 } else null
             }
             else -> {

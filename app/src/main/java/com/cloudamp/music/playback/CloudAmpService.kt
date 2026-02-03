@@ -1353,8 +1353,9 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 }
             }
             com.cloudamp.music.models.SavedQueue.PROVIDER_JELLYFIN -> {
-                if (queue.jellyfinItems.isEmpty()) return
-                jellyfinPlaybackManager.playItems(queue.jellyfinItems, queue.currentIndex)
+                val items = queue.jellyfinItems.orEmpty()
+                if (items.isEmpty()) return
+                jellyfinPlaybackManager.playItems(items, queue.currentIndex)
                 // Seek to saved position within the track after a brief delay for buffering
                 if (queue.currentPositionMs > 0) {
                     serviceScope.launch {
