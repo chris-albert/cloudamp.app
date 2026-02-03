@@ -446,6 +446,10 @@ class PlaybackManager private constructor(
                         val fileId = mediaId.removePrefix("gdrive_file_")
                         val parentId = extras?.getString("gdrive_parent_id")
                         service?.playGDriveFromMediaId(fileId, parentId)
+                    } else if (mediaId.startsWith("jellyfin_track_")) {
+                        val trackId = mediaId.removePrefix("jellyfin_track_")
+                        val parentId = extras?.getString("jellyfin_parent_id")
+                        service?.playJellyfinFromMediaId(trackId, parentId)
                     } else if (mediaId.startsWith("spotify:track:")) {
                         val playlistId = extras?.getString("playlist_id")
                         val albumId = extras?.getString("album_id")

@@ -7,6 +7,7 @@ import com.cloudamp.music.models.SavedQueue
 import com.cloudamp.music.models.Track
 import com.cloudamp.music.playback.ActivePlayback
 import com.cloudamp.music.playback.GDrivePlaybackManager
+import com.cloudamp.music.playback.JellyfinPlaybackManager
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.util.UUID
@@ -83,37 +84,57 @@ class SavedQueuesManager private constructor(context: Context) {
         val active = ActivePlayback.provider ?: return null
 
         // Serialization still needs to know the concrete type to store
-        // driveFiles vs tracks in SavedQueue
-        val queue = if (active is GDrivePlaybackManager) {
-            val files = active.getQueue()
-            if (files.isEmpty()) return null
+        // the native items in SavedQueue
+        val queue = when (active) {
+            is GDrivePlaybackManager -> {
+                val files = active.getQueue()
+                if (files.isEmpty()) return null
 
-            SavedQueue(
-                id = UUID.randomUUID().toString(),
-                name = name,
-                provider = SavedQueue.PROVIDER_GDRIVE,
-                tracks = emptyList(),
-                driveFiles = files,
-                currentIndex = active.getCurrentIndex(),
-                currentPositionMs = positionMs ?: active.getCurrentPosition(),
-                createdAt = System.currentTimeMillis(),
-                lastPlayedAt = System.currentTimeMillis()
-            )
-        } else {
-            val tracks = active.getQueueAsTracks()
-            if (tracks.isEmpty()) return null
+                SavedQueue(
+                    id = UUID.randomUUID().toString(),
+                    name = name,
+                    provider = SavedQueue.PROVIDER_GDRIVE,
+                    tracks = emptyList(),
+                    driveFiles = files,
+                    currentIndex = active.getCurrentIndex(),
+                    currentPositionMs = positionMs ?: active.getCurrentPosition(),
+                    createdAt = System.currentTimeMillis(),
+                    lastPlayedAt = System.currentTimeMillis()
+                )
+            }
+            is JellyfinPlaybackManager -> {
+                val items = active.getQueue()
+                if (items.isEmpty()) return null
 
-            SavedQueue(
-                id = UUID.randomUUID().toString(),
-                name = name,
-                provider = SavedQueue.PROVIDER_SPOTIFY,
-                tracks = tracks,
-                driveFiles = emptyList(),
-                currentIndex = active.getCurrentIndex(),
-                currentPositionMs = positionMs ?: active.getCurrentPosition(),
-                createdAt = System.currentTimeMillis(),
-                lastPlayedAt = System.currentTimeMillis()
-            )
+                SavedQueue(
+                    id = UUID.randomUUID().toString(),
+                    name = name,
+                    provider = SavedQueue.PROVIDER_JELLYFIN,
+                    tracks = emptyList(),
+                    driveFiles = emptyList(),
+                    jellyfinItems = items,
+                    currentIndex = active.getCurrentIndex(),
+                    currentPositionMs = positionMs ?: active.getCurrentPosition(),
+                    createdAt = System.currentTimeMillis(),
+                    lastPlayedAt = System.currentTimeMillis()
+                )
+            }
+            else -> {
+                val tracks = active.getQueueAsTracks()
+                if (tracks.isEmpty()) return null
+
+                SavedQueue(
+                    id = UUID.randomUUID().toString(),
+                    name = name,
+                    provider = SavedQueue.PROVIDER_SPOTIFY,
+                    tracks = tracks,
+                    driveFiles = emptyList(),
+                    currentIndex = active.getCurrentIndex(),
+                    currentPositionMs = positionMs ?: active.getCurrentPosition(),
+                    createdAt = System.currentTimeMillis(),
+                    lastPlayedAt = System.currentTimeMillis()
+                )
+            }
         }
 
         val queues = getSavedQueues().toMutableList()

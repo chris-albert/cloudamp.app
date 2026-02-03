@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew compileDebugKotlin:*)",
+      "Bash(/usr/libexec/java_home:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(gh pr create:*)",
+      "Bash(git pull:*)",
+      "Bash(./gradlew assembleDebug:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(git -C /Users/christopheralbert/git/cloudamp.app status)",
+      "Bash(git -C /Users/christopheralbert/git/cloudamp.app diff)",
+      "Bash(git -C /Users/christopheralbert/git/cloudamp.app log --oneline -10)",
+      "Bash(git -C /Users/christopheralbert/git/cloudamp.app add app/src/main/java/com/cloudamp/music/SavedQueuesActivity.kt app/src/main/java/com/cloudamp/music/cache/SavedQueuesManager.kt app/src/main/java/com/cloudamp/music/playback/CloudAmpService.kt app/src/main/java/com/cloudamp/music/ui/SavedQueuesAdapter.kt)",
+      "Bash(Song Name\"\\).\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C /Users/christopheralbert/git/cloudamp.app push -u origin fix/saved-queue-position-tracking)",
+      "Bash(git -C /Users/christopheralbert/git/cloudamp.app diff app/src/main/java/com/cloudamp/music/playback/PlaybackManager.kt)",
+      "Bash(git -C /Users/christopheralbert/git/cloudamp.app add app/src/main/java/com/cloudamp/music/playback/PlaybackManager.kt)",
+      "Bash(git -C /Users/christopheralbert/git/cloudamp.app commit -m \"$\\(cat <<''EOF''\nFix Spotify position not being saved by interpolating between polls\n\nPlaybackManager.getCurrentPosition\\(\\) returned lastKnownPosition which\nwas only updated by the CloudAmpService polling loop every 3 seconds.\nFor mobile-only usage \\(no Android Auto\\), the polling might not be\nrunning at all, leaving the position at 0.\n\nAdd timestamp-based interpolation so getCurrentPosition\\(\\) estimates the\nreal position from elapsed time since the last update. Also set initial\nposition state on play, pause, stop, seek, and skip so the interpolation\nworks even without the polling loop.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C /Users/christopheralbert/git/cloudamp.app push)",
+      "Bash(/opt/homebrew/opt/openjdk@20/bin/java:*)",
+      "Bash(brew list:*)",
+      "Bash(/opt/homebrew/opt/openjdk/bin/java:*)",
+      "Bash(git fetch:*)",
+      "Bash(git merge:*)"
+    ]
+  }
+}

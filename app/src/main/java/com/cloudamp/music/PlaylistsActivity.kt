@@ -185,6 +185,10 @@ class PlaylistsActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
                 startActivity(Intent(this, GDriveLibraryActivity::class.java))
                 finish()
             }
+            R.id.nav_jellyfin_library -> {
+                startActivity(Intent(this, JellyfinLibraryActivity::class.java))
+                finish()
+            }
             R.id.nav_saved_queues -> {
                 startActivity(Intent(this, SavedQueuesActivity::class.java))
                 finish()

@@ -17,6 +17,7 @@ import com.cloudamp.music.cache.SavedQueuesManager
 import com.cloudamp.music.models.Track
 import com.cloudamp.music.playback.ActivePlayback
 import com.cloudamp.music.playback.GDrivePlaybackManager
+import com.cloudamp.music.playback.JellyfinPlaybackManager
 import com.cloudamp.music.ui.QueueAdapter
 import kotlinx.coroutines.*
 
@@ -232,10 +233,10 @@ class NowPlayingActivity : AppCompatActivity() {
 
     private fun loadCurrentTrack() {
         val active = ActivePlayback.provider
-        if (active is GDrivePlaybackManager) {
-            updateGDriveTrackInfo(active)
-        } else {
-            loadSpotifyTrack()
+        when (active) {
+            is GDrivePlaybackManager -> updateGDriveTrackInfo(active)
+            is JellyfinPlaybackManager -> updateJellyfinTrackInfo(active)
+            else -> loadSpotifyTrack()
         }
     }
 
@@ -301,10 +302,10 @@ class NowPlayingActivity : AppCompatActivity() {
 
     private fun updatePlaybackState() {
         val active = ActivePlayback.provider
-        if (active is GDrivePlaybackManager) {
-            updateGDrivePlaybackState(active)
-        } else {
-            updateSpotifyPlaybackState()
+        when (active) {
+            is GDrivePlaybackManager -> updateGDrivePlaybackState(active)
+            is JellyfinPlaybackManager -> updateJellyfinPlaybackState(active)
+            else -> updateSpotifyPlaybackState()
         }
         updateQueueDisplay()
     }
@@ -318,6 +319,60 @@ class NowPlayingActivity : AppCompatActivity() {
     }
 
     private fun updateGDrivePlaybackState(active: GDrivePlaybackManager) {
+        currentPosition = active.getCurrentPosition()
+        isPlaying = active.isPlaying()
+
+        val newDuration = active.getDuration()
+        if (newDuration > 0 && newDuration != totalDuration) {
+            totalDuration = newDuration
+            totalTimeTextView.text = formatTime(totalDuration)
+            seekBar.max = totalDuration.toInt()
+        }
+
+        seekBar.progress = currentPosition.toInt()
+        currentTimeTextView.text = formatTime(currentPosition)
+
+        // Check if track changed
+        val queueTracks = active.getQueueAsTracks()
+        val currentIdx = active.getCurrentIndex()
+        if (currentIdx in queueTracks.indices) {
+            val track = queueTracks[currentIdx]
+            if (currentTrack?.id != track.id) {
+                currentTrack = track
+                updateTrackInfo(track)
+            }
+        }
+
+        playPauseButton.setImageResource(
+            if (isPlaying) R.drawable.ic_pause
+            else R.drawable.ic_play
+        )
+    }
+
+    private fun updateJellyfinTrackInfo(active: JellyfinPlaybackManager) {
+        val queueTracks = active.getQueueAsTracks()
+        val index = active.getCurrentIndex()
+
+        if (index in queueTracks.indices) {
+            currentTrack = queueTracks[index]
+            updateTrackInfo(queueTracks[index])
+        }
+
+        isPlaying = active.isPlaying()
+        currentPosition = active.getCurrentPosition()
+        totalDuration = active.getDuration()
+
+        if (totalDuration > 0) {
+            totalTimeTextView.text = formatTime(totalDuration)
+            seekBar.max = totalDuration.toInt()
+        }
+
+        playPauseButton.setImageResource(
+            if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
+        )
+    }
+
+    private fun updateJellyfinPlaybackState(active: JellyfinPlaybackManager) {
         currentPosition = active.getCurrentPosition()
         isPlaying = active.isPlaying()
 

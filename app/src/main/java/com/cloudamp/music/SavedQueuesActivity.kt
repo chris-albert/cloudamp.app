@@ -19,6 +19,7 @@ import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.cache.SavedQueuesManager
 import com.cloudamp.music.models.SavedQueue
 import com.cloudamp.music.playback.GDrivePlaybackManager
+import com.cloudamp.music.playback.JellyfinPlaybackManager
 import com.cloudamp.music.playback.PlaybackManager
 import com.cloudamp.music.ui.SavedQueuesAdapter
 import com.google.android.material.navigation.NavigationView
@@ -108,6 +109,7 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
         when (queue.provider) {
             SavedQueue.PROVIDER_SPOTIFY -> loadSpotifyQueue(queue)
             SavedQueue.PROVIDER_GDRIVE -> loadGDriveQueue(queue)
+            SavedQueue.PROVIDER_JELLYFIN -> loadJellyfinQueue(queue)
         }
     }
 
@@ -182,6 +184,43 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
         startActivity(Intent(this, NowPlayingActivity::class.java))
     }
 
+    private fun loadJellyfinQueue(queue: SavedQueue) {
+        val items = queue.jellyfinItems.orEmpty()
+        if (items.isEmpty()) {
+            Toast.makeText(this, "Queue is empty", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Save position of the currently active queue before switching
+        savedQueuesManager.saveActiveQueuePosition()
+
+        val jellyfin = JellyfinPlaybackManager.getInstance(this)
+        jellyfin.playItems(items, queue.currentIndex)
+
+        // Seek to saved position within the track after buffering
+        if (queue.currentPositionMs > 0) {
+            scope.launch {
+                delay(1500)
+                jellyfin.seekTo(queue.currentPositionMs)
+            }
+        }
+
+        // Mark this queue as active and update last played time
+        savedQueuesManager.setActiveQueue(queue.id)
+        savedQueuesManager.updateQueuePosition(
+            queue.id, queue.currentIndex, queue.currentPositionMs
+        )
+
+        Toast.makeText(
+            this,
+            "Loading: ${queue.name} (${queue.getTrackCount()} tracks)",
+            Toast.LENGTH_SHORT
+        ).show()
+
+        // Open now playing
+        startActivity(Intent(this, NowPlayingActivity::class.java))
+    }
+
     private fun showRenameDialog(queue: SavedQueue) {
         val editText = EditText(this).apply {
             setText(queue.name)
@@ -233,6 +272,10 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
             }
             R.id.nav_gdrive_library -> {
                 startActivity(Intent(this, GDriveLibraryActivity::class.java))
+                finish()
+            }
+            R.id.nav_jellyfin_library -> {
+                startActivity(Intent(this, JellyfinLibraryActivity::class.java))
                 finish()
             }
             R.id.nav_saved_queues -> {
