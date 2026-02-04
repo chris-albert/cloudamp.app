@@ -94,13 +94,32 @@
 
             </LinearLayout>
 
-            <!-- Item List -->
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/jellyfinRecyclerView"
+            <!-- Library content with alphabet sidebar -->
+            <FrameLayout
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
-                android:layout_weight="1"
-                android:background="@color/winamp_background"/>
+                android:layout_weight="1">
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/jellyfinRecyclerView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@color/winamp_background"
+                    android:clipToPadding="false"
+                    android:paddingEnd="24dp"/>
+
+                <!-- A-Z Fast Scroll Sidebar -->
+                <com.cloudamp.music.ui.AlphabetSidebarView
+                    android:id="@+id/alphabetSidebar"
+                    android:layout_width="24dp"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="end"
+                    android:background="@color/winamp_section_header"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp"
+                    android:visibility="gone"/>
+
+            </FrameLayout>
 
         </LinearLayout>
 
