@@ -2,6 +2,8 @@ package com.cloudamp.music
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -99,6 +101,7 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
         pathTextView = findViewById(R.id.pathTextView)
 
         recyclerView.layoutManager = LinearLayoutManager(this)
+        recyclerView.addItemDecoration(LibraryDividerDecoration(this))
 
         val serverUrl = authManager.getServerUrl()?.trimEnd('/') ?: ""
 
@@ -452,5 +455,43 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
     override fun onDestroy() {
         scope.cancel()
         super.onDestroy()
+    }
+
+    /**
+     * Draws a thin divider line between content items (artists, albums, tracks, playlists)
+     * but not after headers or footers.
+     */
+    private class LibraryDividerDecoration(context: Context) : RecyclerView.ItemDecoration() {
+        private val paint = Paint().apply {
+            color = context.getColor(R.color.winamp_section_header)
+            strokeWidth = (context.resources.displayMetrics.density * 1f) // 1dp
+        }
+
+        override fun onDrawOver(c: Canvas, parent: RecyclerView, state: RecyclerView.State) {
+            val adapter = parent.adapter as? JellyfinLibraryAdapter ?: return
+            val childCount = parent.childCount
+
+            for (i in 0 until childCount - 1) {
+                val child = parent.getChildAt(i)
+                val pos = parent.getChildAdapterPosition(child)
+                if (pos == RecyclerView.NO_POSITION || pos + 1 >= adapter.itemCount) continue
+
+                val currentType = adapter.getItemViewType(pos)
+                val nextType = adapter.getItemViewType(pos + 1)
+
+                // Draw divider between two content items of the same type
+                val contentTypes = setOf(1, 2, 3, 4) // ARTIST, ALBUM, TRACK, PLAYLIST
+                if (currentType in contentTypes && nextType in contentTypes) {
+                    val y = child.bottom.toFloat() + child.translationY
+                    c.drawLine(
+                        parent.paddingLeft.toFloat(),
+                        y,
+                        (parent.width - parent.paddingRight).toFloat(),
+                        y,
+                        paint
+                    )
+                }
+            }
+        }
     }
 }
