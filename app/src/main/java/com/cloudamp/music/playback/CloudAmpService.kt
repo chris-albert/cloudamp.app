@@ -475,7 +475,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                                     playbackManager.updateSpotifyState(
                                         playback.progressMs.toLong(),
                                         playback.item?.durationMs?.toLong() ?: 0L,
-                                        playback.isPlaying
+                                        playback.isPlaying,
+                                        playback.item?.id
                                     )
 
                                     // Update metadata BEFORE playback state so that
