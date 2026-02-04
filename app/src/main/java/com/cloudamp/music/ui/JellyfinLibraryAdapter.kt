@@ -201,10 +201,8 @@ class JellyfinLibraryAdapter(
         if (item.isExpanded && albums.isNotEmpty()) {
             val itemsToAdd = mutableListOf<JellyfinLibraryItem>()
 
-            // For Jellyfin, albums are sorted by year (newest first) — no categorization
+            itemsToAdd.add(JellyfinLibraryItem.HeaderItem("ALBUMS"))
             itemsToAdd.addAll(albums.map { JellyfinLibraryItem.AlbumItem(it, item.item.Id) })
-
-            // Add footer at the end
             itemsToAdd.add(JellyfinLibraryItem.FooterItem(item.item.Id))
 
             items.addAll(position + 1, itemsToAdd)
@@ -217,8 +215,9 @@ class JellyfinLibraryAdapter(
         val item = items[position] as? JellyfinLibraryItem.AlbumItem ?: return
 
         if (item.isExpanded) {
-            // Collapse: remove tracks and footer
+            // Collapse: remove header, tracks, and footer
             val itemsToRemove = items.drop(position + 1).takeWhile {
+                it is JellyfinLibraryItem.HeaderItem ||
                 it is JellyfinLibraryItem.TrackItem && it.parentAlbumId == item.item.Id ||
                 it is JellyfinLibraryItem.FooterItem && it.parentId == item.item.Id
             }.size
@@ -243,6 +242,7 @@ class JellyfinLibraryAdapter(
 
         if (item.isExpanded && tracks.isNotEmpty()) {
             val itemsToAdd = mutableListOf<JellyfinLibraryItem>()
+            itemsToAdd.add(JellyfinLibraryItem.HeaderItem("TRACKS"))
             itemsToAdd.addAll(tracks.map { JellyfinLibraryItem.TrackItem(it, item.item.Id) })
             itemsToAdd.add(JellyfinLibraryItem.FooterItem(item.item.Id))
             items.addAll(position + 1, itemsToAdd)
