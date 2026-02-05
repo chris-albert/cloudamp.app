@@ -481,6 +481,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                                     // Update metadata BEFORE playback state so that
                                     // Android Auto has track info when the state changes.
                                     playback.item?.let { track ->
+                                        playbackManager.updateCurrentIndexFromTrack(track.id)
+                                        playbackManager.lastKnownTrack = track
                                         updateMetadata(track, track.album?.images?.firstOrNull()?.url)
                                     }
 

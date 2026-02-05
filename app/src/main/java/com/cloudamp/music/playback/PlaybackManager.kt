@@ -67,12 +67,23 @@ class PlaybackManager private constructor(
     @Volatile var lastKnownIsPlaying: Boolean = false
     @Volatile private var lastPositionTimestamp: Long = 0L
 
+    /** Last track reported by Spotify polling — used by NowPlayingActivity to detect track changes. */
+    @Volatile var lastKnownTrack: Track? = null
+
     /** Called from CloudAmpService polling loop to feed Spotify state. */
     fun updateSpotifyState(position: Long, duration: Long, isPlaying: Boolean) {
         lastKnownPosition = position
         lastKnownDuration = duration
         lastKnownIsPlaying = isPlaying
         lastPositionTimestamp = System.currentTimeMillis()
+    }
+
+    /** Updates currentIndex to match the track Spotify is actually playing. */
+    fun updateCurrentIndexFromTrack(trackId: String) {
+        val idx = currentQueue.indexOfFirst { it.id == trackId }
+        if (idx >= 0) {
+            currentIndex = idx
+        }
     }
 
     // Expose queue for UI
