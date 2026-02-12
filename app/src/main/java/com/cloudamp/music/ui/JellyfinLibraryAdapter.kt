@@ -98,7 +98,7 @@ class JellyfinLibraryAdapter(
     override fun getItemCount() = items.size
 
     fun getLetterPosition(letter: String): Int {
-        return items.indexOfFirst { it is JellyfinLibraryItem.HeaderItem && it.title == letter }
+        return items.indexOfFirst { it is JellyfinLibraryItem.HeaderItem && it.title.startsWith(letter) }
     }
 
     fun getArtistCount(): Int {
@@ -128,6 +128,13 @@ class JellyfinLibraryAdapter(
 
         // Sort artists purely alphabetically by display name and add section headers
         val sortedArtists = artists.sortedBy { it.Name.lowercase() }
+
+        // Group by first letter to get counts
+        val grouped = sortedArtists.groupBy { artist ->
+            val firstLetter = artist.Name.firstOrNull()?.uppercaseChar() ?: '#'
+            if (firstLetter.isLetter()) firstLetter else '#'
+        }
+
         var currentLetter: Char? = null
         for (artist in sortedArtists) {
             val firstLetter = artist.Name.firstOrNull()?.uppercaseChar() ?: '#'
@@ -135,7 +142,8 @@ class JellyfinLibraryAdapter(
 
             if (letter != currentLetter) {
                 currentLetter = letter
-                items.add(JellyfinLibraryItem.HeaderItem(letter.toString()))
+                val count = grouped[letter]?.size ?: 0
+                items.add(JellyfinLibraryItem.HeaderItem("$letter ($count)"))
             }
             items.add(JellyfinLibraryItem.ArtistItem(artist))
         }
@@ -232,7 +240,7 @@ class JellyfinLibraryAdapter(
         if (item.isExpanded && albums.isNotEmpty()) {
             val itemsToAdd = mutableListOf<JellyfinLibraryItem>()
 
-            itemsToAdd.add(JellyfinLibraryItem.HeaderItem("ALBUMS"))
+            itemsToAdd.add(JellyfinLibraryItem.HeaderItem("ALBUMS (${albums.size})"))
             itemsToAdd.addAll(albums.map { JellyfinLibraryItem.AlbumItem(it, item.item.Id) })
             itemsToAdd.add(JellyfinLibraryItem.FooterItem(item.item.Id))
 
@@ -273,7 +281,7 @@ class JellyfinLibraryAdapter(
 
         if (item.isExpanded && tracks.isNotEmpty()) {
             val itemsToAdd = mutableListOf<JellyfinLibraryItem>()
-            itemsToAdd.add(JellyfinLibraryItem.HeaderItem("TRACKS"))
+            itemsToAdd.add(JellyfinLibraryItem.HeaderItem("TRACKS (${tracks.size})"))
             itemsToAdd.addAll(tracks.map { JellyfinLibraryItem.TrackItem(it, item.item.Id) })
             itemsToAdd.add(JellyfinLibraryItem.FooterItem(item.item.Id))
             items.addAll(position + 1, itemsToAdd)
