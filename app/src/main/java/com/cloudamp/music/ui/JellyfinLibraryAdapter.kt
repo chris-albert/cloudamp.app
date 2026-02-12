@@ -111,9 +111,10 @@ class JellyfinLibraryAdapter(
     private fun rebuildItems(artists: List<JellyfinItem>, playlists: List<JellyfinItem>) {
         items.clear()
 
-        // Group artists by first letter and add section headers
+        // Sort artists purely alphabetically by display name and add section headers
+        val sortedArtists = artists.sortedBy { it.Name.lowercase() }
         var currentLetter: Char? = null
-        for (artist in artists) {
+        for (artist in sortedArtists) {
             val firstLetter = artist.Name.firstOrNull()?.uppercaseChar() ?: '#'
             val letter = if (firstLetter.isLetter()) firstLetter else '#'
 
