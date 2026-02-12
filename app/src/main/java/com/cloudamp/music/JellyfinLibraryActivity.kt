@@ -175,7 +175,7 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 showAlphabetSidebar(true)
                 hasLoadedContent = true
                 scrollToRandomArtist()
-                preloadAlbumsForArtistsWithoutImages()
+                preloadAllArtistAlbums()
                 return
             }
         }
@@ -255,7 +255,7 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 hasLoadedContent = true
                 showAlphabetSidebar(artists.isNotEmpty())
                 scrollToRandomArtist()
-                preloadAlbumsForArtistsWithoutImages()
+                preloadAllArtistAlbums()
 
                 if (artists.isEmpty()) {
                     showEmptyState("No music found in your Jellyfin library")
@@ -269,17 +269,17 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
         }
     }
 
-    private fun preloadAlbumsForArtistsWithoutImages() {
-        val artists = adapter.getArtistsWithoutImages()
-        if (artists.isEmpty()) return
+    private fun preloadAllArtistAlbums() {
+        val artistGroups = adapter.getAllArtistGroups()
+        if (artistGroups.isEmpty()) return
         scope.launch {
             val userId = authManager.getUserId() ?: return@launch
-            for (artist in artists) {
+            for ((representativeId, groupedIds) in artistGroups) {
                 try {
-                    val response = jellyfinClient.api.getArtistAlbums(userId, artist.Id)
+                    val response = jellyfinClient.api.getArtistAlbums(userId, groupedIds)
                     if (response.isSuccessful) {
                         val albums = response.body()?.Items ?: emptyList()
-                        adapter.preloadArtistAlbums(artist.Id, albums)
+                        adapter.preloadArtistAlbums(representativeId, albums)
                     }
                 } catch (_: Exception) { }
             }

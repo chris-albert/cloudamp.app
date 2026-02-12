@@ -266,6 +266,12 @@ class JellyfinLibraryAdapter(
             .map { it.item }
     }
 
+    fun getAllArtistGroups(): List<Pair<String, String>> {
+        return items.filterIsInstance<JellyfinLibraryItem.ArtistItem>()
+            .filter { it.albums.isEmpty() }
+            .map { it.item.Id to it.groupedArtistIds.joinToString(",") }
+    }
+
     fun preloadArtistAlbums(artistId: String, albums: List<JellyfinItem>) {
         val index = items.indexOfFirst { it is JellyfinLibraryItem.ArtistItem && it.item.Id == artistId }
         if (index >= 0) {
