@@ -169,10 +169,9 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
         // Try to load from cache first
         if (libraryCache.hasCache()) {
             val cachedArtists = libraryCache.getArtists()
-            val cachedPlaylists = libraryCache.getPlaylists()
 
             if (cachedArtists != null && cachedArtists.isNotEmpty()) {
-                adapter.setArtists(cachedArtists, cachedPlaylists ?: emptyList())
+                adapter.setArtists(cachedArtists, emptyList())
                 showAlphabetSidebar(true)
                 hasLoadedContent = true
                 preloadAlbumsForArtistsWithoutImages()
@@ -231,35 +230,21 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
             try {
                 val userId = authManager.getUserId() ?: return@launch
 
-                // Load artists and playlists in parallel
-                val artistsDeferred = async {
-                    jellyfinClient.api.getArtists(userId)
-                }
-                val playlistsDeferred = async {
-                    jellyfinClient.api.getPlaylists(userId)
-                }
+                val response = jellyfinClient.api.getArtists(userId)
 
-                val artistsResponse = artistsDeferred.await()
-                val playlistsResponse = playlistsDeferred.await()
-
-                val artists = if (artistsResponse.isSuccessful) {
-                    artistsResponse.body()?.Items ?: emptyList()
-                } else emptyList()
-
-                val playlists = if (playlistsResponse.isSuccessful) {
-                    playlistsResponse.body()?.Items ?: emptyList()
+                val artists = if (response.isSuccessful) {
+                    response.body()?.Items ?: emptyList()
                 } else emptyList()
 
                 // Save to cache
                 libraryCache.saveArtists(artists)
-                libraryCache.savePlaylists(playlists)
 
-                adapter.setArtists(artists, playlists)
+                adapter.setArtists(artists, emptyList())
                 hasLoadedContent = true
                 showAlphabetSidebar(artists.isNotEmpty())
                 preloadAlbumsForArtistsWithoutImages()
 
-                if (artists.isEmpty() && playlists.isEmpty()) {
+                if (artists.isEmpty()) {
                     showEmptyState("No music found in your Jellyfin library")
                 }
             } catch (e: Exception) {
@@ -413,6 +398,10 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
             }
             R.id.nav_jellyfin_library -> {
                 // Already here
+            }
+            R.id.nav_jellyfin_playlists -> {
+                startActivity(Intent(this, JellyfinPlaylistsActivity::class.java))
+                finish()
             }
             R.id.nav_saved_queues -> {
                 startActivity(Intent(this, SavedQueuesActivity::class.java))

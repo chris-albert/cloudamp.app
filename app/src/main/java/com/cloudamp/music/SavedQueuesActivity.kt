@@ -278,6 +278,10 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
                 startActivity(Intent(this, JellyfinLibraryActivity::class.java))
                 finish()
             }
+            R.id.nav_jellyfin_playlists -> {
+                startActivity(Intent(this, JellyfinPlaylistsActivity::class.java))
+                finish()
+            }
             R.id.nav_saved_queues -> {
                 // Already here
             }

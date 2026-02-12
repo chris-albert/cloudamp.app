@@ -31,6 +31,10 @@
                     android:id="@+id/nav_jellyfin_library"
                     android:icon="@drawable/ic_jellyfin"
                     android:title="Jellyfin Library" />
+                <item
+                    android:id="@+id/nav_jellyfin_playlists"
+                    android:icon="@drawable/ic_playlist"
+                    android:title="Jellyfin Playlists" />
             </group>
         </menu>
     </item>
