@@ -17,7 +17,10 @@ sealed class JellyfinLibraryItem {
         val item: JellyfinItem,
         var isExpanded: Boolean = false,
         var albums: List<JellyfinItem> = emptyList(),
-        var isLoadingAlbums: Boolean = false
+        var isLoadingAlbums: Boolean = false,
+        val groupedArtistIds: List<String> = emptyList(),
+        val displayName: String? = null,
+        val totalAlbumCount: Int = 0
     ) : JellyfinLibraryItem()
 
     data class AlbumItem(
@@ -40,7 +43,7 @@ sealed class JellyfinLibraryItem {
 
 class JellyfinLibraryAdapter(
     private val serverUrl: String,
-    private val onArtistExpand: (JellyfinItem, Int) -> Unit,
+    private val onArtistExpand: (JellyfinItem, List<String>, Int) -> Unit,
     private val onAlbumExpand: (JellyfinItem, String, Int) -> Unit,
     private val onTrackClick: (JellyfinItem, List<JellyfinItem>, Int) -> Unit,
     private val onPlaylistClick: (JellyfinItem) -> Unit
@@ -123,21 +126,61 @@ class JellyfinLibraryAdapter(
         rebuildItems(artists, playlists)
     }
 
+    private val collabSeparatorRegex = Regex(
+        """\s+(?:feat\.?|ft\.?|with|w/|w\.)\s+""",
+        RegexOption.IGNORE_CASE
+    )
+
+    private fun extractPrimaryName(name: String): String {
+        val match = collabSeparatorRegex.find(name) ?: return name
+        return name.substring(0, match.range.first).trim()
+    }
+
+    private fun groupArtists(artists: List<JellyfinItem>): List<JellyfinLibraryItem.ArtistItem> {
+        val groups = mutableMapOf<String, MutableList<JellyfinItem>>()
+        for (artist in artists) {
+            val primary = extractPrimaryName(artist.Name).lowercase()
+            groups.getOrPut(primary) { mutableListOf() }.add(artist)
+        }
+        return groups.map { (primaryKey, members) ->
+            val primaryName = extractPrimaryName(members.first().Name)
+            val representative = members.find { it.Name.lowercase() == primaryKey } ?: members.first()
+            val albumCount = members.sumOf { it.ChildCount ?: 0 }
+            JellyfinLibraryItem.ArtistItem(
+                item = representative,
+                groupedArtistIds = members.map { it.Id },
+                displayName = if (members.size > 1 || representative.Name != primaryName) primaryName else null,
+                totalAlbumCount = albumCount
+            )
+        }
+    }
+
     private fun rebuildItems(artists: List<JellyfinItem>, playlists: List<JellyfinItem>) {
         items.clear()
 
+        // Group collaboration artists under their primary artist
+        val groupedArtists = groupArtists(artists)
+
         // Sort artists purely alphabetically by display name and add section headers
-        val sortedArtists = artists.sortedBy { it.Name.lowercase() }
+        val sortedArtists = groupedArtists.sortedBy {
+            (it.displayName ?: it.item.Name).lowercase()
+        }
 
         // Group by first letter to get counts
-        val grouped = sortedArtists.groupBy { artist ->
-            val firstLetter = artist.Name.firstOrNull()?.uppercaseChar() ?: '#'
+        val grouped = sortedArtists.groupBy { artistItem ->
+            val name = artistItem.displayName ?: artistItem.item.Name
+            val firstLetter = name.firstOrNull()?.uppercaseChar() ?: '#'
             if (firstLetter.isLetter()) firstLetter else '#'
         }
 
+        if (sortedArtists.isNotEmpty()) {
+            items.add(JellyfinLibraryItem.HeaderItem("ARTISTS (${sortedArtists.size})"))
+        }
+
         var currentLetter: Char? = null
-        for (artist in sortedArtists) {
-            val firstLetter = artist.Name.firstOrNull()?.uppercaseChar() ?: '#'
+        for (artistItem in sortedArtists) {
+            val name = artistItem.displayName ?: artistItem.item.Name
+            val firstLetter = name.firstOrNull()?.uppercaseChar() ?: '#'
             val letter = if (firstLetter.isLetter()) firstLetter else '#'
 
             if (letter != currentLetter) {
@@ -145,7 +188,7 @@ class JellyfinLibraryAdapter(
                 val count = grouped[letter]?.size ?: 0
                 items.add(JellyfinLibraryItem.HeaderItem("$letter ($count)"))
             }
-            items.add(JellyfinLibraryItem.ArtistItem(artist))
+            items.add(artistItem)
         }
 
         // Add playlists under a "PLAYLISTS" header
@@ -213,7 +256,7 @@ class JellyfinLibraryAdapter(
             // Expand: trigger loading
             item.isExpanded = true
             notifyItemChanged(position)
-            onArtistExpand(item.item, position)
+            onArtistExpand(item.item, item.groupedArtistIds, position)
         }
     }
 
@@ -221,6 +264,12 @@ class JellyfinLibraryAdapter(
         return items.filterIsInstance<JellyfinLibraryItem.ArtistItem>()
             .filter { !it.item.hasPrimaryImage() && it.albums.isEmpty() }
             .map { it.item }
+    }
+
+    fun getAllArtistGroups(): List<Pair<String, String>> {
+        return items.filterIsInstance<JellyfinLibraryItem.ArtistItem>()
+            .filter { it.albums.isEmpty() }
+            .map { it.item.Id to it.groupedArtistIds.joinToString(",") }
     }
 
     fun preloadArtistAlbums(artistId: String, albums: List<JellyfinItem>) {
@@ -320,13 +369,22 @@ class JellyfinLibraryAdapter(
         private val expandIcon: TextView = itemView.findViewById(R.id.expandIcon)
 
         fun bind(item: JellyfinLibraryItem.ArtistItem) {
-            nameTextView.text = item.item.Name
+            val name = item.displayName ?: item.item.Name
+            nameTextView.text = name
             expandIcon.text = if (item.isExpanded) "▼" else "▶"
 
-            // Show album count when albums have been loaded
-            if (item.albums.isNotEmpty()) {
-                val count = item.albums.size
-                subtitleTextView.text = "$count Album${if (count != 1) "s" else ""}"
+            // Show album count (from loaded albums, or ChildCount from API), plus collab count
+            val collabCount = item.groupedArtistIds.size - 1
+            val albumCount = if (item.albums.isNotEmpty()) item.albums.size else item.totalAlbumCount
+            val collabSuffix = if (collabCount > 0) {
+                " · +$collabCount collab${if (collabCount != 1) "s" else ""}"
+            } else ""
+
+            if (albumCount > 0) {
+                subtitleTextView.text = "$albumCount Album${if (albumCount != 1) "s" else ""}$collabSuffix"
+                subtitleTextView.visibility = View.VISIBLE
+            } else if (collabCount > 0) {
+                subtitleTextView.text = "+$collabCount collab${if (collabCount != 1) "s" else ""}"
                 subtitleTextView.visibility = View.VISIBLE
             } else {
                 subtitleTextView.visibility = View.GONE
@@ -347,7 +405,7 @@ class JellyfinLibraryAdapter(
             } else {
                 Glide.with(itemView.context).clear(imageView)
                 imageView.setImageDrawable(null)
-                letterAvatar.text = item.item.Name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+                letterAvatar.text = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
                 letterAvatar.visibility = View.VISIBLE
             }
 
