@@ -110,8 +110,8 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
 
         adapter = JellyfinLibraryAdapter(
             serverUrl = serverUrl,
-            onArtistExpand = { artist, position ->
-                loadArtistAlbums(artist, position)
+            onArtistExpand = { artist, artistIds, position ->
+                loadArtistAlbums(artistIds, position)
             },
             onAlbumExpand = { album, artistId, position ->
                 loadAlbumTracks(album, position)
@@ -286,11 +286,11 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
         }
     }
 
-    private fun loadArtistAlbums(artist: JellyfinItem, position: Int) {
+    private fun loadArtistAlbums(artistIds: List<String>, position: Int) {
         scope.launch {
             try {
                 val userId = authManager.getUserId() ?: return@launch
-                val response = jellyfinClient.api.getArtistAlbums(userId, artist.Id)
+                val response = jellyfinClient.api.getArtistAlbums(userId, artistIds.joinToString(","))
 
                 if (response.isSuccessful) {
                     val albums = response.body()?.Items ?: emptyList()
