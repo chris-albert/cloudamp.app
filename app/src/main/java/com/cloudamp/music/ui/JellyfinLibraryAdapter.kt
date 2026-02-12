@@ -19,7 +19,8 @@ sealed class JellyfinLibraryItem {
         var albums: List<JellyfinItem> = emptyList(),
         var isLoadingAlbums: Boolean = false,
         val groupedArtistIds: List<String> = emptyList(),
-        val displayName: String? = null
+        val displayName: String? = null,
+        val totalAlbumCount: Int = 0
     ) : JellyfinLibraryItem()
 
     data class AlbumItem(
@@ -144,10 +145,12 @@ class JellyfinLibraryAdapter(
         return groups.map { (primaryKey, members) ->
             val primaryName = extractPrimaryName(members.first().Name)
             val representative = members.find { it.Name.lowercase() == primaryKey } ?: members.first()
+            val albumCount = members.sumOf { it.ChildCount ?: 0 }
             JellyfinLibraryItem.ArtistItem(
                 item = representative,
                 groupedArtistIds = members.map { it.Id },
-                displayName = if (members.size > 1 || representative.Name != primaryName) primaryName else null
+                displayName = if (members.size > 1 || representative.Name != primaryName) primaryName else null,
+                totalAlbumCount = albumCount
             )
         }
     }
@@ -360,14 +363,15 @@ class JellyfinLibraryAdapter(
             nameTextView.text = name
             expandIcon.text = if (item.isExpanded) "▼" else "▶"
 
-            // Show album count when albums have been loaded, plus collab count
+            // Show album count (from loaded albums, or ChildCount from API), plus collab count
             val collabCount = item.groupedArtistIds.size - 1
-            if (item.albums.isNotEmpty()) {
-                val count = item.albums.size
-                val albumText = "$count Album${if (count != 1) "s" else ""}"
-                subtitleTextView.text = if (collabCount > 0) {
-                    "$albumText · +$collabCount collab${if (collabCount != 1) "s" else ""}"
-                } else albumText
+            val albumCount = if (item.albums.isNotEmpty()) item.albums.size else item.totalAlbumCount
+            val collabSuffix = if (collabCount > 0) {
+                " · +$collabCount collab${if (collabCount != 1) "s" else ""}"
+            } else ""
+
+            if (albumCount > 0) {
+                subtitleTextView.text = "$albumCount Album${if (albumCount != 1) "s" else ""}$collabSuffix"
                 subtitleTextView.visibility = View.VISIBLE
             } else if (collabCount > 0) {
                 subtitleTextView.text = "+$collabCount collab${if (collabCount != 1) "s" else ""}"

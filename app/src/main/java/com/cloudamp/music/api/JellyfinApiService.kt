@@ -22,7 +22,7 @@ interface JellyfinApiService {
         @Query("SortBy") sortBy: String = "SortName",
         @Query("SortOrder") sortOrder: String = "Ascending",
         @Query("Recursive") recursive: Boolean = true,
-        @Query("Fields") fields: String = "PrimaryImageAspectRatio,SortName",
+        @Query("Fields") fields: String = "PrimaryImageAspectRatio,SortName,ChildCount",
         @Query("StartIndex") startIndex: Int = 0,
         @Query("Limit") limit: Int = 500
     ): Response<JellyfinItemsResponse>
