@@ -13,18 +13,18 @@ import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.cloudamp.music.api.Playlist
-import com.cloudamp.music.api.SpotifyApiClient
-import com.cloudamp.music.models.Track
-import com.cloudamp.music.playback.PlaybackManager
-import com.cloudamp.music.ui.PlaylistsAdapter
+import com.cloudamp.music.api.JellyfinApiClient
+import com.cloudamp.music.api.JellyfinItem
+import com.cloudamp.music.auth.JellyfinAuthManager
+import com.cloudamp.music.playback.JellyfinPlaybackManager
+import com.cloudamp.music.ui.JellyfinPlaylistsAdapter
 import com.google.android.material.navigation.NavigationView
 import kotlinx.coroutines.*
 
-class PlaylistsActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelectedListener {
+class JellyfinPlaylistsActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelectedListener {
 
-    private lateinit var spotifyClient: SpotifyApiClient
-    private lateinit var playbackManager: PlaybackManager
+    private lateinit var jellyfinClient: JellyfinApiClient
+    private lateinit var authManager: JellyfinAuthManager
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private lateinit var drawerLayout: DrawerLayout
@@ -32,15 +32,15 @@ class PlaylistsActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
     private lateinit var toggle: ActionBarDrawerToggle
 
     private lateinit var playlistsRecyclerView: RecyclerView
-    private lateinit var playlistsAdapter: PlaylistsAdapter
+    private lateinit var playlistsAdapter: JellyfinPlaylistsAdapter
     private lateinit var loadingContainer: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_playlists)
+        setContentView(R.layout.activity_jellyfin_playlists)
 
-        spotifyClient = SpotifyApiClient.getInstance(this)
-        playbackManager = PlaybackManager.getInstance(this)
+        jellyfinClient = JellyfinApiClient.getInstance(this)
+        authManager = JellyfinAuthManager(this)
 
         setupDrawer()
         setupRecyclerView()
@@ -64,7 +64,7 @@ class PlaylistsActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
         toggle.syncState()
 
         navigationView.setNavigationItemSelectedListener(this)
-        navigationView.setCheckedItem(R.id.nav_playlists)
+        navigationView.setCheckedItem(R.id.nav_jellyfin_playlists)
     }
 
     private fun setupRecyclerView() {
@@ -72,7 +72,10 @@ class PlaylistsActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
         loadingContainer = findViewById(R.id.loadingContainer)
         playlistsRecyclerView.layoutManager = LinearLayoutManager(this)
 
-        playlistsAdapter = PlaylistsAdapter(
+        val serverUrl = authManager.getServerUrl()?.trimEnd('/') ?: ""
+
+        playlistsAdapter = JellyfinPlaylistsAdapter(
+            serverUrl = serverUrl,
             onPlaylistClick = { playlist, position ->
                 loadPlaylistTracks(playlist, position)
             },
@@ -92,36 +95,27 @@ class PlaylistsActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
         showLoading(true)
         scope.launch {
             try {
-                val allPlaylists = mutableListOf<Playlist>()
-                var offset = 0
-                val limit = 50
+                val userId = authManager.getUserId() ?: return@launch
+                val response = jellyfinClient.api.getPlaylists(userId)
 
-                do {
-                    val response = spotifyClient.api.getMyPlaylists(limit = limit, offset = offset)
-                    if (response.isSuccessful) {
-                        val playlists = response.body()?.items ?: emptyList()
-                        allPlaylists.addAll(playlists)
-                        offset += limit
-                        if (playlists.size < limit) break
-                    } else {
-                        handleApiError(response.code())
-                        break
+                if (response.isSuccessful) {
+                    val playlists = response.body()?.Items ?: emptyList()
+                    playlistsAdapter.setPlaylists(playlists)
+
+                    if (playlists.isEmpty()) {
+                        Toast.makeText(
+                            this@JellyfinPlaylistsActivity,
+                            "No playlists found",
+                            Toast.LENGTH_LONG
+                        ).show()
                     }
-                } while (true)
-
-                playlistsAdapter.setPlaylists(allPlaylists)
-
-                if (allPlaylists.isEmpty()) {
-                    Toast.makeText(
-                        this@PlaylistsActivity,
-                        "No playlists found",
-                        Toast.LENGTH_LONG
-                    ).show()
+                } else {
+                    handleApiError(response.code())
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
                 Toast.makeText(
-                    this@PlaylistsActivity,
+                    this@JellyfinPlaylistsActivity,
                     "Error loading playlists: ${e.message}",
                     Toast.LENGTH_LONG
                 ).show()
@@ -131,14 +125,14 @@ class PlaylistsActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
         }
     }
 
-    private fun loadPlaylistTracks(playlist: Playlist, position: Int) {
+    private fun loadPlaylistTracks(playlist: JellyfinItem, position: Int) {
         scope.launch {
             try {
-                val response = spotifyClient.api.getPlaylistTracks(playlist.id)
+                val userId = authManager.getUserId() ?: return@launch
+                val response = jellyfinClient.api.getPlaylistItems(playlist.Id, userId)
+
                 if (response.isSuccessful) {
-                    val tracks = response.body()?.items
-                        ?.mapNotNull { it.track }
-                        ?: emptyList()
+                    val tracks = response.body()?.Items ?: emptyList()
                     playlistsAdapter.setPlaylistTracks(position, tracks)
                 } else {
                     handleApiError(response.code())
@@ -146,7 +140,7 @@ class PlaylistsActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
             } catch (e: Exception) {
                 e.printStackTrace()
                 Toast.makeText(
-                    this@PlaylistsActivity,
+                    this@JellyfinPlaylistsActivity,
                     "Error loading tracks: ${e.message}",
                     Toast.LENGTH_SHORT
                 ).show()
@@ -154,16 +148,19 @@ class PlaylistsActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
         }
     }
 
-    private fun playTrackWithQueue(track: Track, allTracks: List<Track>, trackPosition: Int) {
-        val tracksToPlay = allTracks.drop(trackPosition)
-        playbackManager.playTracks(tracksToPlay, 0)
-        Toast.makeText(this, "Playing: ${track.name} (+${tracksToPlay.size - 1} in queue)", Toast.LENGTH_SHORT).show()
+    private fun playTrackWithQueue(track: JellyfinItem, allTracks: List<JellyfinItem>, trackPosition: Int) {
+        val jellyfinPlayback = JellyfinPlaybackManager.getInstance(this)
+        val queueItems = allTracks.subList(trackPosition, allTracks.size) +
+                allTracks.subList(0, trackPosition)
+        jellyfinPlayback.playItems(queueItems, 0)
+        Toast.makeText(this, "Playing: ${track.Name}", Toast.LENGTH_SHORT).show()
+        startActivity(Intent(this, NowPlayingActivity::class.java))
     }
 
     private fun handleApiError(code: Int) {
         val errorMsg = when (code) {
-            401 -> "Token expired. Please re-login in Settings."
-            403 -> "Insufficient permissions. Please re-login in Settings."
+            401 -> "Jellyfin authentication failed. Check your credentials in Settings."
+            403 -> "Insufficient permissions."
             404 -> "Content not found."
             else -> "Error loading content (code: $code)"
         }
@@ -179,7 +176,8 @@ class PlaylistsActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
                 finish()
             }
             R.id.nav_playlists -> {
-                // Already here
+                startActivity(Intent(this, PlaylistsActivity::class.java))
+                finish()
             }
             R.id.nav_gdrive_library -> {
                 startActivity(Intent(this, GDriveLibraryActivity::class.java))
@@ -190,8 +188,7 @@ class PlaylistsActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
                 finish()
             }
             R.id.nav_jellyfin_playlists -> {
-                startActivity(Intent(this, JellyfinPlaylistsActivity::class.java))
-                finish()
+                // Already here
             }
             R.id.nav_saved_queues -> {
                 startActivity(Intent(this, SavedQueuesActivity::class.java))
@@ -221,7 +218,6 @@ class PlaylistsActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.main_menu, menu)
-        // Hide search in playlists view for now
         menu.findItem(R.id.action_search)?.isVisible = false
         return true
     }

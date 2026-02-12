@@ -61,6 +61,12 @@
             android:exported="false"
             android:parentActivityName=".MainActivity" />
 
+        <!-- Jellyfin Playlists Activity -->
+        <activity
+            android:name=".JellyfinPlaylistsActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity" />
+
         <!-- Saved Queues Activity -->
         <activity
             android:name=".SavedQueuesActivity"

@@ -101,6 +101,9 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             R.id.nav_jellyfin_library -> {
                 startActivity(Intent(this, JellyfinLibraryActivity::class.java))
             }
+            R.id.nav_jellyfin_playlists -> {
+                startActivity(Intent(this, JellyfinPlaylistsActivity::class.java))
+            }
             R.id.nav_saved_queues -> {
                 startActivity(Intent(this, SavedQueuesActivity::class.java))
             }
@@ -185,6 +188,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                 libraryAdapter.setArtists(cachedArtists)
                 showAlphabetSidebar(true)
                 hasLoadedContent = true
+                preloadAlbumsForArtistsWithoutImages()
                 return
             }
         }
@@ -231,6 +235,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                     libraryAdapter.setArtists(artists)
                     showAlphabetSidebar(artists.isNotEmpty())
                     hasLoadedContent = true
+                    preloadAlbumsForArtistsWithoutImages()
 
                     if (artists.isEmpty()) {
                         Toast.makeText(
@@ -297,6 +302,22 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             e.printStackTrace()
         }
         return savedIds
+    }
+
+    private fun preloadAlbumsForArtistsWithoutImages() {
+        val artists = libraryAdapter.getArtistsWithoutImages()
+        if (artists.isEmpty()) return
+        scope.launch {
+            for (artist in artists) {
+                try {
+                    val response = spotifyClient.api.getArtistAlbums(artist.id, limit = 50)
+                    if (response.isSuccessful) {
+                        val albums = response.body()?.items ?: emptyList()
+                        libraryAdapter.preloadArtistAlbums(artist.id, albums)
+                    }
+                } catch (_: Exception) { }
+            }
+        }
     }
 
     private fun loadArtistAlbums(artist: Artist, position: Int) {

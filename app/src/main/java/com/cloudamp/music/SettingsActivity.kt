@@ -17,6 +17,7 @@ import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.auth.GoogleDriveAuthManager
 import com.cloudamp.music.auth.JellyfinAuthManager
 import com.cloudamp.music.auth.SpotifyAuthManager
+import com.cloudamp.music.cache.JellyfinLibraryCache
 import com.cloudamp.music.cache.LibraryCache
 import kotlinx.coroutines.*
 
@@ -44,6 +45,11 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var lastLoadedText: TextView
     private lateinit var reloadLibraryButton: Button
 
+    // Jellyfin library fields
+    private lateinit var jellyfinLibraryCache: JellyfinLibraryCache
+    private lateinit var jellyfinLastLoadedText: TextView
+    private lateinit var reloadJellyfinLibraryButton: Button
+
     // Jellyfin fields
     private lateinit var jellyfinAuthManager: JellyfinAuthManager
     private lateinit var jellyfinServerUrlEditText: EditText
@@ -66,6 +72,7 @@ class SettingsActivity : AppCompatActivity() {
 
     companion object {
         var onLibraryReloadRequested: (() -> Unit)? = null
+        var onJellyfinLibraryReloadRequested: (() -> Unit)? = null
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -160,6 +167,19 @@ class SettingsActivity : AppCompatActivity() {
         reloadLibraryButton.setOnClickListener {
             onLibraryReloadRequested?.invoke()
             Toast.makeText(this, "Library will reload", Toast.LENGTH_SHORT).show()
+            finish()
+        }
+
+        // Jellyfin library views
+        jellyfinLibraryCache = JellyfinLibraryCache.getInstance(this)
+        jellyfinLastLoadedText = findViewById(R.id.jellyfinLastLoadedText)
+        reloadJellyfinLibraryButton = findViewById(R.id.reloadJellyfinLibraryButton)
+
+        updateJellyfinLastLoadedDisplay()
+
+        reloadJellyfinLibraryButton.setOnClickListener {
+            onJellyfinLibraryReloadRequested?.invoke()
+            Toast.makeText(this, "Jellyfin library will reload", Toast.LENGTH_SHORT).show()
             finish()
         }
 
@@ -380,6 +400,15 @@ class SettingsActivity : AppCompatActivity() {
     private fun updateLastLoadedDisplay() {
         val lastLoaded = libraryCache.getLastLoadedFormatted()
         lastLoadedText.text = if (lastLoaded != null) {
+            "Last loaded: $lastLoaded"
+        } else {
+            "Last loaded: Never"
+        }
+    }
+
+    private fun updateJellyfinLastLoadedDisplay() {
+        val lastLoaded = jellyfinLibraryCache.getLastLoadedFormatted()
+        jellyfinLastLoadedText.text = if (lastLoaded != null) {
             "Last loaded: $lastLoaded"
         } else {
             "Last loaded: Never"

@@ -21,24 +21,59 @@
         android:textSize="12sp"
         android:fontFamily="monospace"/>
 
-    <ImageView
-        android:id="@+id/artistImageView"
+    <FrameLayout
         android:layout_width="48dp"
         android:layout_height="48dp"
-        android:layout_marginStart="8dp"
-        android:scaleType="centerCrop"
-        android:contentDescription="Artist image"/>
+        android:layout_marginStart="8dp">
 
-    <TextView
-        android:id="@+id/artistNameTextView"
+        <ImageView
+            android:id="@+id/artistImageView"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:scaleType="centerCrop"
+            android:contentDescription="Artist image"/>
+
+        <TextView
+            android:id="@+id/artistLetterAvatar"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:gravity="center"
+            android:background="@drawable/bg_letter_avatar"
+            android:textColor="#000000"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace"
+            android:visibility="gone"/>
+    </FrameLayout>
+
+    <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:layout_gravity="center_vertical"
+        android:orientation="vertical"
         android:layout_marginStart="12dp"
-        android:textColor="@color/winamp_text"
-        android:textSize="14sp"
-        android:fontFamily="monospace"
-        android:maxLines="2"
-        android:ellipsize="end"/>
+        android:layout_gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/artistNameTextView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/winamp_text"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:maxLines="2"
+            android:ellipsize="end"/>
+
+        <TextView
+            android:id="@+id/artistSubtitleTextView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/winamp_display_text"
+            android:textSize="10sp"
+            android:fontFamily="monospace"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:layout_marginTop="2dp"
+            android:visibility="gone"/>
+    </LinearLayout>
 </LinearLayout>
