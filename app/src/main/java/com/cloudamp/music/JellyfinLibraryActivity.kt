@@ -174,6 +174,7 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 adapter.setArtists(cachedArtists, emptyList())
                 showAlphabetSidebar(true)
                 hasLoadedContent = true
+                scrollToRandomArtist()
                 preloadAlbumsForArtistsWithoutImages()
                 return
             }
@@ -219,6 +220,17 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
         }
     }
 
+    private fun scrollToRandomArtist() {
+        val artistCount = adapter.getArtistCount()
+        if (artistCount <= 0) return
+        val randomIndex = (0 until artistCount).random()
+        val position = adapter.getArtistPosition(randomIndex)
+        if (position >= 0) {
+            (recyclerView.layoutManager as LinearLayoutManager)
+                .scrollToPositionWithOffset(position, 0)
+        }
+    }
+
     // ── Data Loading ────────────────────────────────────────────────────
 
     private fun loadRoot() {
@@ -242,6 +254,7 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 adapter.setArtists(artists, emptyList())
                 hasLoadedContent = true
                 showAlphabetSidebar(artists.isNotEmpty())
+                scrollToRandomArtist()
                 preloadAlbumsForArtistsWithoutImages()
 
                 if (artists.isEmpty()) {
@@ -384,6 +397,7 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
         when (item.itemId) {
             R.id.nav_library -> {
                 val intent = Intent(this, MainActivity::class.java)
+                intent.putExtra("from_nav", true)
                 intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 startActivity(intent)
                 finish()

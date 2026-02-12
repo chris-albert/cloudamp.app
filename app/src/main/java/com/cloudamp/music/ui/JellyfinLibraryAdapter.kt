@@ -101,6 +101,21 @@ class JellyfinLibraryAdapter(
         return items.indexOfFirst { it is JellyfinLibraryItem.HeaderItem && it.title == letter }
     }
 
+    fun getArtistCount(): Int {
+        return items.count { it is JellyfinLibraryItem.ArtistItem }
+    }
+
+    fun getArtistPosition(artistIndex: Int): Int {
+        var count = 0
+        for (i in items.indices) {
+            if (items[i] is JellyfinLibraryItem.ArtistItem) {
+                if (count == artistIndex) return i
+                count++
+            }
+        }
+        return -1
+    }
+
     fun setArtists(artists: List<JellyfinItem>, playlists: List<JellyfinItem>) {
         allArtists = artists
         allPlaylists = playlists
