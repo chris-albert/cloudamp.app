@@ -333,10 +333,18 @@ class ExpandableLibraryAdapter(
                 subtitleTextView.visibility = View.GONE
             }
 
-            val imageUrl = item.artist.images?.firstOrNull()?.url
-            if (imageUrl != null) {
+            // Fallback chain: artist image → latest album art → letter avatar
+            val artistImageUrl = item.artist.images?.firstOrNull()?.url
+            val albumImageUrl = if (artistImageUrl == null) {
+                item.albums
+                    .sortedByDescending { it.releaseDate ?: "" }
+                    .firstNotNullOfOrNull { it.images?.firstOrNull()?.url }
+            } else null
+            val displayImageUrl = artistImageUrl ?: albumImageUrl
+
+            if (displayImageUrl != null) {
                 Glide.with(itemView.context)
-                    .load(imageUrl)
+                    .load(displayImageUrl)
                     .placeholder(R.drawable.ic_artist_placeholder)
                     .into(imageView)
                 letterAvatar.visibility = View.GONE

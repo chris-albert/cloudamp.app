@@ -293,9 +293,17 @@ class JellyfinLibraryAdapter(
                 subtitleTextView.visibility = View.GONE
             }
 
-            val imageUrl = item.item.getPrimaryImageUrl(serverUrl)
-            if (imageUrl != null) {
-                Glide.with(itemView.context).load(imageUrl).into(imageView)
+            // Fallback chain: artist image → latest album art → letter avatar
+            val artistImageUrl = item.item.getPrimaryImageUrl(serverUrl)
+            val albumImageUrl = if (artistImageUrl == null) {
+                item.albums
+                    .sortedByDescending { it.Year ?: 0 }
+                    .firstNotNullOfOrNull { it.getPrimaryImageUrl(serverUrl) }
+            } else null
+            val displayImageUrl = artistImageUrl ?: albumImageUrl
+
+            if (displayImageUrl != null) {
+                Glide.with(itemView.context).load(displayImageUrl).into(imageView)
                 letterAvatar.visibility = View.GONE
             } else {
                 Glide.with(itemView.context).clear(imageView)
