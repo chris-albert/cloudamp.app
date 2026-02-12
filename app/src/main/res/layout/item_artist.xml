@@ -21,13 +21,30 @@
         android:textSize="12sp"
         android:fontFamily="monospace"/>
 
-    <ImageView
-        android:id="@+id/artistImageView"
+    <FrameLayout
         android:layout_width="48dp"
         android:layout_height="48dp"
-        android:layout_marginStart="8dp"
-        android:scaleType="centerCrop"
-        android:contentDescription="Artist image"/>
+        android:layout_marginStart="8dp">
+
+        <ImageView
+            android:id="@+id/artistImageView"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:scaleType="centerCrop"
+            android:contentDescription="Artist image"/>
+
+        <TextView
+            android:id="@+id/artistLetterAvatar"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:gravity="center"
+            android:background="@drawable/bg_letter_avatar"
+            android:textColor="#000000"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace"
+            android:visibility="gone"/>
+    </FrameLayout>
 
     <LinearLayout
         android:layout_width="0dp"

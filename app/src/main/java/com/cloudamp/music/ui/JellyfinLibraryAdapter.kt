@@ -277,6 +277,7 @@ class JellyfinLibraryAdapter(
         private val nameTextView: TextView = itemView.findViewById(R.id.artistNameTextView)
         private val subtitleTextView: TextView = itemView.findViewById(R.id.artistSubtitleTextView)
         private val imageView: ImageView = itemView.findViewById(R.id.artistImageView)
+        private val letterAvatar: TextView = itemView.findViewById(R.id.artistLetterAvatar)
         private val expandIcon: TextView = itemView.findViewById(R.id.expandIcon)
 
         fun bind(item: JellyfinLibraryItem.ArtistItem) {
@@ -295,9 +296,12 @@ class JellyfinLibraryAdapter(
             val imageUrl = item.item.getPrimaryImageUrl(serverUrl)
             if (imageUrl != null) {
                 Glide.with(itemView.context).load(imageUrl).into(imageView)
+                letterAvatar.visibility = View.GONE
             } else {
                 Glide.with(itemView.context).clear(imageView)
-                imageView.setImageResource(R.drawable.ic_artist_placeholder)
+                imageView.setImageDrawable(null)
+                letterAvatar.text = item.item.Name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+                letterAvatar.visibility = View.VISIBLE
             }
 
             itemView.setOnClickListener {
