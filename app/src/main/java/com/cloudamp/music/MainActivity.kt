@@ -56,6 +56,16 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Launch Jellyfin Library as the default screen on fresh app start
+        if (!intent.hasExtra("from_nav")) {
+            val jellyfinIntent = Intent(this, JellyfinLibraryActivity::class.java)
+            jellyfinIntent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            startActivity(jellyfinIntent)
+            finish()
+            return
+        }
+
         setContentView(R.layout.activity_main)
 
         spotifyClient = SpotifyApiClient.getInstance(this)

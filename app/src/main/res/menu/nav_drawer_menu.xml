@@ -1,5 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:title="Jellyfin">
+        <menu>
+            <group android:checkableBehavior="single">
+                <item
+                    android:id="@+id/nav_jellyfin_library"
+                    android:icon="@drawable/ic_jellyfin"
+                    android:title="Jellyfin Library" />
+                <item
+                    android:id="@+id/nav_jellyfin_playlists"
+                    android:icon="@drawable/ic_playlist"
+                    android:title="Jellyfin Playlists" />
+            </group>
+        </menu>
+    </item>
     <item android:title="Spotify">
         <menu>
             <group android:checkableBehavior="single">
@@ -21,20 +35,6 @@
                     android:id="@+id/nav_gdrive_library"
                     android:icon="@drawable/ic_gdrive"
                     android:title="GDrive Library" />
-            </group>
-        </menu>
-    </item>
-    <item android:title="Jellyfin">
-        <menu>
-            <group android:checkableBehavior="single">
-                <item
-                    android:id="@+id/nav_jellyfin_library"
-                    android:icon="@drawable/ic_jellyfin"
-                    android:title="Jellyfin Library" />
-                <item
-                    android:id="@+id/nav_jellyfin_playlists"
-                    android:icon="@drawable/ic_playlist"
-                    android:title="Jellyfin Playlists" />
             </group>
         </menu>
     </item>

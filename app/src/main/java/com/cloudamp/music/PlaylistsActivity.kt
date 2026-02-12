@@ -174,6 +174,7 @@ class PlaylistsActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
         when (item.itemId) {
             R.id.nav_library -> {
                 val intent = Intent(this, MainActivity::class.java)
+                intent.putExtra("from_nav", true)
                 intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 startActivity(intent)
                 finish()
