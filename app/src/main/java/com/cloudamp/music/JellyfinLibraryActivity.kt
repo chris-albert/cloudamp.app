@@ -26,6 +26,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.cloudamp.music.api.JellyfinApiClient
 import com.cloudamp.music.api.JellyfinItem
 import com.cloudamp.music.auth.JellyfinAuthManager
+import com.cloudamp.music.cache.JellyfinLibraryCache
 import com.cloudamp.music.playback.JellyfinPlaybackManager
 import com.cloudamp.music.ui.AlphabetSidebarView
 import com.cloudamp.music.ui.JellyfinLibraryAdapter
@@ -37,6 +38,7 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
 
     private lateinit var jellyfinClient: JellyfinApiClient
     private lateinit var authManager: JellyfinAuthManager
+    private lateinit var libraryCache: JellyfinLibraryCache
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private lateinit var drawerLayout: DrawerLayout
@@ -68,6 +70,7 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
 
         jellyfinClient = JellyfinApiClient.getInstance(this)
         authManager = JellyfinAuthManager(this)
+        libraryCache = JellyfinLibraryCache.getInstance(this)
 
         setupDrawer()
         setupRecyclerView()
@@ -145,6 +148,9 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
 
     override fun onResume() {
         super.onResume()
+        SettingsActivity.onJellyfinLibraryReloadRequested = {
+            reloadLibrary()
+        }
         checkAuthAndLoad()
     }
 
@@ -154,9 +160,36 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
         } else {
             hideEmptyState()
             if (!hasLoadedContent && currentPlaylist == null) {
-                loadRoot()
+                loadMyLibrary()
             }
         }
+    }
+
+    private fun loadMyLibrary() {
+        // Try to load from cache first
+        if (libraryCache.hasCache()) {
+            val cachedArtists = libraryCache.getArtists()
+            val cachedPlaylists = libraryCache.getPlaylists()
+
+            if (cachedArtists != null && cachedArtists.isNotEmpty()) {
+                adapter.setArtists(cachedArtists, cachedPlaylists ?: emptyList())
+                showAlphabetSidebar(true)
+                hasLoadedContent = true
+                preloadAlbumsForArtistsWithoutImages()
+                return
+            }
+        }
+
+        // No cache, load from API
+        loadRoot()
+    }
+
+    fun reloadLibrary() {
+        libraryCache.clearCache()
+        hasLoadedContent = false
+        adapter.setArtists(emptyList(), emptyList())
+        showAlphabetSidebar(false)
+        loadRoot()
     }
 
     private fun showEmptyState(message: String) {
@@ -216,6 +249,10 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 val playlists = if (playlistsResponse.isSuccessful) {
                     playlistsResponse.body()?.Items ?: emptyList()
                 } else emptyList()
+
+                // Save to cache
+                libraryCache.saveArtists(artists)
+                libraryCache.savePlaylists(playlists)
 
                 adapter.setArtists(artists, playlists)
                 hasLoadedContent = true
