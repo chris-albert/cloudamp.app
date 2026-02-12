@@ -30,6 +30,7 @@ import com.cloudamp.music.api.JellyfinApiClient
 import com.cloudamp.music.api.JellyfinItem
 import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.auth.JellyfinAuthManager
+import com.cloudamp.music.cache.JellyfinLibraryCache
 import com.cloudamp.music.cache.LibraryCache
 import com.cloudamp.music.cache.SavedQueuesManager
 import com.cloudamp.music.api.Playlist
@@ -50,6 +51,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     private lateinit var jellyfinClient: JellyfinApiClient
     private lateinit var jellyfinAuthManager: JellyfinAuthManager
     private lateinit var libraryCache: LibraryCache
+    private lateinit var jellyfinLibraryCache: JellyfinLibraryCache
     private lateinit var savedQueuesManager: SavedQueuesManager
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var currentAlbumArt: Bitmap? = null
@@ -106,6 +108,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         jellyfinClient = JellyfinApiClient.getInstance(this)
         jellyfinAuthManager = JellyfinAuthManager(this)
         libraryCache = LibraryCache.getInstance(this)
+        jellyfinLibraryCache = JellyfinLibraryCache.getInstance(this)
         savedQueuesManager = SavedQueuesManager.getInstance(this)
 
         // Create MediaSession
@@ -1119,35 +1122,28 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 return
             }
 
-            val userId = jellyfinAuthManager.getUserId() ?: return
-            val response = jellyfinClient.api.getArtists(userId)
-            if (response.isSuccessful) {
-                val artists = response.body()?.Items ?: emptyList()
-                val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
-                val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_artist_placeholder}"
-
-                for (artist in artists) {
-                    var imageUrl = artist.getPrimaryImageUrl(serverUrl)
-
-                    // Fallback: use latest album art if artist has no image
-                    if (imageUrl == null) {
-                        try {
-                            val albumsResponse = jellyfinClient.api.getArtistAlbums(userId, artist.Id)
-                            if (albumsResponse.isSuccessful) {
-                                imageUrl = albumsResponse.body()?.Items
-                                    ?.sortedByDescending { it.Year ?: 0 }
-                                    ?.firstNotNullOfOrNull { it.getPrimaryImageUrl(serverUrl) }
-                            }
-                        } catch (_: Exception) { }
-                    }
-
-                    items.add(createBrowsableItem(
-                        "jellyfin_artist_${artist.Id}",
-                        artist.Name,
-                        "Artist",
-                        imageUrl ?: placeholderUri
-                    ))
+            // Use cache first, fall back to API
+            var artists = jellyfinLibraryCache.getArtists()
+            if (artists.isNullOrEmpty()) {
+                val userId = jellyfinAuthManager.getUserId() ?: return
+                val response = jellyfinClient.api.getArtists(userId)
+                if (response.isSuccessful) {
+                    artists = response.body()?.Items ?: emptyList()
+                    jellyfinLibraryCache.saveArtists(artists)
                 }
+            }
+
+            val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
+            val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_artist_placeholder}"
+
+            for (artist in artists ?: emptyList()) {
+                val imageUrl = artist.getPrimaryImageUrl(serverUrl)
+                items.add(createBrowsableItem(
+                    "jellyfin_artist_${artist.Id}",
+                    artist.Name,
+                    "Artist",
+                    imageUrl ?: placeholderUri
+                ))
             }
         } catch (e: Exception) {
             e.printStackTrace()
