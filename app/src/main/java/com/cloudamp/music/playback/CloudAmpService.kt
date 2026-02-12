@@ -80,6 +80,11 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         const val PLAYLISTS_ID = "playlists"
         const val GDRIVE_ID = "gdrive"
         const val JELLYFIN_ID = "jellyfin"
+        const val JELLYFIN_LIBRARY_ID = "jellyfin_library"
+        const val JELLYFIN_PLAYLISTS_ID = "jellyfin_playlists"
+        const val SPOTIFY_ID = "spotify"
+        const val SPOTIFY_LIBRARY_ID = "spotify_library"
+        const val SPOTIFY_PLAYLISTS_ID = "spotify_playlists"
         const val SAVED_QUEUES_ID = "saved_queues"
         const val SEARCH_ID = "search"
         const val CUSTOM_ACTION_SAVE_QUEUE = "save_queue"
@@ -532,10 +537,9 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             when (parentId) {
                 ROOT_ID -> {
                     // Root menu - main categories
-                    mediaItems.add(createBrowsableItem(LIBRARY_ID, "Library", "Your followed artists"))
-                    mediaItems.add(createBrowsableItem(PLAYLISTS_ID, "Playlists", "Your playlists"))
-                    mediaItems.add(createBrowsableItem(GDRIVE_ID, "Drive", "Browse your Drive music"))
                     mediaItems.add(createBrowsableItem(JELLYFIN_ID, "Jellyfin", "Browse your Jellyfin library"))
+                    mediaItems.add(createBrowsableItem(SPOTIFY_ID, "Spotify", "Browse your Spotify library"))
+                    mediaItems.add(createBrowsableItem(GDRIVE_ID, "Drive", "Browse your Drive music"))
                     mediaItems.add(createBrowsableItem(SAVED_QUEUES_ID, "Queues", "Resume where you left off"))
                 }
 
@@ -547,11 +551,16 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     loadTopArtists(mediaItems)
                 }
 
-                LIBRARY_ID -> {
+                SPOTIFY_ID -> {
+                    mediaItems.add(createBrowsableItem(SPOTIFY_LIBRARY_ID, "Library", "Your followed artists"))
+                    mediaItems.add(createBrowsableItem(SPOTIFY_PLAYLISTS_ID, "Playlists", "Your playlists"))
+                }
+
+                SPOTIFY_LIBRARY_ID, LIBRARY_ID -> {
                     loadTopArtists(mediaItems)
                 }
 
-                PLAYLISTS_ID -> {
+                SPOTIFY_PLAYLISTS_ID, PLAYLISTS_ID -> {
                     loadPlaylists(mediaItems)
                 }
 
@@ -564,7 +573,16 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 }
 
                 JELLYFIN_ID -> {
+                    mediaItems.add(createBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "Jellyfin artists"))
+                    mediaItems.add(createBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "Jellyfin playlists"))
+                }
+
+                JELLYFIN_LIBRARY_ID -> {
                     loadJellyfinArtists(mediaItems)
+                }
+
+                JELLYFIN_PLAYLISTS_ID -> {
+                    loadJellyfinPlaylists(mediaItems)
                 }
 
                 SAVED_QUEUES_ID -> {
@@ -1106,20 +1124,36 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         artist.getPrimaryImageUrl(serverUrl)
                     ))
                 }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 
-                // Also add playlists at the end
-                val playlistsResponse = jellyfinClient.api.getPlaylists(userId)
-                if (playlistsResponse.isSuccessful) {
-                    val playlists = playlistsResponse.body()?.Items ?: emptyList()
-                    for (playlist in playlists) {
-                        val countStr = if (playlist.ChildCount != null) "${playlist.ChildCount} tracks" else "Playlist"
-                        items.add(createBrowsableItem(
-                            "jellyfin_playlist_${playlist.Id}",
-                            playlist.Name,
-                            countStr,
-                            playlist.getPrimaryImageUrl(serverUrl)
-                        ))
-                    }
+    private suspend fun loadJellyfinPlaylists(items: MutableList<MediaBrowserCompat.MediaItem>) {
+        try {
+            if (!jellyfinAuthManager.isConfigured()) {
+                items.add(createBrowsableItem(
+                    "jellyfin_no_auth",
+                    "Connect Jellyfin",
+                    "Open CloudAmp app to configure"
+                ))
+                return
+            }
+
+            val userId = jellyfinAuthManager.getUserId() ?: return
+            val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
+            val playlistsResponse = jellyfinClient.api.getPlaylists(userId)
+            if (playlistsResponse.isSuccessful) {
+                val playlists = playlistsResponse.body()?.Items ?: emptyList()
+                for (playlist in playlists) {
+                    val countStr = if (playlist.ChildCount != null) "${playlist.ChildCount} tracks" else "Playlist"
+                    items.add(createBrowsableItem(
+                        "jellyfin_playlist_${playlist.Id}",
+                        playlist.Name,
+                        countStr,
+                        playlist.getPrimaryImageUrl(serverUrl)
+                    ))
                 }
             }
         } catch (e: Exception) {
