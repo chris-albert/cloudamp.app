@@ -166,7 +166,7 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
     }
 
     private fun loadMyLibrary() {
-        // Try to load from cache first
+        // Show cached data immediately if available
         if (libraryCache.hasCache()) {
             val cachedArtists = libraryCache.getArtists()
 
@@ -176,12 +176,11 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 hasLoadedContent = true
                 scrollToRandomArtist()
                 preloadAllArtistAlbums()
-                return
             }
         }
 
-        // No cache, load from API
-        loadRoot()
+        // Always refresh from API in the background
+        refreshFromApi()
     }
 
     fun reloadLibrary() {
@@ -236,7 +235,13 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
     private fun loadRoot() {
         currentPlaylist = null
         updatePath()
-        showLoading(true)
+        hasLoadedContent = false
+        refreshFromApi()
+    }
+
+    private fun refreshFromApi() {
+        val showSpinner = !hasLoadedContent
+        if (showSpinner) showLoading(true)
 
         scope.launch {
             try {
@@ -254,7 +259,9 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 adapter.setArtists(artists, emptyList())
                 hasLoadedContent = true
                 showAlphabetSidebar(artists.isNotEmpty())
-                scrollToRandomArtist()
+                if (showSpinner) {
+                    scrollToRandomArtist()
+                }
                 preloadAllArtistAlbums()
 
                 if (artists.isEmpty()) {
@@ -262,7 +269,9 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                Toast.makeText(this@JellyfinLibraryActivity, "Error loading library: ${e.message}", Toast.LENGTH_LONG).show()
+                if (!hasLoadedContent) {
+                    Toast.makeText(this@JellyfinLibraryActivity, "Error loading library: ${e.message}", Toast.LENGTH_LONG).show()
+                }
             } finally {
                 showLoading(false)
             }
