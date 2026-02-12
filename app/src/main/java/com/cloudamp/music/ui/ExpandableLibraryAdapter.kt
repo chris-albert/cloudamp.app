@@ -301,8 +301,21 @@ class ExpandableLibraryAdapter(
         }
     }
 
+    private fun formatDuration(ms: Long): String {
+        val totalSeconds = ms / 1000
+        val hours = totalSeconds / 3600
+        val minutes = (totalSeconds % 3600) / 60
+        val seconds = totalSeconds % 60
+        return if (hours > 0) {
+            String.format("%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            String.format("%d:%02d", minutes, seconds)
+        }
+    }
+
     inner class ArtistViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val nameTextView: TextView = itemView.findViewById(R.id.artistNameTextView)
+        private val subtitleTextView: TextView = itemView.findViewById(R.id.artistSubtitleTextView)
         private val imageView: ImageView = itemView.findViewById(R.id.artistImageView)
         private val expandIcon: TextView = itemView.findViewById(R.id.expandIcon)
 
@@ -310,11 +323,24 @@ class ExpandableLibraryAdapter(
             nameTextView.text = item.artist.name
             expandIcon.text = if (item.isExpanded) "▼" else "▶"
 
-            item.artist.images?.firstOrNull()?.url?.let { imageUrl ->
+            // Show album count when albums have been loaded
+            if (item.albums.isNotEmpty()) {
+                val count = item.albums.size
+                subtitleTextView.text = "$count Album${if (count != 1) "s" else ""}"
+                subtitleTextView.visibility = View.VISIBLE
+            } else {
+                subtitleTextView.visibility = View.GONE
+            }
+
+            val imageUrl = item.artist.images?.firstOrNull()?.url
+            if (imageUrl != null) {
                 Glide.with(itemView.context)
                     .load(imageUrl)
-                    .placeholder(R.drawable.ic_launcher_foreground)
+                    .placeholder(R.drawable.ic_artist_placeholder)
                     .into(imageView)
+            } else {
+                Glide.with(itemView.context).clear(imageView)
+                imageView.setImageResource(R.drawable.ic_artist_placeholder)
             }
 
             itemView.setOnClickListener {
@@ -341,7 +367,6 @@ class ExpandableLibraryAdapter(
 
         fun bind(item: LibraryItem.AlbumItem) {
             nameTextView.text = item.album.name
-            artistTextView.text = item.album.artists.joinToString(", ") { it.name }
             expandIcon.text = if (item.isExpanded) "▼" else "▶"
 
             // Format release date (extract year from YYYY-MM-DD or YYYY format)
@@ -349,16 +374,29 @@ class ExpandableLibraryAdapter(
                 if (date.length >= 4) date.substring(0, 4) else date
             } ?: ""
 
-            // Display track count
-            trackCountTextView.text = item.album.totalTracks?.let { count ->
-                "$count Track${if (count != 1) "s" else ""}"
-            } ?: ""
+            // Display track count and total duration
+            val trackCount = item.album.totalTracks
+            val trackLabel = if (trackCount != null) {
+                "$trackCount Track${if (trackCount != 1) "s" else ""}"
+            } else ""
 
-            item.album.images?.firstOrNull()?.url?.let { imageUrl ->
+            if (item.tracks.isNotEmpty()) {
+                val totalMs = item.tracks.sumOf { it.durationMs.toLong() }
+                artistTextView.text = "$trackLabel · ${formatDuration(totalMs)}"
+            } else {
+                artistTextView.text = trackLabel
+            }
+            trackCountTextView.visibility = View.GONE
+
+            val imageUrl = item.album.images?.firstOrNull()?.url
+            if (imageUrl != null) {
                 Glide.with(itemView.context)
                     .load(imageUrl)
-                    .placeholder(R.drawable.ic_launcher_foreground)
+                    .placeholder(R.drawable.ic_album_placeholder)
                     .into(imageView)
+            } else {
+                Glide.with(itemView.context).clear(imageView)
+                imageView.setImageResource(R.drawable.ic_album_placeholder)
             }
 
             itemView.setOnClickListener {

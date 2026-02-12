@@ -253,9 +253,14 @@ class JellyfinLibraryAdapter(
 
     private fun formatDuration(ms: Long): String {
         val totalSeconds = ms / 1000
-        val minutes = totalSeconds / 60
+        val hours = totalSeconds / 3600
+        val minutes = (totalSeconds % 3600) / 60
         val seconds = totalSeconds % 60
-        return String.format("%d:%02d", minutes, seconds)
+        return if (hours > 0) {
+            String.format("%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            String.format("%d:%02d", minutes, seconds)
+        }
     }
 
     // ── ViewHolders ─────────────────────────────────────────────────────
@@ -270,6 +275,7 @@ class JellyfinLibraryAdapter(
 
     inner class ArtistViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val nameTextView: TextView = itemView.findViewById(R.id.artistNameTextView)
+        private val subtitleTextView: TextView = itemView.findViewById(R.id.artistSubtitleTextView)
         private val imageView: ImageView = itemView.findViewById(R.id.artistImageView)
         private val expandIcon: TextView = itemView.findViewById(R.id.expandIcon)
 
@@ -277,10 +283,20 @@ class JellyfinLibraryAdapter(
             nameTextView.text = item.item.Name
             expandIcon.text = if (item.isExpanded) "▼" else "▶"
 
+            // Show album count when albums have been loaded
+            if (item.albums.isNotEmpty()) {
+                val count = item.albums.size
+                subtitleTextView.text = "$count Album${if (count != 1) "s" else ""}"
+                subtitleTextView.visibility = View.VISIBLE
+            } else {
+                subtitleTextView.visibility = View.GONE
+            }
+
             val imageUrl = item.item.getPrimaryImageUrl(serverUrl)
             if (imageUrl != null) {
                 Glide.with(itemView.context).load(imageUrl).into(imageView)
             } else {
+                Glide.with(itemView.context).clear(imageView)
                 imageView.setImageResource(R.drawable.ic_artist_placeholder)
             }
 
@@ -300,10 +316,25 @@ class JellyfinLibraryAdapter(
 
         fun bind(item: JellyfinLibraryItem.AlbumItem) {
             nameTextView.text = item.item.Name
-            artistTextView.text = item.item.getArtistDisplay()
             releaseDateTextView.text = item.item.Year?.toString() ?: ""
-            trackCountTextView.text = if (item.item.ChildCount != null) "${item.item.ChildCount} tracks" else ""
             expandIcon.text = if (item.isExpanded) "▼" else "▶"
+
+            // Display track count and total duration
+            val trackLabel = if (item.item.ChildCount != null) {
+                val count = item.item.ChildCount
+                "$count Track${if (count != 1) "s" else ""}"
+            } else ""
+
+            val durationMs = item.item.getDurationMs()
+            if (durationMs > 0) {
+                artistTextView.text = "$trackLabel · ${formatDuration(durationMs)}"
+            } else if (item.tracks.isNotEmpty()) {
+                val totalMs = item.tracks.sumOf { it.getDurationMs() }
+                artistTextView.text = "$trackLabel · ${formatDuration(totalMs)}"
+            } else {
+                artistTextView.text = trackLabel
+            }
+            trackCountTextView.visibility = View.GONE
 
             val imageUrl = item.item.getPrimaryImageUrl(serverUrl)
             if (imageUrl != null) {
