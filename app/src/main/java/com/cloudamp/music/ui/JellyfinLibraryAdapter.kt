@@ -173,6 +173,10 @@ class JellyfinLibraryAdapter(
             if (firstLetter.isLetter()) firstLetter else '#'
         }
 
+        if (sortedArtists.isNotEmpty()) {
+            items.add(JellyfinLibraryItem.HeaderItem("ARTISTS (${sortedArtists.size})"))
+        }
+
         var currentLetter: Char? = null
         for (artistItem in sortedArtists) {
             val name = artistItem.displayName ?: artistItem.item.Name
