@@ -856,6 +856,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     private suspend fun loadSavedAlbums(items: MutableList<MediaBrowserCompat.MediaItem>) {
         try {
             val allAlbums = loadAllSavedAlbumsFromApi()
+            val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
 
             // Sort by album name and group by first letter using group title hint
             val sortedAlbums = allAlbums.sortedBy { it.name }
@@ -869,7 +870,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     album.name,
                     album.artists.joinToString(", ") { it.name },
                     letter.toString(),
-                    album.images?.firstOrNull()?.url
+                    album.images?.firstOrNull()?.url ?: placeholderUri
                 ))
             }
         } catch (e: Exception) {
@@ -906,6 +907,12 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 // Get saved album IDs for categorization
                 val savedAlbumIds = libraryCache.getSavedAlbumIds()
 
+                // Fallback image from latest album that has one
+                val fallbackImageUrl = albums
+                    .sortedByDescending { it.releaseDate ?: "" }
+                    .firstNotNullOfOrNull { it.images?.firstOrNull()?.url }
+                val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
+
                 // Group albums into categories
                 val savedAlbums = mutableListOf<Album>()
                 val lps = mutableListOf<Album>()
@@ -931,7 +938,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         album.name,
                         album.releaseDate?.take(4) ?: "",
                         "♥ SAVED",
-                        album.images?.firstOrNull()?.url
+                        album.images?.firstOrNull()?.url ?: fallbackImageUrl ?: placeholderUri
                     ))
                 }
 
@@ -942,7 +949,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         album.name,
                         album.releaseDate?.take(4) ?: "",
                         "LP's",
-                        album.images?.firstOrNull()?.url
+                        album.images?.firstOrNull()?.url ?: fallbackImageUrl ?: placeholderUri
                     ))
                 }
 
@@ -953,7 +960,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         album.name,
                         album.releaseDate?.take(4) ?: "",
                         "EP's",
-                        album.images?.firstOrNull()?.url
+                        album.images?.firstOrNull()?.url ?: fallbackImageUrl ?: placeholderUri
                     ))
                 }
 
@@ -964,7 +971,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         album.name,
                         album.releaseDate?.take(4) ?: "",
                         "SINGLES",
-                        album.images?.firstOrNull()?.url
+                        album.images?.firstOrNull()?.url ?: fallbackImageUrl ?: placeholderUri
                     ))
                 }
             }
@@ -1115,13 +1122,28 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             if (response.isSuccessful) {
                 val artists = response.body()?.Items ?: emptyList()
                 val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
+                val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_artist_placeholder}"
 
                 for (artist in artists) {
+                    var imageUrl = artist.getPrimaryImageUrl(serverUrl)
+
+                    // Fallback: use latest album art if artist has no image
+                    if (imageUrl == null) {
+                        try {
+                            val albumsResponse = jellyfinClient.api.getArtistAlbums(userId, artist.Id)
+                            if (albumsResponse.isSuccessful) {
+                                imageUrl = albumsResponse.body()?.Items
+                                    ?.sortedByDescending { it.Year ?: 0 }
+                                    ?.firstNotNullOfOrNull { it.getPrimaryImageUrl(serverUrl) }
+                            }
+                        } catch (_: Exception) { }
+                    }
+
                     items.add(createBrowsableItem(
                         "jellyfin_artist_${artist.Id}",
                         artist.Name,
                         "Artist",
-                        artist.getPrimaryImageUrl(serverUrl)
+                        imageUrl ?: placeholderUri
                     ))
                 }
             }
@@ -1168,13 +1190,19 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             val response = jellyfinClient.api.getArtistAlbums(userId, artistId)
             if (response.isSuccessful) {
                 val albums = response.body()?.Items ?: emptyList()
+                val fallbackImageUrl = albums
+                    .sortedByDescending { it.Year ?: 0 }
+                    .firstNotNullOfOrNull { it.getPrimaryImageUrl(serverUrl) }
+                val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
+
                 for (album in albums) {
                     val yearStr = album.Year?.toString() ?: ""
+                    val imageUrl = album.getPrimaryImageUrl(serverUrl) ?: fallbackImageUrl ?: placeholderUri
                     items.add(createBrowsableItem(
                         "jellyfin_album_${album.Id}",
                         album.Name,
                         yearStr,
-                        album.getPrimaryImageUrl(serverUrl)
+                        imageUrl
                     ))
                 }
             }
