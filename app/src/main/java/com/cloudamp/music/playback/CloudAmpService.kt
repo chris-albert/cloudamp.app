@@ -1136,7 +1136,14 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
             val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_artist_placeholder}"
 
-            for (artist in artists ?: emptyList()) {
+            // Rotate list to start from a random position
+            val sortedArtists = (artists ?: emptyList()).sortedBy { it.Name.lowercase() }
+            val rotated = if (sortedArtists.size > 1) {
+                val offset = (0 until sortedArtists.size).random()
+                sortedArtists.subList(offset, sortedArtists.size) + sortedArtists.subList(0, offset)
+            } else sortedArtists
+
+            for (artist in rotated) {
                 val imageUrl = artist.getPrimaryImageUrl(serverUrl)
                 items.add(createBrowsableItem(
                     "jellyfin_artist_${artist.Id}",
