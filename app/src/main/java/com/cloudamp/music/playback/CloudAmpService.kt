@@ -80,6 +80,11 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         const val PLAYLISTS_ID = "playlists"
         const val GDRIVE_ID = "gdrive"
         const val JELLYFIN_ID = "jellyfin"
+        const val JELLYFIN_LIBRARY_ID = "jellyfin_library"
+        const val JELLYFIN_PLAYLISTS_ID = "jellyfin_playlists"
+        const val SPOTIFY_ID = "spotify"
+        const val SPOTIFY_LIBRARY_ID = "spotify_library"
+        const val SPOTIFY_PLAYLISTS_ID = "spotify_playlists"
         const val SAVED_QUEUES_ID = "saved_queues"
         const val SEARCH_ID = "search"
         const val CUSTOM_ACTION_SAVE_QUEUE = "save_queue"
@@ -534,10 +539,9 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             when (parentId) {
                 ROOT_ID -> {
                     // Root menu - main categories
-                    mediaItems.add(createBrowsableItem(LIBRARY_ID, "Library", "Your followed artists"))
-                    mediaItems.add(createBrowsableItem(PLAYLISTS_ID, "Playlists", "Your playlists"))
-                    mediaItems.add(createBrowsableItem(GDRIVE_ID, "Drive", "Browse your Drive music"))
                     mediaItems.add(createBrowsableItem(JELLYFIN_ID, "Jellyfin", "Browse your Jellyfin library"))
+                    mediaItems.add(createBrowsableItem(SPOTIFY_ID, "Spotify", "Browse your Spotify library"))
+                    mediaItems.add(createBrowsableItem(GDRIVE_ID, "Drive", "Browse your Drive music"))
                     mediaItems.add(createBrowsableItem(SAVED_QUEUES_ID, "Queues", "Resume where you left off"))
                 }
 
@@ -549,11 +553,16 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     loadTopArtists(mediaItems)
                 }
 
-                LIBRARY_ID -> {
+                SPOTIFY_ID -> {
+                    mediaItems.add(createBrowsableItem(SPOTIFY_LIBRARY_ID, "Library", "Your followed artists"))
+                    mediaItems.add(createBrowsableItem(SPOTIFY_PLAYLISTS_ID, "Playlists", "Your playlists"))
+                }
+
+                SPOTIFY_LIBRARY_ID, LIBRARY_ID -> {
                     loadTopArtists(mediaItems)
                 }
 
-                PLAYLISTS_ID -> {
+                SPOTIFY_PLAYLISTS_ID, PLAYLISTS_ID -> {
                     loadPlaylists(mediaItems)
                 }
 
@@ -566,7 +575,16 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 }
 
                 JELLYFIN_ID -> {
+                    mediaItems.add(createBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "Jellyfin artists"))
+                    mediaItems.add(createBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "Jellyfin playlists"))
+                }
+
+                JELLYFIN_LIBRARY_ID -> {
                     loadJellyfinArtists(mediaItems)
+                }
+
+                JELLYFIN_PLAYLISTS_ID -> {
+                    loadJellyfinPlaylists(mediaItems)
                 }
 
                 SAVED_QUEUES_ID -> {
@@ -840,6 +858,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     private suspend fun loadSavedAlbums(items: MutableList<MediaBrowserCompat.MediaItem>) {
         try {
             val allAlbums = loadAllSavedAlbumsFromApi()
+            val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
 
             // Sort by album name and group by first letter using group title hint
             val sortedAlbums = allAlbums.sortedBy { it.name }
@@ -853,7 +872,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     album.name,
                     album.artists.joinToString(", ") { it.name },
                     letter.toString(),
-                    album.images?.firstOrNull()?.url
+                    album.images?.firstOrNull()?.url ?: placeholderUri
                 ))
             }
         } catch (e: Exception) {
@@ -890,6 +909,12 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 // Get saved album IDs for categorization
                 val savedAlbumIds = libraryCache.getSavedAlbumIds()
 
+                // Fallback image from latest album that has one
+                val fallbackImageUrl = albums
+                    .sortedByDescending { it.releaseDate ?: "" }
+                    .firstNotNullOfOrNull { it.images?.firstOrNull()?.url }
+                val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
+
                 // Group albums into categories
                 val savedAlbums = mutableListOf<Album>()
                 val lps = mutableListOf<Album>()
@@ -915,7 +940,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         album.name,
                         album.releaseDate?.take(4) ?: "",
                         "♥ SAVED",
-                        album.images?.firstOrNull()?.url
+                        album.images?.firstOrNull()?.url ?: fallbackImageUrl ?: placeholderUri
                     ))
                 }
 
@@ -926,7 +951,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         album.name,
                         album.releaseDate?.take(4) ?: "",
                         "LP's",
-                        album.images?.firstOrNull()?.url
+                        album.images?.firstOrNull()?.url ?: fallbackImageUrl ?: placeholderUri
                     ))
                 }
 
@@ -937,7 +962,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         album.name,
                         album.releaseDate?.take(4) ?: "",
                         "EP's",
-                        album.images?.firstOrNull()?.url
+                        album.images?.firstOrNull()?.url ?: fallbackImageUrl ?: placeholderUri
                     ))
                 }
 
@@ -948,7 +973,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         album.name,
                         album.releaseDate?.take(4) ?: "",
                         "SINGLES",
-                        album.images?.firstOrNull()?.url
+                        album.images?.firstOrNull()?.url ?: fallbackImageUrl ?: placeholderUri
                     ))
                 }
             }
@@ -1099,29 +1124,60 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             if (response.isSuccessful) {
                 val artists = response.body()?.Items ?: emptyList()
                 val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
+                val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_artist_placeholder}"
 
                 for (artist in artists) {
+                    var imageUrl = artist.getPrimaryImageUrl(serverUrl)
+
+                    // Fallback: use latest album art if artist has no image
+                    if (imageUrl == null) {
+                        try {
+                            val albumsResponse = jellyfinClient.api.getArtistAlbums(userId, artist.Id)
+                            if (albumsResponse.isSuccessful) {
+                                imageUrl = albumsResponse.body()?.Items
+                                    ?.sortedByDescending { it.Year ?: 0 }
+                                    ?.firstNotNullOfOrNull { it.getPrimaryImageUrl(serverUrl) }
+                            }
+                        } catch (_: Exception) { }
+                    }
+
                     items.add(createBrowsableItem(
                         "jellyfin_artist_${artist.Id}",
                         artist.Name,
                         "Artist",
-                        artist.getPrimaryImageUrl(serverUrl)
+                        imageUrl ?: placeholderUri
                     ))
                 }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 
-                // Also add playlists at the end
-                val playlistsResponse = jellyfinClient.api.getPlaylists(userId)
-                if (playlistsResponse.isSuccessful) {
-                    val playlists = playlistsResponse.body()?.Items ?: emptyList()
-                    for (playlist in playlists) {
-                        val countStr = if (playlist.ChildCount != null) "${playlist.ChildCount} tracks" else "Playlist"
-                        items.add(createBrowsableItem(
-                            "jellyfin_playlist_${playlist.Id}",
-                            playlist.Name,
-                            countStr,
-                            playlist.getPrimaryImageUrl(serverUrl)
-                        ))
-                    }
+    private suspend fun loadJellyfinPlaylists(items: MutableList<MediaBrowserCompat.MediaItem>) {
+        try {
+            if (!jellyfinAuthManager.isConfigured()) {
+                items.add(createBrowsableItem(
+                    "jellyfin_no_auth",
+                    "Connect Jellyfin",
+                    "Open CloudAmp app to configure"
+                ))
+                return
+            }
+
+            val userId = jellyfinAuthManager.getUserId() ?: return
+            val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
+            val playlistsResponse = jellyfinClient.api.getPlaylists(userId)
+            if (playlistsResponse.isSuccessful) {
+                val playlists = playlistsResponse.body()?.Items ?: emptyList()
+                for (playlist in playlists) {
+                    val countStr = if (playlist.ChildCount != null) "${playlist.ChildCount} tracks" else "Playlist"
+                    items.add(createBrowsableItem(
+                        "jellyfin_playlist_${playlist.Id}",
+                        playlist.Name,
+                        countStr,
+                        playlist.getPrimaryImageUrl(serverUrl)
+                    ))
                 }
             }
         } catch (e: Exception) {
@@ -1136,13 +1192,19 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             val response = jellyfinClient.api.getArtistAlbums(userId, artistId)
             if (response.isSuccessful) {
                 val albums = response.body()?.Items ?: emptyList()
+                val fallbackImageUrl = albums
+                    .sortedByDescending { it.Year ?: 0 }
+                    .firstNotNullOfOrNull { it.getPrimaryImageUrl(serverUrl) }
+                val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
+
                 for (album in albums) {
                     val yearStr = album.Year?.toString() ?: ""
+                    val imageUrl = album.getPrimaryImageUrl(serverUrl) ?: fallbackImageUrl ?: placeholderUri
                     items.add(createBrowsableItem(
                         "jellyfin_album_${album.Id}",
                         album.Name,
                         yearStr,
-                        album.getPrimaryImageUrl(serverUrl)
+                        imageUrl
                     ))
                 }
             }
