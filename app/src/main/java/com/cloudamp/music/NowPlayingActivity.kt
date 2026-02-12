@@ -18,6 +18,7 @@ import com.cloudamp.music.models.Track
 import com.cloudamp.music.playback.ActivePlayback
 import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.playback.JellyfinPlaybackManager
+import com.cloudamp.music.playback.PlaybackManager
 import com.cloudamp.music.ui.QueueAdapter
 import kotlinx.coroutines.*
 
@@ -305,17 +306,46 @@ class NowPlayingActivity : AppCompatActivity() {
         when (active) {
             is GDrivePlaybackManager -> updateGDrivePlaybackState(active)
             is JellyfinPlaybackManager -> updateJellyfinPlaybackState(active)
-            else -> updateSpotifyPlaybackState()
+            is PlaybackManager -> updateSpotifyPlaybackState(active)
+            else -> {}
         }
         updateQueueDisplay()
     }
 
-    private fun updateSpotifyPlaybackState() {
-        if (isPlaying && currentPosition < totalDuration) {
-            currentPosition += 1000
-            seekBar.progress = currentPosition.toInt()
-            currentTimeTextView.text = formatTime(currentPosition)
+    private fun updateSpotifyPlaybackState(active: PlaybackManager) {
+        currentPosition = active.getCurrentPosition()
+        isPlaying = active.isPlaying()
+
+        val newDuration = active.getDuration()
+        if (newDuration > 0 && newDuration != totalDuration) {
+            totalDuration = newDuration
+            totalTimeTextView.text = formatTime(totalDuration)
+            seekBar.max = totalDuration.toInt()
         }
+
+        seekBar.progress = currentPosition.toInt()
+        currentTimeTextView.text = formatTime(currentPosition)
+
+        // Check if track changed - try queue first, then fall back to polled track
+        val queueTracks = active.getQueueAsTracks()
+        val currentIdx = active.getCurrentIndex()
+        if (currentIdx in queueTracks.indices) {
+            val track = queueTracks[currentIdx]
+            if (currentTrack?.id != track.id) {
+                currentTrack = track
+                updateTrackInfo(track)
+            }
+        } else {
+            val polledTrack = active.lastKnownTrack
+            if (polledTrack != null && currentTrack?.id != polledTrack.id) {
+                currentTrack = polledTrack
+                updateTrackInfo(polledTrack)
+            }
+        }
+
+        playPauseButton.setImageResource(
+            if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
+        )
     }
 
     private fun updateGDrivePlaybackState(active: GDrivePlaybackManager) {
