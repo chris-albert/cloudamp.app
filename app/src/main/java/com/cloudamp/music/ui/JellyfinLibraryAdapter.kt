@@ -193,6 +193,21 @@ class JellyfinLibraryAdapter(
         }
     }
 
+    fun getArtistsWithoutImages(): List<JellyfinItem> {
+        return items.filterIsInstance<JellyfinLibraryItem.ArtistItem>()
+            .filter { !it.item.hasPrimaryImage() && it.albums.isEmpty() }
+            .map { it.item }
+    }
+
+    fun preloadArtistAlbums(artistId: String, albums: List<JellyfinItem>) {
+        val index = items.indexOfFirst { it is JellyfinLibraryItem.ArtistItem && it.item.Id == artistId }
+        if (index >= 0) {
+            val item = items[index] as JellyfinLibraryItem.ArtistItem
+            item.albums = albums
+            notifyItemChanged(index)
+        }
+    }
+
     fun setArtistAlbums(position: Int, albums: List<JellyfinItem>) {
         val item = items[position] as? JellyfinLibraryItem.ArtistItem ?: return
         item.albums = albums

@@ -220,6 +220,7 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 adapter.setArtists(artists, playlists)
                 hasLoadedContent = true
                 showAlphabetSidebar(artists.isNotEmpty())
+                preloadAlbumsForArtistsWithoutImages()
 
                 if (artists.isEmpty() && playlists.isEmpty()) {
                     showEmptyState("No music found in your Jellyfin library")
@@ -229,6 +230,23 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 Toast.makeText(this@JellyfinLibraryActivity, "Error loading library: ${e.message}", Toast.LENGTH_LONG).show()
             } finally {
                 showLoading(false)
+            }
+        }
+    }
+
+    private fun preloadAlbumsForArtistsWithoutImages() {
+        val artists = adapter.getArtistsWithoutImages()
+        if (artists.isEmpty()) return
+        scope.launch {
+            val userId = authManager.getUserId() ?: return@launch
+            for (artist in artists) {
+                try {
+                    val response = jellyfinClient.api.getArtistAlbums(userId, artist.Id)
+                    if (response.isSuccessful) {
+                        val albums = response.body()?.Items ?: emptyList()
+                        adapter.preloadArtistAlbums(artist.Id, albums)
+                    }
+                } catch (_: Exception) { }
             }
         }
     }

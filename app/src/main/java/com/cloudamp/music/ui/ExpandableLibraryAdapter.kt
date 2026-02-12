@@ -196,6 +196,21 @@ class ExpandableLibraryAdapter(
         }
     }
 
+    fun getArtistsWithoutImages(): List<Artist> {
+        return items.filterIsInstance<LibraryItem.ArtistItem>()
+            .filter { it.artist.images.isNullOrEmpty() && it.albums.isEmpty() }
+            .map { it.artist }
+    }
+
+    fun preloadArtistAlbums(artistId: String, albums: List<Album>) {
+        val index = items.indexOfFirst { it is LibraryItem.ArtistItem && it.artist.id == artistId }
+        if (index >= 0) {
+            val item = items[index] as LibraryItem.ArtistItem
+            item.albums = albums
+            notifyItemChanged(index)
+        }
+    }
+
     fun setArtistAlbums(position: Int, albums: List<Album>) {
         val item = items[position] as? LibraryItem.ArtistItem ?: return
         item.albums = albums
