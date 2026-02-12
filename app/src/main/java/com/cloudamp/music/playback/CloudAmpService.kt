@@ -1134,10 +1134,11 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             }
 
             val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
+            val apiKey = jellyfinAuthManager.getApiKey()
             val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_artist_placeholder}"
 
             for (artist in artists ?: emptyList()) {
-                val imageUrl = artist.getPrimaryImageUrl(serverUrl)
+                val imageUrl = artist.getPrimaryImageUrl(serverUrl, apiKey)
                 items.add(createBrowsableItem(
                     "jellyfin_artist_${artist.Id}",
                     artist.Name,
@@ -1163,6 +1164,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
             val userId = jellyfinAuthManager.getUserId() ?: return
             val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
+            val apiKey = jellyfinAuthManager.getApiKey()
             val playlistsResponse = jellyfinClient.api.getPlaylists(userId)
             if (playlistsResponse.isSuccessful) {
                 val playlists = playlistsResponse.body()?.Items ?: emptyList()
@@ -1172,7 +1174,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         "jellyfin_playlist_${playlist.Id}",
                         playlist.Name,
                         countStr,
-                        playlist.getPrimaryImageUrl(serverUrl)
+                        playlist.getPrimaryImageUrl(serverUrl, apiKey)
                     ))
                 }
             }
@@ -1185,17 +1187,18 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         try {
             val userId = jellyfinAuthManager.getUserId() ?: return
             val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
+            val apiKey = jellyfinAuthManager.getApiKey()
             val response = jellyfinClient.api.getArtistAlbums(userId, artistId)
             if (response.isSuccessful) {
                 val albums = response.body()?.Items ?: emptyList()
                 val fallbackImageUrl = albums
                     .sortedByDescending { it.Year ?: 0 }
-                    .firstNotNullOfOrNull { it.getPrimaryImageUrl(serverUrl) }
+                    .firstNotNullOfOrNull { it.getPrimaryImageUrl(serverUrl, apiKey) }
                 val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
 
                 for (album in albums) {
                     val yearStr = album.Year?.toString() ?: ""
-                    val imageUrl = album.getPrimaryImageUrl(serverUrl) ?: fallbackImageUrl ?: placeholderUri
+                    val imageUrl = album.getPrimaryImageUrl(serverUrl, apiKey) ?: fallbackImageUrl ?: placeholderUri
                     items.add(createBrowsableItem(
                         "jellyfin_album_${album.Id}",
                         album.Name,
@@ -1213,6 +1216,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         try {
             val userId = jellyfinAuthManager.getUserId() ?: return
             val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
+            val apiKey = jellyfinAuthManager.getApiKey()
+            val apiKeySuffix = if (apiKey != null) "&api_key=$apiKey" else ""
             val response = jellyfinClient.api.getAlbumTracks(userId, albumId)
             if (response.isSuccessful) {
                 val tracks = response.body()?.Items ?: emptyList()
@@ -1231,8 +1236,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     val subtitle = "${track.getArtistDisplay()} · $durationStr"
 
                     // Use album art URL if track has no image
-                    val imageUrl = track.getPrimaryImageUrl(serverUrl)
-                        ?: "$serverUrl/Items/$albumId/Images/Primary?maxWidth=300"
+                    val imageUrl = track.getPrimaryImageUrl(serverUrl, apiKey)
+                        ?: "$serverUrl/Items/$albumId/Images/Primary?maxWidth=300$apiKeySuffix"
 
                     items.add(createJellyfinPlayableItem(
                         "jellyfin_track_${track.Id}",
@@ -1252,6 +1257,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         try {
             val userId = jellyfinAuthManager.getUserId() ?: return
             val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
+            val apiKey = jellyfinAuthManager.getApiKey()
+            val apiKeySuffix = if (apiKey != null) "&api_key=$apiKey" else ""
             val response = jellyfinClient.api.getPlaylistItems(playlistId, userId)
             if (response.isSuccessful) {
                 val tracks = response.body()?.Items ?: emptyList()
@@ -1269,8 +1276,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     } else ""
                     val subtitle = "${track.getArtistDisplay()} · $durationStr"
 
-                    val imageUrl = track.getPrimaryImageUrl(serverUrl)
-                        ?: if (track.AlbumId != null) "$serverUrl/Items/${track.AlbumId}/Images/Primary?maxWidth=300" else null
+                    val imageUrl = track.getPrimaryImageUrl(serverUrl, apiKey)
+                        ?: if (track.AlbumId != null) "$serverUrl/Items/${track.AlbumId}/Images/Primary?maxWidth=300$apiKeySuffix" else null
 
                     items.add(createJellyfinPlayableItem(
                         "jellyfin_track_${track.Id}",

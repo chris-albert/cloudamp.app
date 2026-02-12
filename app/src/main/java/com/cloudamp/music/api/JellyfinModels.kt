@@ -35,10 +35,13 @@ data class JellyfinItem(
     /**
      * Build the URL for this item's primary image.
      * @param serverUrl Base server URL (no trailing slash)
+     * @param apiKey Optional API key/access token to include as a query parameter.
+     *              Required for Android Auto and Glide which cannot add auth headers.
      */
-    fun getPrimaryImageUrl(serverUrl: String): String? {
+    fun getPrimaryImageUrl(serverUrl: String, apiKey: String? = null): String? {
         if (!hasPrimaryImage()) return null
-        return "$serverUrl/Items/$Id/Images/Primary?maxWidth=300"
+        val base = "$serverUrl/Items/$Id/Images/Primary?maxWidth=300"
+        return if (apiKey != null) "$base&api_key=$apiKey" else base
     }
 
     fun getArtistDisplay(): String {
