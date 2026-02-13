@@ -1111,6 +1111,12 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
     // ── Jellyfin browsing ──────────────────────────────────────────────
 
+    /** Convert a Jellyfin HTTP image URL to a content:// URI that Android Auto can load. */
+    private fun jellyfinContentUri(itemId: String, httpUrl: String?): String? {
+        if (httpUrl == null) return null
+        return JellyfinImageProvider.buildUri(itemId, httpUrl).toString()
+    }
+
     private suspend fun loadJellyfinArtists(items: MutableList<MediaBrowserCompat.MediaItem>) {
         try {
             if (!jellyfinAuthManager.isConfigured()) {
@@ -1138,7 +1144,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_artist_placeholder}"
 
             for (artist in artists ?: emptyList()) {
-                val imageUrl = artist.getPrimaryImageUrl(serverUrl, apiKey)
+                val imageUrl = jellyfinContentUri(artist.Id, artist.getPrimaryImageUrl(serverUrl, apiKey))
                 items.add(createBrowsableItem(
                     "jellyfin_artist_${artist.Id}",
                     artist.Name,
@@ -1174,7 +1180,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         "jellyfin_playlist_${playlist.Id}",
                         playlist.Name,
                         countStr,
-                        playlist.getPrimaryImageUrl(serverUrl, apiKey)
+                        jellyfinContentUri(playlist.Id, playlist.getPrimaryImageUrl(serverUrl, apiKey))
                     ))
                 }
             }
@@ -1193,12 +1199,14 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 val albums = response.body()?.Items ?: emptyList()
                 val fallbackImageUrl = albums
                     .sortedByDescending { it.Year ?: 0 }
-                    .firstNotNullOfOrNull { it.getPrimaryImageUrl(serverUrl, apiKey) }
+                    .firstOrNull { it.hasPrimaryImage() }
+                    ?.let { jellyfinContentUri(it.Id, it.getPrimaryImageUrl(serverUrl, apiKey)) }
                 val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
 
                 for (album in albums) {
                     val yearStr = album.Year?.toString() ?: ""
-                    val imageUrl = album.getPrimaryImageUrl(serverUrl, apiKey) ?: fallbackImageUrl ?: placeholderUri
+                    val imageUrl = jellyfinContentUri(album.Id, album.getPrimaryImageUrl(serverUrl, apiKey))
+                        ?: fallbackImageUrl ?: placeholderUri
                     items.add(createBrowsableItem(
                         "jellyfin_album_${album.Id}",
                         album.Name,
@@ -1236,8 +1244,9 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     val subtitle = "${track.getArtistDisplay()} · $durationStr"
 
                     // Use album art URL if track has no image
-                    val imageUrl = track.getPrimaryImageUrl(serverUrl, apiKey)
+                    val rawImageUrl = track.getPrimaryImageUrl(serverUrl, apiKey)
                         ?: "$serverUrl/Items/$albumId/Images/Primary?maxWidth=300$apiKeySuffix"
+                    val imageUrl = jellyfinContentUri(track.Id, rawImageUrl)
 
                     items.add(createJellyfinPlayableItem(
                         "jellyfin_track_${track.Id}",
@@ -1276,8 +1285,9 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     } else ""
                     val subtitle = "${track.getArtistDisplay()} · $durationStr"
 
-                    val imageUrl = track.getPrimaryImageUrl(serverUrl, apiKey)
+                    val rawImageUrl = track.getPrimaryImageUrl(serverUrl, apiKey)
                         ?: if (track.AlbumId != null) "$serverUrl/Items/${track.AlbumId}/Images/Primary?maxWidth=300$apiKeySuffix" else null
+                    val imageUrl = jellyfinContentUri(track.Id, rawImageUrl)
 
                     items.add(createJellyfinPlayableItem(
                         "jellyfin_track_${track.Id}",

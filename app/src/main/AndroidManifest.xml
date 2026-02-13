@@ -98,6 +98,13 @@
             </intent-filter>
         </service>
 
+        <!-- Jellyfin Image Provider for Android Auto -->
+        <provider
+            android:name=".playback.JellyfinImageProvider"
+            android:authorities="com.cloudamp.music.jellyfinimages"
+            android:exported="true"
+            android:grantUriPermissions="true" />
+
         <!-- Media Button Receiver -->
         <receiver android:name="androidx.media.session.MediaButtonReceiver"
             android:exported="true">
