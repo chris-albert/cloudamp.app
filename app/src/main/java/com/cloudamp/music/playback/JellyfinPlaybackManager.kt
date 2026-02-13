@@ -178,13 +178,15 @@ class JellyfinPlaybackManager private constructor(
     fun jellyfinItemToTrack(item: JellyfinItem): Track {
         val client = JellyfinApiClient.getInstance(context)
         val serverUrl = client.getServerUrl()?.trimEnd('/') ?: ""
+        val apiKey = client.getApiKey()
+        val apiKeySuffix = if (apiKey != null) "&api_key=$apiKey" else ""
 
         val artistName = item.getArtistDisplay()
-        val imageUrl = item.getPrimaryImageUrl(serverUrl)
+        val imageUrl = item.getPrimaryImageUrl(serverUrl, apiKey)
 
         // Build album art from the album ID if the track itself has no image
         val albumImageUrl = if (imageUrl == null && item.AlbumId != null) {
-            "$serverUrl/Items/${item.AlbumId}/Images/Primary?maxWidth=300"
+            "$serverUrl/Items/${item.AlbumId}/Images/Primary?maxWidth=300$apiKeySuffix"
         } else {
             imageUrl
         }

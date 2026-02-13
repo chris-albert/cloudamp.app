@@ -31,6 +31,7 @@ sealed class JellyfinPlaylistItem {
 
 class JellyfinPlaylistsAdapter(
     private val serverUrl: String,
+    private val apiKey: String? = null,
     private val onPlaylistClick: (JellyfinItem, Int) -> Unit,
     private val onTrackClick: (JellyfinItem, List<JellyfinItem>, Int) -> Unit
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
@@ -141,7 +142,7 @@ class JellyfinPlaylistsAdapter(
             } else ""
             expandIcon.text = if (item.isExpanded) "▼" else "▶"
 
-            val imageUrl = item.playlist.getPrimaryImageUrl(serverUrl)
+            val imageUrl = item.playlist.getPrimaryImageUrl(serverUrl, apiKey)
             if (imageUrl != null) {
                 Glide.with(itemView.context)
                     .load(imageUrl)
