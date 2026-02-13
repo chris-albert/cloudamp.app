@@ -295,11 +295,18 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
         // Set album art URI for Android Auto
         albumArtUrl?.let { url ->
-            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, url)
-            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ART_URI, url)
-            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI, url)
+            // For Jellyfin, use content:// URI so Android Auto can load the image
+            val artUri = if (track.uri.startsWith("jellyfin:")) {
+                val itemId = track.uri.removePrefix("jellyfin:track:")
+                jellyfinContentUri(itemId, url) ?: url
+            } else {
+                url
+            }
+            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, artUri)
+            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ART_URI, artUri)
+            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI, artUri)
 
-            // Also load bitmap for notification
+            // Also load bitmap for notification (Glide can handle HTTP URLs directly)
             loadAlbumArt(url)
         }
 
@@ -419,7 +426,14 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 .setSubtitle(track.artists.joinToString(", ") { it.name })
                 .apply {
                     track.album?.images?.firstOrNull()?.url?.let { url ->
-                        setIconUri(android.net.Uri.parse(url))
+                        // For Jellyfin, use content:// URI so Android Auto can load the image
+                        val iconUrl = if (track.uri.startsWith("jellyfin:")) {
+                            val itemId = track.uri.removePrefix("jellyfin:track:")
+                            jellyfinContentUri(itemId, url) ?: url
+                        } else {
+                            url
+                        }
+                        setIconUri(android.net.Uri.parse(iconUrl))
                     }
                 }
                 .build()
