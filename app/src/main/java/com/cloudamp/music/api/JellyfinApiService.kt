@@ -31,7 +31,7 @@ interface JellyfinApiService {
     @GET("Users/{userId}/Items")
     suspend fun getArtistAlbums(
         @Path("userId") userId: String,
-        @Query("ArtistIds") artistId: String,
+        @Query("AlbumArtistIds") artistId: String,
         @Query("IncludeItemTypes") types: String = "MusicAlbum",
         @Query("SortBy") sortBy: String = "ProductionYear,SortName",
         @Query("SortOrder") sortOrder: String = "Descending",
