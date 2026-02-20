@@ -111,7 +111,7 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
         adapter = JellyfinLibraryAdapter(
             serverUrl = serverUrl,
             onArtistExpand = { artist, artistIds, position ->
-                loadArtistAlbums(artistIds, position)
+                loadArtistAlbums(artist.Id, artistIds, position)
             },
             onAlbumExpand = { album, artistId, position ->
                 loadAlbumTracks(album, position)
@@ -166,21 +166,109 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
     }
 
     private fun loadMyLibrary() {
-        // Show cached data immediately if available
-        if (libraryCache.hasCache()) {
+        if (libraryCache.hasFullCache()) {
+            // Serve entirely from cache - no API calls
             val cachedArtists = libraryCache.getArtists()
-
             if (cachedArtists != null && cachedArtists.isNotEmpty()) {
                 adapter.setArtists(cachedArtists, emptyList())
                 showAlphabetSidebar(true)
                 hasLoadedContent = true
                 scrollToRandomArtist()
-                preloadAllArtistAlbums()
+                preloadCachedAlbums()
+                return
             }
         }
 
-        // Always refresh from API in the background
-        refreshFromApi()
+        // No full cache - build it
+        buildFullCache()
+    }
+
+    private fun buildFullCache() {
+        showLoading(true)
+        pathTextView.text = "JELLYFIN"
+
+        scope.launch {
+            try {
+                val userId = authManager.getUserId() ?: return@launch
+
+                // 1. Fetch all artists from API
+                pathTextView.text = "JELLYFIN / loading artists..."
+                val response = jellyfinClient.api.getArtists(userId)
+                val artists = if (response.isSuccessful) {
+                    response.body()?.Items ?: emptyList()
+                } else emptyList()
+
+                libraryCache.saveArtists(artists)
+                adapter.setArtists(artists, emptyList())
+                hasLoadedContent = true
+                showAlphabetSidebar(artists.isNotEmpty())
+                showLoading(false)
+                scrollToRandomArtist()
+
+                if (artists.isEmpty()) {
+                    showEmptyState("No music found in your Jellyfin library")
+                    return@launch
+                }
+
+                // 2. Save artist group mappings to cache
+                val artistGroups = adapter.getAllArtistGroups()
+                val groupMap = mutableMapOf<String, List<String>>()
+                for ((repId, joinedIds) in artistGroups) {
+                    groupMap[repId] = joinedIds.split(",")
+                }
+                libraryCache.saveArtistGroups(groupMap)
+
+                // 3. For each artist group: fetch albums, save to cache, preload into adapter
+                val totalGroups = artistGroups.size
+                var albumsCompleted = 0
+                for ((representativeId, groupedIds) in artistGroups) {
+                    try {
+                        val albumResponse = jellyfinClient.api.getArtistAlbums(userId, groupedIds)
+                        if (albumResponse.isSuccessful) {
+                            val albums = albumResponse.body()?.Items ?: emptyList()
+                            libraryCache.saveArtistAlbums(representativeId, albums)
+                            adapter.preloadArtistAlbums(representativeId, albums)
+
+                            // 4. For each album: fetch tracks, save to cache
+                            for (album in albums) {
+                                try {
+                                    val trackResponse = jellyfinClient.api.getAlbumTracks(userId, album.Id)
+                                    if (trackResponse.isSuccessful) {
+                                        val tracks = trackResponse.body()?.Items ?: emptyList()
+                                        libraryCache.saveAlbumTracks(album.Id, tracks)
+                                    }
+                                } catch (_: Exception) { }
+                            }
+                        }
+                    } catch (_: Exception) { }
+                    albumsCompleted++
+                    pathTextView.text = "JELLYFIN / albums $albumsCompleted/$totalGroups..."
+                }
+
+                // 5. Mark cache complete
+                libraryCache.markCacheComplete()
+                pathTextView.text = "JELLYFIN"
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                if (!hasLoadedContent) {
+                    Toast.makeText(this@JellyfinLibraryActivity, "Error loading library: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            } finally {
+                showLoading(false)
+                updatePath()
+            }
+        }
+    }
+
+    private fun preloadCachedAlbums() {
+        val artistGroups = adapter.getAllArtistGroups()
+        for ((representativeId, _) in artistGroups) {
+            val albums = libraryCache.getArtistAlbums(representativeId)
+            if (albums != null && albums.isNotEmpty()) {
+                adapter.preloadArtistAlbums(representativeId, albums)
+            }
+        }
     }
 
     fun reloadLibrary() {
@@ -188,7 +276,7 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
         hasLoadedContent = false
         adapter.setArtists(emptyList(), emptyList())
         showAlphabetSidebar(false)
-        loadRoot()
+        buildFullCache()
     }
 
     private fun showEmptyState(message: String) {
@@ -232,70 +320,15 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
 
     // ── Data Loading ────────────────────────────────────────────────────
 
-    private fun loadRoot() {
-        currentPlaylist = null
-        updatePath()
-        hasLoadedContent = false
-        refreshFromApi()
-    }
-
-    private fun refreshFromApi() {
-        val showSpinner = !hasLoadedContent
-        if (showSpinner) showLoading(true)
-
-        scope.launch {
-            try {
-                val userId = authManager.getUserId() ?: return@launch
-
-                val response = jellyfinClient.api.getArtists(userId)
-
-                val artists = if (response.isSuccessful) {
-                    response.body()?.Items ?: emptyList()
-                } else emptyList()
-
-                // Save to cache
-                libraryCache.saveArtists(artists)
-
-                adapter.setArtists(artists, emptyList())
-                hasLoadedContent = true
-                showAlphabetSidebar(artists.isNotEmpty())
-                if (showSpinner) {
-                    scrollToRandomArtist()
-                }
-                preloadAllArtistAlbums()
-
-                if (artists.isEmpty()) {
-                    showEmptyState("No music found in your Jellyfin library")
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                if (!hasLoadedContent) {
-                    Toast.makeText(this@JellyfinLibraryActivity, "Error loading library: ${e.message}", Toast.LENGTH_LONG).show()
-                }
-            } finally {
-                showLoading(false)
-            }
+    private fun loadArtistAlbums(representativeId: String, artistIds: List<String>, position: Int) {
+        // Check cache first
+        val cachedAlbums = libraryCache.getArtistAlbums(representativeId)
+        if (cachedAlbums != null) {
+            adapter.setArtistAlbums(position, cachedAlbums)
+            return
         }
-    }
 
-    private fun preloadAllArtistAlbums() {
-        val artistGroups = adapter.getAllArtistGroups()
-        if (artistGroups.isEmpty()) return
-        scope.launch {
-            val userId = authManager.getUserId() ?: return@launch
-            for ((representativeId, groupedIds) in artistGroups) {
-                try {
-                    val response = jellyfinClient.api.getArtistAlbums(userId, groupedIds)
-                    if (response.isSuccessful) {
-                        val albums = response.body()?.Items ?: emptyList()
-                        adapter.preloadArtistAlbums(representativeId, albums)
-                    }
-                } catch (_: Exception) { }
-            }
-        }
-    }
-
-    private fun loadArtistAlbums(artistIds: List<String>, position: Int) {
+        // Cache miss - fetch from API
         scope.launch {
             try {
                 val userId = authManager.getUserId() ?: return@launch
@@ -303,6 +336,7 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
 
                 if (response.isSuccessful) {
                     val albums = response.body()?.Items ?: emptyList()
+                    libraryCache.saveArtistAlbums(representativeId, albums)
                     adapter.setArtistAlbums(position, albums)
                 } else {
                     handleApiError(response.code())
@@ -315,6 +349,14 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
     }
 
     private fun loadAlbumTracks(album: JellyfinItem, position: Int) {
+        // Check cache first
+        val cachedTracks = libraryCache.getAlbumTracks(album.Id)
+        if (cachedTracks != null) {
+            adapter.setAlbumTracks(position, cachedTracks)
+            return
+        }
+
+        // Cache miss - fetch from API
         scope.launch {
             try {
                 val userId = authManager.getUserId() ?: return@launch
@@ -322,6 +364,7 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
 
                 if (response.isSuccessful) {
                     val tracks = response.body()?.Items ?: emptyList()
+                    libraryCache.saveAlbumTracks(album.Id, tracks)
                     adapter.setAlbumTracks(position, tracks)
                 } else {
                     handleApiError(response.code())
@@ -347,7 +390,7 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
         if (isSearchVisible) hideSearchBar()
         currentPlaylist = null
         hasLoadedContent = false
-        loadRoot()
+        loadMyLibrary()
     }
 
     private fun loadPlaylistItems(playlistId: String) {

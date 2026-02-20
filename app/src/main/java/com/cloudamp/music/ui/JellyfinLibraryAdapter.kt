@@ -394,7 +394,7 @@ class JellyfinLibraryAdapter(
             val artistImageUrl = item.item.getPrimaryImageUrl(serverUrl)
             val albumImageUrl = if (artistImageUrl == null) {
                 item.albums
-                    .sortedByDescending { it.Year ?: 0 }
+                    .sortedBy { it.Year ?: Int.MAX_VALUE }
                     .firstNotNullOfOrNull { it.getPrimaryImageUrl(serverUrl) }
             } else null
             val displayImageUrl = artistImageUrl ?: albumImageUrl
