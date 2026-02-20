@@ -73,9 +73,11 @@ class JellyfinPlaylistsActivity : AppCompatActivity(), NavigationView.OnNavigati
         playlistsRecyclerView.layoutManager = LinearLayoutManager(this)
 
         val serverUrl = authManager.getServerUrl()?.trimEnd('/') ?: ""
+        val apiKey = authManager.getApiKey()
 
         playlistsAdapter = JellyfinPlaylistsAdapter(
             serverUrl = serverUrl,
+            apiKey = apiKey,
             onPlaylistClick = { playlist, position ->
                 loadPlaylistTracks(playlist, position)
             },

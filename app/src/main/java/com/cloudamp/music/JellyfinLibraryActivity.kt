@@ -107,9 +107,11 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
         recyclerView.addItemDecoration(LibraryDividerDecoration(this))
 
         val serverUrl = authManager.getServerUrl()?.trimEnd('/') ?: ""
+        val apiKey = authManager.getApiKey()
 
         adapter = JellyfinLibraryAdapter(
             serverUrl = serverUrl,
+            apiKey = apiKey,
             onArtistExpand = { artist, artistIds, position ->
                 loadArtistAlbums(artist.Id, artistIds, position)
             },

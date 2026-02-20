@@ -43,6 +43,7 @@ sealed class JellyfinLibraryItem {
 
 class JellyfinLibraryAdapter(
     private val serverUrl: String,
+    private val apiKey: String? = null,
     private val onArtistExpand: (JellyfinItem, List<String>, Int) -> Unit,
     private val onAlbumExpand: (JellyfinItem, String, Int) -> Unit,
     private val onTrackClick: (JellyfinItem, List<JellyfinItem>, Int) -> Unit,
@@ -391,11 +392,11 @@ class JellyfinLibraryAdapter(
             }
 
             // Fallback chain: artist image → latest album art → letter avatar
-            val artistImageUrl = item.item.getPrimaryImageUrl(serverUrl)
+            val artistImageUrl = item.item.getPrimaryImageUrl(serverUrl, apiKey)
             val albumImageUrl = if (artistImageUrl == null) {
                 item.albums
                     .sortedBy { it.Year ?: Int.MAX_VALUE }
-                    .firstNotNullOfOrNull { it.getPrimaryImageUrl(serverUrl) }
+                    .firstNotNullOfOrNull { it.getPrimaryImageUrl(serverUrl, apiKey) }
             } else null
             val displayImageUrl = artistImageUrl ?: albumImageUrl
 
@@ -445,7 +446,7 @@ class JellyfinLibraryAdapter(
             }
             trackCountTextView.visibility = View.GONE
 
-            val imageUrl = item.item.getPrimaryImageUrl(serverUrl)
+            val imageUrl = item.item.getPrimaryImageUrl(serverUrl, apiKey)
             if (imageUrl != null) {
                 Glide.with(itemView.context).load(imageUrl).into(imageView)
             } else {
