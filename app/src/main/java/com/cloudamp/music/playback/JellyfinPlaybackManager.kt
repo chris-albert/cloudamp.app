@@ -132,6 +132,8 @@ class JellyfinPlaybackManager private constructor(
 
     override suspend fun play() {
         getPlayer().play()
+        updateServiceMetadata()
+        updateServiceQueue()
     }
 
     override suspend fun pause() {
@@ -243,6 +245,12 @@ class JellyfinPlaybackManager private constructor(
         dataSourceFactory = null
         queue.clear()
         currentIndex = 0
+    }
+
+    /** Push current metadata and queue onto the MediaSession (e.g. after resume). */
+    fun refreshSessionMetadata() {
+        updateServiceMetadata()
+        updateServiceQueue()
     }
 
     private fun updateServiceMetadata() {

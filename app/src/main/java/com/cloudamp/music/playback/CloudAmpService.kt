@@ -457,6 +457,10 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     if (!suppressPollingUpdates) {
                         val active = ActivePlayback.provider
                         if (active is GDrivePlaybackManager) {
+                            if (!detectedPlayback) {
+                                Log.d(TAG, "Detected active GDrive playback, pushing metadata")
+                                active.refreshSessionMetadata()
+                            }
                             detectedPlayback = true
                             // Poll ExoPlayer position for Google Drive playback
                             val position = active.getCurrentPosition()
@@ -467,6 +471,10 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                             }
                             updatePlaybackState(state, position, 1.0f)
                         } else if (active is JellyfinPlaybackManager) {
+                            if (!detectedPlayback) {
+                                Log.d(TAG, "Detected active Jellyfin playback, pushing metadata")
+                                active.refreshSessionMetadata()
+                            }
                             detectedPlayback = true
                             // Poll ExoPlayer position for Jellyfin playback
                             val position = active.getCurrentPosition()
