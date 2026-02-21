@@ -457,6 +457,10 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     if (!suppressPollingUpdates) {
                         val active = ActivePlayback.provider
                         if (active is GDrivePlaybackManager) {
+                            if (!detectedPlayback) {
+                                Log.d(TAG, "Detected active GDrive playback, pushing metadata")
+                                active.refreshSessionMetadata()
+                            }
                             detectedPlayback = true
                             // Poll ExoPlayer position for Google Drive playback
                             val position = active.getCurrentPosition()
@@ -467,6 +471,10 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                             }
                             updatePlaybackState(state, position, 1.0f)
                         } else if (active is JellyfinPlaybackManager) {
+                            if (!detectedPlayback) {
+                                Log.d(TAG, "Detected active Jellyfin playback, pushing metadata")
+                                active.refreshSessionMetadata()
+                            }
                             detectedPlayback = true
                             // Poll ExoPlayer position for Jellyfin playback
                             val position = active.getCurrentPosition()
@@ -1158,7 +1166,22 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_artist_placeholder}"
 
             for (artist in artists ?: emptyList()) {
-                val imageUrl = jellyfinContentUri(artist.Id, artist.getPrimaryImageUrl(serverUrl, apiKey))
+                var imageUrl = jellyfinContentUri(artist.Id, artist.getPrimaryImageUrl(serverUrl, apiKey))
+
+                // Artwork fallback: use first released album cover from cache
+                if (imageUrl == null) {
+                    val repId = jellyfinLibraryCache.getRepresentativeArtistId(artist.Id) ?: artist.Id
+                    val albums = jellyfinLibraryCache.getArtistAlbums(repId)
+                    if (albums != null) {
+                        val fallbackAlbum = albums
+                            .sortedBy { it.Year ?: Int.MAX_VALUE }
+                            .firstOrNull { it.hasPrimaryImage() }
+                        if (fallbackAlbum != null) {
+                            imageUrl = jellyfinContentUri(fallbackAlbum.Id, fallbackAlbum.getPrimaryImageUrl(serverUrl, apiKey))
+                        }
+                    }
+                }
+
                 items.add(createBrowsableItem(
                     "jellyfin_artist_${artist.Id}",
                     artist.Name,
@@ -1205,14 +1228,27 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
     private suspend fun loadJellyfinArtistAlbums(artistId: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
         try {
-            val userId = jellyfinAuthManager.getUserId() ?: return
             val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
             val apiKey = jellyfinAuthManager.getApiKey()
-            val response = jellyfinClient.api.getArtistAlbums(userId, artistId)
-            if (response.isSuccessful) {
-                val albums = response.body()?.Items ?: emptyList()
+
+            // Find representative ID and try cache first
+            val repId = jellyfinLibraryCache.getRepresentativeArtistId(artistId) ?: artistId
+            var albums = jellyfinLibraryCache.getArtistAlbums(repId)
+
+            // Cache miss - fetch from API
+            if (albums == null) {
+                val userId = jellyfinAuthManager.getUserId() ?: return
+                val groupedIds = jellyfinLibraryCache.getGroupedArtistIds(artistId)?.joinToString(",") ?: artistId
+                val response = jellyfinClient.api.getArtistAlbums(userId, groupedIds)
+                if (response.isSuccessful) {
+                    albums = response.body()?.Items ?: emptyList()
+                    jellyfinLibraryCache.saveArtistAlbums(repId, albums)
+                }
+            }
+
+            if (albums != null) {
                 val fallbackImageUrl = albums
-                    .sortedByDescending { it.Year ?: 0 }
+                    .sortedBy { it.Year ?: Int.MAX_VALUE }
                     .firstOrNull { it.hasPrimaryImage() }
                     ?.let { jellyfinContentUri(it.Id, it.getPrimaryImageUrl(serverUrl, apiKey)) }
                 val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
@@ -1236,15 +1272,25 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
     private suspend fun loadJellyfinAlbumTracks(albumId: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
         try {
-            val userId = jellyfinAuthManager.getUserId() ?: return
             val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
             val apiKey = jellyfinAuthManager.getApiKey()
             val apiKeySuffix = if (apiKey != null) "&api_key=$apiKey" else ""
-            val response = jellyfinClient.api.getAlbumTracks(userId, albumId)
-            if (response.isSuccessful) {
-                val tracks = response.body()?.Items ?: emptyList()
 
-                // Cache tracks for playback queue building
+            // Try cache first
+            var tracks = jellyfinLibraryCache.getAlbumTracks(albumId)
+
+            // Cache miss - fetch from API
+            if (tracks == null) {
+                val userId = jellyfinAuthManager.getUserId() ?: return
+                val response = jellyfinClient.api.getAlbumTracks(userId, albumId)
+                if (response.isSuccessful) {
+                    tracks = response.body()?.Items ?: emptyList()
+                    jellyfinLibraryCache.saveAlbumTracks(albumId, tracks)
+                }
+            }
+
+            if (tracks != null) {
+                // Populate runtime map for playback queue building
                 jellyfinTracksByAlbum[albumId] = tracks
 
                 for (track in tracks) {
