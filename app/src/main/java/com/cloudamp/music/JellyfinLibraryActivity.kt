@@ -221,6 +221,9 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 libraryCache.saveArtistGroups(groupMap)
 
                 // 3. For each artist group: fetch albums, save to cache, preload into adapter
+                // Also build fallback image map for artists without primary images
+                val artistsById = artists.associateBy { it.Id }
+                val fallbackImages = mutableMapOf<String, String>()
                 val totalGroups = artistGroups.size
                 var albumsCompleted = 0
                 for ((representativeId, groupedIds) in artistGroups) {
@@ -230,6 +233,17 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                             val albums = albumResponse.body()?.Items ?: emptyList()
                             libraryCache.saveArtistAlbums(representativeId, albums)
                             adapter.preloadArtistAlbums(representativeId, albums)
+
+                            // Cache fallback album image for artists without primary image
+                            val repArtist = artistsById[representativeId]
+                            if (repArtist != null && !repArtist.hasPrimaryImage()) {
+                                val fallbackAlbum = albums
+                                    .sortedBy { it.Year ?: Int.MAX_VALUE }
+                                    .firstOrNull { it.hasPrimaryImage() }
+                                if (fallbackAlbum != null) {
+                                    fallbackImages[representativeId] = fallbackAlbum.Id
+                                }
+                            }
 
                             // 4. For each album: fetch tracks, save to cache
                             for (album in albums) {
@@ -247,7 +261,8 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                     pathTextView.text = "JELLYFIN / albums $albumsCompleted/$totalGroups..."
                 }
 
-                // 5. Mark cache complete
+                // 5. Save fallback images and mark cache complete
+                libraryCache.saveArtistFallbackImages(fallbackImages)
                 libraryCache.markCacheComplete()
                 pathTextView.text = "JELLYFIN"
 
