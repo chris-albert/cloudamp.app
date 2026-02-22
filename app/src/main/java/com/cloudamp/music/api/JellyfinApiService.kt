@@ -15,8 +15,8 @@ interface JellyfinApiService {
     @GET("Users/Me")
     suspend fun getCurrentUser(): Response<JellyfinUser>
 
-    /** Get all music artists in the library. */
-    @GET("Artists")
+    /** Get album artists in the library (excludes featured/track-only artists). */
+    @GET("Artists/AlbumArtists")
     suspend fun getArtists(
         @Query("UserId") userId: String,
         @Query("SortBy") sortBy: String = "SortName",
@@ -31,7 +31,7 @@ interface JellyfinApiService {
     @GET("Users/{userId}/Items")
     suspend fun getArtistAlbums(
         @Path("userId") userId: String,
-        @Query("ArtistIds") artistId: String,
+        @Query("AlbumArtistIds") artistId: String,
         @Query("IncludeItemTypes") types: String = "MusicAlbum",
         @Query("SortBy") sortBy: String = "ProductionYear,SortName",
         @Query("SortOrder") sortOrder: String = "Descending",
@@ -45,7 +45,7 @@ interface JellyfinApiService {
         @Path("userId") userId: String,
         @Query("ParentId") albumId: String,
         @Query("IncludeItemTypes") types: String = "Audio",
-        @Query("SortBy") sortBy: String = "IndexNumber",
+        @Query("SortBy") sortBy: String = "ParentIndexNumber,IndexNumber",
         @Query("SortOrder") sortOrder: String = "Ascending",
         @Query("Fields") fields: String = "PrimaryImageAspectRatio,Artists"
     ): Response<JellyfinItemsResponse>
