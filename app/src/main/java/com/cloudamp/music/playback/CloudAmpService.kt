@@ -63,6 +63,10 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     // Cache of Jellyfin tracks by album/playlist for building playback queues
     private val jellyfinTracksByAlbum = mutableMapOf<String, List<JellyfinItem>>()
 
+    // In-memory cache of built Jellyfin artist MediaItems for Android Auto browsing
+    private var jellyfinArtistMediaItems: List<MediaBrowserCompat.MediaItem>? = null
+    private var jellyfinArtistCacheTimestamp: Long = 0
+
     // Cache of tracks per Spotify playlist, populated when browsing playlists
     private val playlistTracksCache = mutableMapOf<String, List<Track>>()
 
@@ -1150,6 +1154,13 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 return
             }
 
+            // Return in-memory cached list if available and not stale
+            val currentTimestamp = jellyfinLibraryCache.getLastLoadedTimestamp()
+            if (jellyfinArtistMediaItems != null && jellyfinArtistCacheTimestamp == currentTimestamp) {
+                items.addAll(jellyfinArtistMediaItems!!)
+                return
+            }
+
             // Use cache first, fall back to API
             var artists = jellyfinLibraryCache.getArtists()
             if (artists.isNullOrEmpty()) {
@@ -1164,31 +1175,34 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
             val apiKey = jellyfinAuthManager.getApiKey()
             val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_artist_placeholder}"
+            val fallbackImages = jellyfinLibraryCache.getArtistFallbackImages() ?: emptyMap()
 
+            val built = mutableListOf<MediaBrowserCompat.MediaItem>()
             for (artist in artists ?: emptyList()) {
                 var imageUrl = jellyfinContentUri(artist.Id, artist.getPrimaryImageUrl(serverUrl, apiKey))
 
-                // Artwork fallback: use first released album cover from cache
+                // Use cached fallback album image for artists without primary image
                 if (imageUrl == null) {
                     val repId = jellyfinLibraryCache.getRepresentativeArtistId(artist.Id) ?: artist.Id
-                    val albums = jellyfinLibraryCache.getArtistAlbums(repId)
-                    if (albums != null) {
-                        val fallbackAlbum = albums
-                            .sortedBy { it.Year ?: Int.MAX_VALUE }
-                            .firstOrNull { it.hasPrimaryImage() }
-                        if (fallbackAlbum != null) {
-                            imageUrl = jellyfinContentUri(fallbackAlbum.Id, fallbackAlbum.getPrimaryImageUrl(serverUrl, apiKey))
-                        }
+                    val fallbackAlbumId = fallbackImages[repId]
+                    if (fallbackAlbumId != null) {
+                        val fallbackUrl = "$serverUrl/Items/$fallbackAlbumId/Images/Primary?maxWidth=300" +
+                            (if (apiKey != null) "&api_key=$apiKey" else "")
+                        imageUrl = jellyfinContentUri(fallbackAlbumId, fallbackUrl)
                     }
                 }
 
-                items.add(createBrowsableItem(
+                built.add(createBrowsableItem(
                     "jellyfin_artist_${artist.Id}",
                     artist.Name,
                     "Artist",
                     imageUrl ?: placeholderUri
                 ))
             }
+
+            jellyfinArtistMediaItems = built
+            jellyfinArtistCacheTimestamp = currentTimestamp
+            items.addAll(built)
         } catch (e: Exception) {
             e.printStackTrace()
         }

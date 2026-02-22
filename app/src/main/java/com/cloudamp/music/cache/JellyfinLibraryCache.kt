@@ -22,6 +22,7 @@ class JellyfinLibraryCache(private val context: Context) {
         private const val KEY_ARTISTS = "cached_artists"
         private const val KEY_PLAYLISTS = "cached_playlists"
         private const val KEY_ARTIST_GROUPS = "cached_artist_groups"
+        private const val KEY_ARTIST_FALLBACK_IMAGES = "cached_artist_fallback_images"
         private const val KEY_LAST_LOADED = "last_loaded_timestamp"
 
         @Volatile
@@ -141,6 +142,27 @@ class JellyfinLibraryCache(private val context: Context) {
         return null
     }
 
+    // ── Artist fallback images (artist ID → fallback album ID with image) ──
+
+    fun saveArtistFallbackImages(fallbacks: Map<String, String>) {
+        val serialized = fallbacks.map { (artistId, albumId) -> "$artistId=$albumId" }
+            .joinToString("|")
+        prefs.edit().putString(KEY_ARTIST_FALLBACK_IMAGES, serialized).apply()
+    }
+
+    fun getArtistFallbackImages(): Map<String, String>? {
+        val raw = prefs.getString(KEY_ARTIST_FALLBACK_IMAGES, null) ?: return null
+        if (raw.isEmpty()) return emptyMap()
+        return try {
+            raw.split("|").associate { entry ->
+                val parts = entry.split("=", limit = 2)
+                parts[0] to parts[1]
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     // ── Cache completeness ─────────────────────────────────────────────
 
     fun hasFullCache(): Boolean {
@@ -172,6 +194,7 @@ class JellyfinLibraryCache(private val context: Context) {
             .remove(KEY_ARTISTS)
             .remove(KEY_PLAYLISTS)
             .remove(KEY_ARTIST_GROUPS)
+            .remove(KEY_ARTIST_FALLBACK_IMAGES)
             .remove(KEY_LAST_LOADED)
             .apply()
 
