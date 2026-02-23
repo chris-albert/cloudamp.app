@@ -1195,7 +1195,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 built.add(createBrowsableItem(
                     "jellyfin_artist_${artist.Id}",
                     artist.Name,
-                    "Artist",
+                    "",
                     imageUrl ?: placeholderUri
                 ))
             }
