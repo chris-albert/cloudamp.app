@@ -196,10 +196,21 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 // 1. Fetch all artists from API
                 pathTextView.text = "JELLYFIN / loading artists..."
                 val response = jellyfinClient.api.getArtists(userId)
-                val artists = if (response.isSuccessful) {
-                    (response.body()?.Items ?: emptyList())
-                        .filter { it.Path == null || !it.Path.startsWith("/config/metadata/") }
+                val allArtists = if (response.isSuccessful) {
+                    response.body()?.Items ?: emptyList()
                 } else emptyList()
+
+                // Filter out /config/metadata/ ghost artists only when a real
+                // /media/ artist with the same normalized name already exists.
+                val mediaNames = allArtists
+                    .filter { it.Path?.startsWith("/media/") == true }
+                    .map { it.Name.lowercase().trim() }
+                    .toSet()
+                val artists = allArtists.filter {
+                    it.Path == null ||
+                    !it.Path.startsWith("/config/metadata/") ||
+                    it.Name.lowercase().trim() !in mediaNames
+                }
 
                 libraryCache.saveArtists(artists)
                 adapter.setArtists(artists, emptyList())

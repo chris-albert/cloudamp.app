@@ -1179,8 +1179,18 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 val userId = jellyfinAuthManager.getUserId() ?: return
                 val response = jellyfinClient.api.getArtists(userId)
                 if (response.isSuccessful) {
-                    artists = (response.body()?.Items ?: emptyList())
-                        .filter { it.Path == null || !it.Path.startsWith("/config/metadata/") }
+                    val allArtists = response.body()?.Items ?: emptyList()
+                    // Filter out /config/metadata/ ghost artists only when a real
+                    // /media/ artist with the same normalized name already exists.
+                    val mediaNames = allArtists
+                        .filter { it.Path?.startsWith("/media/") == true }
+                        .map { it.Name.lowercase().trim() }
+                        .toSet()
+                    artists = allArtists.filter {
+                        it.Path == null ||
+                        !it.Path.startsWith("/config/metadata/") ||
+                        it.Name.lowercase().trim() !in mediaNames
+                    }
                     jellyfinLibraryCache.saveArtists(artists)
                 }
             }
