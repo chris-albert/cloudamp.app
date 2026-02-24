@@ -11,6 +11,14 @@
                     android:id="@+id/nav_jellyfin_playlists"
                     android:icon="@drawable/ic_playlist"
                     android:title="Jellyfin Playlists" />
+                <item
+                    android:id="@+id/nav_jellyfin_recent_played"
+                    android:icon="@drawable/ic_playlist"
+                    android:title="Recently Played" />
+                <item
+                    android:id="@+id/nav_jellyfin_recent_added"
+                    android:icon="@drawable/ic_playlist"
+                    android:title="Recently Added" />
             </group>
         </menu>
     </item>

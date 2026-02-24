@@ -18,6 +18,8 @@ import com.google.android.exoplayer2.audio.AudioAttributes
 import com.google.android.exoplayer2.ext.okhttp.OkHttpDataSource
 import com.google.android.exoplayer2.source.DefaultMediaSourceFactory
 import com.google.android.exoplayer2.upstream.DataSource
+import com.cloudamp.music.auth.JellyfinAuthManager
+import kotlinx.coroutines.*
 
 /**
  * Manages Jellyfin audio playback using ExoPlayer.
@@ -49,6 +51,9 @@ class JellyfinPlaybackManager private constructor(
 
     private val queue = mutableListOf<JellyfinItem>()
     private var currentIndex = 0
+
+    // Fire-and-forget scope for reporting playback to Jellyfin server
+    private val reportingScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     override val providerName: String = "Jellyfin"
 
@@ -240,6 +245,7 @@ class JellyfinPlaybackManager private constructor(
         if (ActivePlayback.provider === this) {
             ActivePlayback.clear()
         }
+        reportingScope.cancel()
         exoPlayer?.release()
         exoPlayer = null
         dataSourceFactory = null
@@ -272,6 +278,20 @@ class JellyfinPlaybackManager private constructor(
         service?.updateQueue(tracks, currentIndex)
     }
 
+    private fun reportTrackPlayed(item: JellyfinItem) {
+        reportingScope.launch {
+            try {
+                val authManager = JellyfinAuthManager(context)
+                val userId = authManager.getUserId() ?: return@launch
+                val client = JellyfinApiClient.getInstance(context)
+                client.api.markItemPlayed(userId, item.Id)
+                Log.d(TAG, "Reported played: ${item.Name}")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to report played: ${e.message}")
+            }
+        }
+    }
+
     private val playerListener = object : Player.Listener {
 
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -290,6 +310,10 @@ class JellyfinPlaybackManager private constructor(
                     service?.updatePlaybackState(PlaybackStateCompat.STATE_BUFFERING, getCurrentPosition())
                 }
                 Player.STATE_ENDED -> {
+                    // Report the last track as played when the queue finishes
+                    if (currentIndex in queue.indices) {
+                        reportTrackPlayed(queue[currentIndex])
+                    }
                     service?.updatePlaybackState(PlaybackStateCompat.STATE_STOPPED)
                 }
                 Player.STATE_IDLE -> { }
@@ -320,8 +344,15 @@ class JellyfinPlaybackManager private constructor(
 
         override fun onMediaItemTransition(mediaItem: com.google.android.exoplayer2.MediaItem?, reason: Int) {
             val player = exoPlayer ?: return
+            val previousIndex = currentIndex
             currentIndex = player.currentMediaItemIndex
             Log.d(TAG, "onMediaItemTransition: index=$currentIndex, reason=$reason")
+
+            // Report the previous track as played when it auto-advanced
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && previousIndex in queue.indices) {
+                reportTrackPlayed(queue[previousIndex])
+            }
+
             updateServiceMetadata()
             updateServiceQueue()
         }
