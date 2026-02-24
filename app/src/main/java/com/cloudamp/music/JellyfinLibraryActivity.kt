@@ -27,6 +27,7 @@ import com.cloudamp.music.api.JellyfinApiClient
 import com.cloudamp.music.api.JellyfinItem
 import com.cloudamp.music.auth.JellyfinAuthManager
 import com.cloudamp.music.cache.JellyfinLibraryCache
+import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.JellyfinPlaybackManager
 import com.cloudamp.music.ui.AlphabetSidebarView
 import com.cloudamp.music.ui.JellyfinLibraryAdapter
@@ -460,6 +461,7 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
         val queueItems = allTracks.subList(position, allTracks.size) +
                 allTracks.subList(0, position)
 
+        CloudAmpService.ensureForeground(this)
         jellyfinPlayback.playItems(queueItems, 0)
 
         Toast.makeText(this, "Playing: ${track.Name}", Toast.LENGTH_SHORT).show()

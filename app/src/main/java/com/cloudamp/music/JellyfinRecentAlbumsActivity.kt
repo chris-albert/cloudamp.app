@@ -17,6 +17,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.cloudamp.music.api.JellyfinApiClient
 import com.cloudamp.music.api.JellyfinItem
 import com.cloudamp.music.auth.JellyfinAuthManager
+import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.JellyfinPlaybackManager
 import com.cloudamp.music.ui.JellyfinRecentAlbumsAdapter
 import com.google.android.material.navigation.NavigationView
@@ -182,6 +183,7 @@ class JellyfinRecentAlbumsActivity : AppCompatActivity(), NavigationView.OnNavig
         val jellyfinPlayback = JellyfinPlaybackManager.getInstance(this)
         val queueItems = allTracks.subList(trackPosition, allTracks.size) +
                 allTracks.subList(0, trackPosition)
+        CloudAmpService.ensureForeground(this)
         jellyfinPlayback.playItems(queueItems, 0)
         Toast.makeText(this, "Playing: ${track.Name}", Toast.LENGTH_SHORT).show()
         startActivity(Intent(this, NowPlayingActivity::class.java))

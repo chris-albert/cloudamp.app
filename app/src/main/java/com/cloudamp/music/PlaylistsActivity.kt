@@ -16,6 +16,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.cloudamp.music.api.Playlist
 import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.models.Track
+import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.PlaybackManager
 import com.cloudamp.music.ui.PlaylistsAdapter
 import com.google.android.material.navigation.NavigationView
@@ -156,6 +157,7 @@ class PlaylistsActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
 
     private fun playTrackWithQueue(track: Track, allTracks: List<Track>, trackPosition: Int) {
         val tracksToPlay = allTracks.drop(trackPosition)
+        CloudAmpService.ensureForeground(this)
         playbackManager.playTracks(tracksToPlay, 0)
         Toast.makeText(this, "Playing: ${track.name} (+${tracksToPlay.size - 1} in queue)", Toast.LENGTH_SHORT).show()
     }

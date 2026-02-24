@@ -18,6 +18,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.cache.SavedQueuesManager
 import com.cloudamp.music.models.SavedQueue
+import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.playback.JellyfinPlaybackManager
 import com.cloudamp.music.playback.PlaybackManager
@@ -122,6 +123,7 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
         // Save position of the currently active queue before switching
         savedQueuesManager.saveActiveQueuePosition()
 
+        CloudAmpService.ensureForeground(this)
         playbackManager.playTracks(queue.tracks, queue.currentIndex)
 
         // Seek to saved position within the track after playback starts
@@ -158,6 +160,7 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
         savedQueuesManager.saveActiveQueuePosition()
 
         val gdrive = GDrivePlaybackManager.getInstance(this)
+        CloudAmpService.ensureForeground(this)
         gdrive.playFiles(queue.driveFiles, queue.currentIndex)
 
         // Seek to saved position within the track after buffering
@@ -195,6 +198,7 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
         savedQueuesManager.saveActiveQueuePosition()
 
         val jellyfin = JellyfinPlaybackManager.getInstance(this)
+        CloudAmpService.ensureForeground(this)
         jellyfin.playItems(items, queue.currentIndex)
 
         // Seek to saved position within the track after buffering

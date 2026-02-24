@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
@@ -99,6 +100,23 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
         private const val CHANNEL_ID = "cloudamp_playback"
         private const val NOTIFICATION_ID = 1
+
+        /** Start the service as a foreground service so playback survives backgrounding. */
+        fun ensureForeground(context: Context) {
+            val intent = Intent(context, CloudAmpService::class.java)
+            ContextCompat.startForegroundService(context, intent)
+        }
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // When started via startForegroundService(), immediately promote to foreground
+        // so Android doesn't kill the service after ~5 seconds.
+        try {
+            updateNotification(ActivePlayback.provider?.isPlaying() ?: false)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not start foreground notification: ${e.message}")
+        }
+        return START_STICKY
     }
 
     override fun onCreate() {
