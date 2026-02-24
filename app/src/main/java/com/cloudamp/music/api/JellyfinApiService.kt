@@ -39,6 +39,18 @@ interface JellyfinApiService {
         @Query("Fields") fields: String = "PrimaryImageAspectRatio,ProductionYear"
     ): Response<JellyfinItemsResponse>
 
+    /** Get albums by album-artist metadata (fallback for metadata-only artists). */
+    @GET("Users/{userId}/Items")
+    suspend fun getArtistAlbumsByArtistId(
+        @Path("userId") userId: String,
+        @Query("AlbumArtistIds") artistId: String,
+        @Query("IncludeItemTypes") types: String = "MusicAlbum",
+        @Query("SortBy") sortBy: String = "ProductionYear,SortName",
+        @Query("SortOrder") sortOrder: String = "Descending",
+        @Query("Recursive") recursive: Boolean = true,
+        @Query("Fields") fields: String = "PrimaryImageAspectRatio,ProductionYear"
+    ): Response<JellyfinItemsResponse>
+
     /** Get tracks in an album. */
     @GET("Users/{userId}/Items")
     suspend fun getAlbumTracks(

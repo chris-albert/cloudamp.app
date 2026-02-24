@@ -1332,10 +1332,13 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             if (albums == null) {
                 val userId = jellyfinAuthManager.getUserId() ?: return
                 val response = jellyfinClient.api.getArtistAlbums(userId, repId)
-                if (response.isSuccessful) {
-                    albums = response.body()?.Items ?: emptyList()
-                    jellyfinLibraryCache.saveArtistAlbums(repId, albums)
+                albums = if (response.isSuccessful) response.body()?.Items ?: emptyList() else null
+                // Fallback for metadata-only artists (no folder children)
+                if (albums != null && albums.isEmpty()) {
+                    val fallbackResponse = jellyfinClient.api.getArtistAlbumsByArtistId(userId, repId)
+                    if (fallbackResponse.isSuccessful) albums = fallbackResponse.body()?.Items ?: emptyList()
                 }
+                if (albums != null) jellyfinLibraryCache.saveArtistAlbums(repId, albums)
             }
 
             if (albums != null) {
