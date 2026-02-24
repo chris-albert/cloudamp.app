@@ -1,5 +1,6 @@
 package com.cloudamp.music.ui
 
+import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -22,7 +23,8 @@ sealed class JellyfinRecentAlbumItem {
     data class TrackItem(
         val track: JellyfinItem,
         val parentAlbumId: String,
-        val trackIndex: Int
+        val trackIndex: Int,
+        val isLastPlayed: Boolean = false
     ) : JellyfinRecentAlbumItem()
 
     data class FooterItem(
@@ -102,21 +104,28 @@ class JellyfinRecentAlbumsAdapter(
         }
     }
 
-    fun setAlbumTracks(position: Int, tracks: List<JellyfinItem>) {
-        val item = items[position] as? JellyfinRecentAlbumItem.AlbumHeader ?: return
+    /**
+     * @return the adapter position of the last-played track, or -1 if none
+     */
+    fun setAlbumTracks(position: Int, tracks: List<JellyfinItem>): Int {
+        val item = items[position] as? JellyfinRecentAlbumItem.AlbumHeader ?: return -1
         item.tracks = tracks
         item.isLoadingTracks = false
 
+        var lastPlayedAdapterPos = -1
         if (item.isExpanded && tracks.isNotEmpty()) {
             val itemsToAdd = mutableListOf<JellyfinRecentAlbumItem>()
             itemsToAdd.addAll(tracks.mapIndexed { index, track ->
-                JellyfinRecentAlbumItem.TrackItem(track, item.album.Id, index)
+                val isLast = item.lastPlayedTrack != null && track.Name == item.lastPlayedTrack
+                if (isLast) lastPlayedAdapterPos = position + 1 + index
+                JellyfinRecentAlbumItem.TrackItem(track, item.album.Id, index, isLast)
             })
             itemsToAdd.add(JellyfinRecentAlbumItem.FooterItem(item.album.Id))
             items.addAll(position + 1, itemsToAdd)
             notifyItemChanged(position)
             notifyItemRangeInserted(position + 1, itemsToAdd.size)
         }
+        return lastPlayedAdapterPos
     }
 
     private fun formatDuration(ms: Long): String {
@@ -168,7 +177,15 @@ class JellyfinRecentAlbumsAdapter(
         private val durationTextView: TextView = itemView.findViewById(R.id.trackDurationTextView)
 
         fun bind(item: JellyfinRecentAlbumItem.TrackItem) {
-            trackNumberTextView.text = (item.trackIndex + 1).toString()
+            if (item.isLastPlayed) {
+                trackNumberTextView.text = "\u25b6"
+                trackNumberTextView.setTextColor(Color.parseColor("#FFFF00"))
+                nameTextView.setTextColor(Color.parseColor("#FFFF00"))
+            } else {
+                trackNumberTextView.text = (item.trackIndex + 1).toString()
+                trackNumberTextView.setTextColor(itemView.context.getColor(R.color.winamp_display_text))
+                nameTextView.setTextColor(itemView.context.getColor(R.color.winamp_text))
+            }
             nameTextView.text = item.track.Name
             artistTextView.text = item.track.getArtistDisplay()
             durationTextView.text = formatDuration(item.track.getDurationMs())
