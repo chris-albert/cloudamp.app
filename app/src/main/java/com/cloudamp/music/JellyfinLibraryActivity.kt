@@ -197,7 +197,8 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 pathTextView.text = "JELLYFIN / loading artists..."
                 val response = jellyfinClient.api.getArtists(userId)
                 val artists = if (response.isSuccessful) {
-                    response.body()?.Items ?: emptyList()
+                    (response.body()?.Items ?: emptyList())
+                        .filter { it.Path == null || !it.Path.startsWith("/config/metadata/") }
                 } else emptyList()
 
                 libraryCache.saveArtists(artists)
@@ -228,7 +229,7 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 var albumsCompleted = 0
                 for ((representativeId, groupedIds) in artistGroups) {
                     try {
-                        val albumResponse = jellyfinClient.api.getArtistAlbums(userId, groupedIds)
+                        val albumResponse = jellyfinClient.api.getArtistAlbums(userId, representativeId)
                         if (albumResponse.isSuccessful) {
                             val albums = albumResponse.body()?.Items ?: emptyList()
                             libraryCache.saveArtistAlbums(representativeId, albums)
@@ -349,7 +350,7 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
         scope.launch {
             try {
                 val userId = authManager.getUserId() ?: return@launch
-                val response = jellyfinClient.api.getArtistAlbums(userId, artistIds.joinToString(","))
+                val response = jellyfinClient.api.getArtistAlbums(userId, representativeId)
 
                 if (response.isSuccessful) {
                     val albums = response.body()?.Items ?: emptyList()

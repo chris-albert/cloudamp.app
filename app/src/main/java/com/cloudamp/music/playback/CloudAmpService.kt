@@ -1167,7 +1167,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 val userId = jellyfinAuthManager.getUserId() ?: return
                 val response = jellyfinClient.api.getArtists(userId)
                 if (response.isSuccessful) {
-                    artists = response.body()?.Items ?: emptyList()
+                    artists = (response.body()?.Items ?: emptyList())
+                        .filter { it.Path == null || !it.Path.startsWith("/config/metadata/") }
                     jellyfinLibraryCache.saveArtists(artists)
                 }
             }
@@ -1252,8 +1253,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             // Cache miss - fetch from API
             if (albums == null) {
                 val userId = jellyfinAuthManager.getUserId() ?: return
-                val groupedIds = jellyfinLibraryCache.getGroupedArtistIds(artistId)?.joinToString(",") ?: artistId
-                val response = jellyfinClient.api.getArtistAlbums(userId, groupedIds)
+                val response = jellyfinClient.api.getArtistAlbums(userId, repId)
                 if (response.isSuccessful) {
                     albums = response.body()?.Items ?: emptyList()
                     jellyfinLibraryCache.saveArtistAlbums(repId, albums)
