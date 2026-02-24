@@ -1304,7 +1304,11 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     val albumName = track.Album ?: continue
                     val artist = track.AlbumArtist ?: ""
                     val year = track.Year?.toString()
-                    val subtitle = if (year != null) "$artist \u00b7 $year" else artist
+                    val parts = mutableListOf<String>()
+                    if (artist.isNotEmpty()) parts.add(artist)
+                    if (year != null) parts.add(year)
+                    parts.add(track.Name)
+                    val subtitle = parts.joinToString(" \u00b7 ")
                     val imageUrl = jellyfinContentUri(albumId,
                         "$serverUrl/Items/$albumId/Images/Primary?maxWidth=300$apiKeySuffix")
                         ?: placeholderUri
