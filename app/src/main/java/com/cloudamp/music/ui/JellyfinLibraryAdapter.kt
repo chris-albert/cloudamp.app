@@ -137,15 +137,26 @@ class JellyfinLibraryAdapter(
         return name.substring(0, match.range.first).trim()
     }
 
+    /** Normalize name for grouping: handles "feat." splits and spelling variations ("&" vs "and"). */
+    private fun normalizeForGrouping(name: String): String {
+        return extractPrimaryName(name)
+            .lowercase()
+            .replace("&", "and")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
     private fun groupArtists(artists: List<JellyfinItem>): List<JellyfinLibraryItem.ArtistItem> {
         val groups = mutableMapOf<String, MutableList<JellyfinItem>>()
         for (artist in artists) {
-            val primary = extractPrimaryName(artist.Name).lowercase()
-            groups.getOrPut(primary) { mutableListOf() }.add(artist)
+            val key = normalizeForGrouping(artist.Name)
+            groups.getOrPut(key) { mutableListOf() }.add(artist)
         }
-        return groups.map { (primaryKey, members) ->
-            val primaryName = extractPrimaryName(members.first().Name)
-            val representative = members.find { it.Name.lowercase() == primaryKey } ?: members.first()
+        return groups.map { (_, members) ->
+            // Prefer real folder artists (/media/) over metadata ghosts (/config/metadata/)
+            val representative = members.find { it.Path?.startsWith("/media/") == true }
+                ?: members.first()
+            val primaryName = extractPrimaryName(representative.Name)
             val albumCount = members.sumOf { it.ChildCount ?: 0 }
             JellyfinLibraryItem.ArtistItem(
                 item = representative,

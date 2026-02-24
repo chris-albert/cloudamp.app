@@ -22,16 +22,16 @@ interface JellyfinApiService {
         @Query("SortBy") sortBy: String = "SortName",
         @Query("SortOrder") sortOrder: String = "Ascending",
         @Query("Recursive") recursive: Boolean = true,
-        @Query("Fields") fields: String = "PrimaryImageAspectRatio,SortName,ChildCount",
+        @Query("Fields") fields: String = "PrimaryImageAspectRatio,SortName,ChildCount,Path",
         @Query("StartIndex") startIndex: Int = 0,
         @Query("Limit") limit: Int = 500
     ): Response<JellyfinItemsResponse>
 
-    /** Get albums by a specific artist. */
+    /** Get albums in an artist's folder (uses folder structure as source of truth). */
     @GET("Users/{userId}/Items")
     suspend fun getArtistAlbums(
         @Path("userId") userId: String,
-        @Query("AlbumArtistIds") artistId: String,
+        @Query("ParentId") artistId: String,
         @Query("IncludeItemTypes") types: String = "MusicAlbum",
         @Query("SortBy") sortBy: String = "ProductionYear,SortName",
         @Query("SortOrder") sortOrder: String = "Descending",
