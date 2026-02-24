@@ -283,6 +283,18 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
                 startActivity(Intent(this, JellyfinPlaylistsActivity::class.java))
                 finish()
             }
+            R.id.nav_jellyfin_recent_played -> {
+                val intent = Intent(this, JellyfinRecentAlbumsActivity::class.java)
+                intent.putExtra(JellyfinRecentAlbumsActivity.EXTRA_MODE, JellyfinRecentAlbumsActivity.MODE_RECENTLY_PLAYED)
+                startActivity(intent)
+                finish()
+            }
+            R.id.nav_jellyfin_recent_added -> {
+                val intent = Intent(this, JellyfinRecentAlbumsActivity::class.java)
+                intent.putExtra(JellyfinRecentAlbumsActivity.EXTRA_MODE, JellyfinRecentAlbumsActivity.MODE_RECENTLY_ADDED)
+                startActivity(intent)
+                finish()
+            }
             R.id.nav_saved_queues -> {
                 // Already here
             }

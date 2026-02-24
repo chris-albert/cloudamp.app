@@ -79,4 +79,36 @@ interface JellyfinApiService {
         @Query("Limit") limit: Int = 50,
         @Query("Fields") fields: String = "PrimaryImageAspectRatio,Artists"
     ): Response<JellyfinItemsResponse>
+
+    /** Mark a track as played. */
+    @POST("Users/{userId}/PlayedItems/{itemId}")
+    suspend fun markItemPlayed(
+        @Path("userId") userId: String,
+        @Path("itemId") itemId: String
+    ): Response<Void>
+
+    /** Recently played albums (sorted by last played date). */
+    @GET("Users/{userId}/Items")
+    suspend fun getRecentlyPlayedAlbums(
+        @Path("userId") userId: String,
+        @Query("SortBy") sortBy: String = "DatePlayed",
+        @Query("SortOrder") sortOrder: String = "Descending",
+        @Query("IncludeItemTypes") types: String = "MusicAlbum",
+        @Query("Filters") filters: String = "IsPlayed",
+        @Query("Recursive") recursive: Boolean = true,
+        @Query("Limit") limit: Int = 50,
+        @Query("Fields") fields: String = "PrimaryImageAspectRatio,ProductionYear"
+    ): Response<JellyfinItemsResponse>
+
+    /** Recently added albums (sorted by date added to library). */
+    @GET("Users/{userId}/Items")
+    suspend fun getRecentlyAddedAlbums(
+        @Path("userId") userId: String,
+        @Query("SortBy") sortBy: String = "DateCreated",
+        @Query("SortOrder") sortOrder: String = "Descending",
+        @Query("IncludeItemTypes") types: String = "MusicAlbum",
+        @Query("Recursive") recursive: Boolean = true,
+        @Query("Limit") limit: Int = 50,
+        @Query("Fields") fields: String = "PrimaryImageAspectRatio,ProductionYear"
+    ): Response<JellyfinItemsResponse>
 }

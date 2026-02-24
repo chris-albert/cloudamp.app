@@ -88,6 +88,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         const val JELLYFIN_ID = "jellyfin"
         const val JELLYFIN_LIBRARY_ID = "jellyfin_library"
         const val JELLYFIN_PLAYLISTS_ID = "jellyfin_playlists"
+        const val JELLYFIN_RECENT_PLAYED_ID = "jellyfin_recent_played"
+        const val JELLYFIN_RECENT_ADDED_ID = "jellyfin_recent_added"
         const val SPOTIFY_ID = "spotify"
         const val SPOTIFY_LIBRARY_ID = "spotify_library"
         const val SPOTIFY_PLAYLISTS_ID = "spotify_playlists"
@@ -604,6 +606,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 }
 
                 JELLYFIN_ID -> {
+                    mediaItems.add(createBrowsableItem(JELLYFIN_RECENT_PLAYED_ID, "Recently Played", "Albums you've listened to"))
+                    mediaItems.add(createBrowsableItem(JELLYFIN_RECENT_ADDED_ID, "Recently Added", "New albums in your library"))
                     mediaItems.add(createBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "Jellyfin artists"))
                     mediaItems.add(createBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "Jellyfin playlists"))
                 }
@@ -614,6 +618,14 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
                 JELLYFIN_PLAYLISTS_ID -> {
                     loadJellyfinPlaylists(mediaItems)
+                }
+
+                JELLYFIN_RECENT_PLAYED_ID -> {
+                    loadJellyfinRecentlyPlayed(mediaItems)
+                }
+
+                JELLYFIN_RECENT_ADDED_ID -> {
+                    loadJellyfinRecentlyAdded(mediaItems)
                 }
 
                 SAVED_QUEUES_ID -> {
@@ -1234,6 +1246,62 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         countStr,
                         jellyfinContentUri(playlist.Id, playlist.getPrimaryImageUrl(serverUrl, apiKey))
                     ))
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private suspend fun loadJellyfinRecentlyPlayed(items: MutableList<MediaBrowserCompat.MediaItem>) {
+        try {
+            if (!jellyfinAuthManager.isConfigured()) {
+                items.add(createBrowsableItem("jellyfin_no_auth", "Connect Jellyfin", "Open CloudAmp app to configure"))
+                return
+            }
+            val userId = jellyfinAuthManager.getUserId() ?: return
+            val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
+            val apiKey = jellyfinAuthManager.getApiKey()
+            val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
+
+            val response = jellyfinClient.api.getRecentlyPlayedAlbums(userId)
+            if (response.isSuccessful) {
+                val albums = response.body()?.Items ?: emptyList()
+                for (album in albums) {
+                    val artist = album.AlbumArtist ?: ""
+                    val year = album.Year?.toString()
+                    val subtitle = if (year != null) "$artist \u00b7 $year" else artist
+                    val imageUrl = jellyfinContentUri(album.Id, album.getPrimaryImageUrl(serverUrl, apiKey))
+                        ?: placeholderUri
+                    items.add(createBrowsableItem("jellyfin_album_${album.Id}", album.Name, subtitle, imageUrl))
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private suspend fun loadJellyfinRecentlyAdded(items: MutableList<MediaBrowserCompat.MediaItem>) {
+        try {
+            if (!jellyfinAuthManager.isConfigured()) {
+                items.add(createBrowsableItem("jellyfin_no_auth", "Connect Jellyfin", "Open CloudAmp app to configure"))
+                return
+            }
+            val userId = jellyfinAuthManager.getUserId() ?: return
+            val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
+            val apiKey = jellyfinAuthManager.getApiKey()
+            val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
+
+            val response = jellyfinClient.api.getRecentlyAddedAlbums(userId)
+            if (response.isSuccessful) {
+                val albums = response.body()?.Items ?: emptyList()
+                for (album in albums) {
+                    val artist = album.AlbumArtist ?: ""
+                    val year = album.Year?.toString()
+                    val subtitle = if (year != null) "$artist \u00b7 $year" else artist
+                    val imageUrl = jellyfinContentUri(album.Id, album.getPrimaryImageUrl(serverUrl, apiKey))
+                        ?: placeholderUri
+                    items.add(createBrowsableItem("jellyfin_album_${album.Id}", album.Name, subtitle, imageUrl))
                 }
             }
         } catch (e: Exception) {
