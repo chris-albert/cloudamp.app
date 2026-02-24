@@ -18,6 +18,7 @@ data class JellyfinItem(
     val RunTimeTicks: Long? = null,
     @SerializedName("IndexNumber") val TrackNumber: Int? = null,
     val ImageTags: Map<String, String>? = null,
+    val Path: String? = null,
     val ParentId: String? = null,
     val ChildCount: Int? = null,
     @SerializedName("ProductionYear") val Year: Int? = null

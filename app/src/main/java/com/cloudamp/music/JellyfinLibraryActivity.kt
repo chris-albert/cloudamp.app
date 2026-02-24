@@ -197,7 +197,8 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 pathTextView.text = "JELLYFIN / loading artists..."
                 val response = jellyfinClient.api.getArtists(userId)
                 val artists = if (response.isSuccessful) {
-                    response.body()?.Items ?: emptyList()
+                    (response.body()?.Items ?: emptyList())
+                        .filter { it.Path == null || !it.Path.startsWith("/config/metadata/") }
                 } else emptyList()
 
                 libraryCache.saveArtists(artists)

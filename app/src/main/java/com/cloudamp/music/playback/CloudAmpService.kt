@@ -1167,7 +1167,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 val userId = jellyfinAuthManager.getUserId() ?: return
                 val response = jellyfinClient.api.getArtists(userId)
                 if (response.isSuccessful) {
-                    artists = response.body()?.Items ?: emptyList()
+                    artists = (response.body()?.Items ?: emptyList())
+                        .filter { it.Path == null || !it.Path.startsWith("/config/metadata/") }
                     jellyfinLibraryCache.saveArtists(artists)
                 }
             }
