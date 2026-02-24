@@ -124,6 +124,7 @@ class JellyfinRecentAlbumsActivity : AppCompatActivity(), NavigationView.OnNavig
                 val userId = authManager.getUserId() ?: return@launch
 
                 val albums: List<JellyfinItem>
+                val lastPlayedTracks = mutableMapOf<String, String>()
                 if (mode == MODE_RECENTLY_PLAYED) {
                     // Query recently played tracks, then deduplicate by album
                     val response = jellyfinClient.api.getRecentlyPlayedTracks(userId)
@@ -134,6 +135,8 @@ class JellyfinRecentAlbumsActivity : AppCompatActivity(), NavigationView.OnNavig
                         val albumId = track.AlbumId ?: return@mapNotNull null
                         if (!seenAlbumIds.add(albumId)) return@mapNotNull null
                         val albumName = track.Album ?: return@mapNotNull null
+                        // Remember the most recently played track for this album
+                        lastPlayedTracks[albumId] = track.Name
                         // Build a synthetic album item from the track's metadata
                         JellyfinItem(
                             Id = albumId,
@@ -149,7 +152,7 @@ class JellyfinRecentAlbumsActivity : AppCompatActivity(), NavigationView.OnNavig
                     albums = response.body()?.Items ?: emptyList()
                 }
 
-                albumsAdapter.setAlbums(albums)
+                albumsAdapter.setAlbums(albums, lastPlayedTracks)
 
                 if (albums.isEmpty()) {
                     val label = if (mode == MODE_RECENTLY_PLAYED) "recently played" else "recently added"

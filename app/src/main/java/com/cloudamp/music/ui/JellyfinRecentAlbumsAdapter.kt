@@ -13,6 +13,7 @@ import com.cloudamp.music.api.JellyfinItem
 sealed class JellyfinRecentAlbumItem {
     data class AlbumHeader(
         val album: JellyfinItem,
+        val lastPlayedTrack: String? = null,
         var isExpanded: Boolean = false,
         var tracks: List<JellyfinItem> = emptyList(),
         var isLoadingTracks: Boolean = false
@@ -72,9 +73,11 @@ class JellyfinRecentAlbumsAdapter(
 
     override fun getItemCount() = items.size
 
-    fun setAlbums(albums: List<JellyfinItem>) {
+    fun setAlbums(albums: List<JellyfinItem>, lastPlayedTracks: Map<String, String> = emptyMap()) {
         items.clear()
-        items.addAll(albums.map { JellyfinRecentAlbumItem.AlbumHeader(it) })
+        items.addAll(albums.map {
+            JellyfinRecentAlbumItem.AlbumHeader(it, lastPlayedTrack = lastPlayedTracks[it.Id])
+        })
         notifyDataSetChanged()
     }
 
@@ -133,19 +136,24 @@ class JellyfinRecentAlbumsAdapter(
             nameTextView.text = item.album.Name
             val artist = item.album.AlbumArtist ?: ""
             val year = item.album.Year?.toString()
-            subtitleTextView.text = if (year != null) "$artist \u00b7 $year" else artist
+            val parts = mutableListOf<String>()
+            if (artist.isNotEmpty()) parts.add(artist)
+            if (year != null) parts.add(year)
+            if (item.lastPlayedTrack != null) parts.add(item.lastPlayedTrack)
+            subtitleTextView.text = parts.joinToString(" \u00b7 ")
             expandIcon.text = if (item.isExpanded) "\u25bc" else "\u25b6"
 
+            // Use getPrimaryImageUrl if the item has ImageTags, otherwise build URL from album ID
             val imageUrl = item.album.getPrimaryImageUrl(serverUrl, apiKey)
-            if (imageUrl != null) {
-                Glide.with(itemView.context)
-                    .load(imageUrl)
-                    .placeholder(R.drawable.ic_album_placeholder)
-                    .into(imageView)
-            } else {
-                Glide.with(itemView.context).clear(imageView)
-                imageView.setImageResource(R.drawable.ic_album_placeholder)
-            }
+                ?: run {
+                    val apiKeySuffix = if (apiKey != null) "&api_key=$apiKey" else ""
+                    "$serverUrl/Items/${item.album.Id}/Images/Primary?maxWidth=300$apiKeySuffix"
+                }
+            Glide.with(itemView.context)
+                .load(imageUrl)
+                .placeholder(R.drawable.ic_album_placeholder)
+                .error(R.drawable.ic_album_placeholder)
+                .into(imageView)
 
             itemView.setOnClickListener {
                 toggleAlbum(bindingAdapterPosition)
