@@ -99,17 +99,17 @@ interface JellyfinApiService {
         @Path("itemId") itemId: String
     ): Response<Void>
 
-    /** Recently played albums (sorted by last played date). */
+    /** Recently played tracks (sorted by last played date; used to derive recently played albums). */
     @GET("Users/{userId}/Items")
-    suspend fun getRecentlyPlayedAlbums(
+    suspend fun getRecentlyPlayedTracks(
         @Path("userId") userId: String,
         @Query("SortBy") sortBy: String = "DatePlayed",
         @Query("SortOrder") sortOrder: String = "Descending",
-        @Query("IncludeItemTypes") types: String = "MusicAlbum",
+        @Query("IncludeItemTypes") types: String = "Audio",
         @Query("Filters") filters: String = "IsPlayed",
         @Query("Recursive") recursive: Boolean = true,
-        @Query("Limit") limit: Int = 50,
-        @Query("Fields") fields: String = "PrimaryImageAspectRatio,ProductionYear"
+        @Query("Limit") limit: Int = 200,
+        @Query("Fields") fields: String = "AlbumId,Album,AlbumArtist,ProductionYear,PrimaryImageAspectRatio"
     ): Response<JellyfinItemsResponse>
 
     /** Recently added albums (sorted by date added to library). */

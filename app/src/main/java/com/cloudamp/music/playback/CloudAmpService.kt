@@ -1290,18 +1290,25 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             val userId = jellyfinAuthManager.getUserId() ?: return
             val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
             val apiKey = jellyfinAuthManager.getApiKey()
+            val apiKeySuffix = if (apiKey != null) "&api_key=$apiKey" else ""
             val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
 
-            val response = jellyfinClient.api.getRecentlyPlayedAlbums(userId)
+            // Query recently played tracks, then deduplicate by album
+            val response = jellyfinClient.api.getRecentlyPlayedTracks(userId)
             if (response.isSuccessful) {
-                val albums = response.body()?.Items ?: emptyList()
-                for (album in albums) {
-                    val artist = album.AlbumArtist ?: ""
-                    val year = album.Year?.toString()
+                val tracks = response.body()?.Items ?: emptyList()
+                val seenAlbumIds = mutableSetOf<String>()
+                for (track in tracks) {
+                    val albumId = track.AlbumId ?: continue
+                    if (!seenAlbumIds.add(albumId)) continue
+                    val albumName = track.Album ?: continue
+                    val artist = track.AlbumArtist ?: ""
+                    val year = track.Year?.toString()
                     val subtitle = if (year != null) "$artist \u00b7 $year" else artist
-                    val imageUrl = jellyfinContentUri(album.Id, album.getPrimaryImageUrl(serverUrl, apiKey))
+                    val imageUrl = jellyfinContentUri(albumId,
+                        "$serverUrl/Items/$albumId/Images/Primary?maxWidth=300$apiKeySuffix")
                         ?: placeholderUri
-                    items.add(createBrowsableItem("jellyfin_album_${album.Id}", album.Name, subtitle, imageUrl))
+                    items.add(createBrowsableItem("jellyfin_album_$albumId", albumName, subtitle, imageUrl))
                 }
             }
         } catch (e: Exception) {
