@@ -196,10 +196,21 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 // 1. Fetch all artists from API
                 pathTextView.text = "JELLYFIN / loading artists..."
                 val response = jellyfinClient.api.getArtists(userId)
-                val artists = if (response.isSuccessful) {
-                    (response.body()?.Items ?: emptyList())
-                        .filter { it.Path == null || !it.Path.startsWith("/config/metadata/") }
+                val allArtists = if (response.isSuccessful) {
+                    response.body()?.Items ?: emptyList()
                 } else emptyList()
+
+                // Filter out /config/metadata/ ghost artists only when a real
+                // /media/ artist with the same normalized name already exists.
+                val mediaNames = allArtists
+                    .filter { it.Path?.startsWith("/media/") == true }
+                    .map { it.Name.lowercase().trim() }
+                    .toSet()
+                val artists = allArtists.filter {
+                    it.Path == null ||
+                    !it.Path.startsWith("/config/metadata/") ||
+                    it.Name.lowercase().trim() !in mediaNames
+                }
 
                 libraryCache.saveArtists(artists)
                 adapter.setArtists(artists, emptyList())
@@ -230,8 +241,13 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 for ((representativeId, groupedIds) in artistGroups) {
                     try {
                         val albumResponse = jellyfinClient.api.getArtistAlbums(userId, representativeId)
-                        if (albumResponse.isSuccessful) {
-                            val albums = albumResponse.body()?.Items ?: emptyList()
+                        var albums = if (albumResponse.isSuccessful) albumResponse.body()?.Items ?: emptyList() else emptyList()
+                        // Fallback for metadata-only artists (no folder children)
+                        if (albums.isEmpty()) {
+                            val fallbackResponse = jellyfinClient.api.getArtistAlbumsByArtistId(userId, representativeId)
+                            if (fallbackResponse.isSuccessful) albums = fallbackResponse.body()?.Items ?: emptyList()
+                        }
+                        if (albums.isNotEmpty()) {
                             libraryCache.saveArtistAlbums(representativeId, albums)
                             adapter.preloadArtistAlbums(representativeId, albums)
 
@@ -351,14 +367,14 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
             try {
                 val userId = authManager.getUserId() ?: return@launch
                 val response = jellyfinClient.api.getArtistAlbums(userId, representativeId)
-
-                if (response.isSuccessful) {
-                    val albums = response.body()?.Items ?: emptyList()
-                    libraryCache.saveArtistAlbums(representativeId, albums)
-                    adapter.setArtistAlbums(position, albums)
-                } else {
-                    handleApiError(response.code())
+                var albums = if (response.isSuccessful) response.body()?.Items ?: emptyList() else emptyList()
+                // Fallback for metadata-only artists (no folder children)
+                if (albums.isEmpty()) {
+                    val fallbackResponse = jellyfinClient.api.getArtistAlbumsByArtistId(userId, representativeId)
+                    if (fallbackResponse.isSuccessful) albums = fallbackResponse.body()?.Items ?: emptyList()
                 }
+                libraryCache.saveArtistAlbums(representativeId, albums)
+                adapter.setArtistAlbums(position, albums)
             } catch (e: Exception) {
                 e.printStackTrace()
                 Toast.makeText(this@JellyfinLibraryActivity, "Error loading albums: ${e.message}", Toast.LENGTH_LONG).show()
