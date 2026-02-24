@@ -122,26 +122,42 @@ class JellyfinRecentAlbumsActivity : AppCompatActivity(), NavigationView.OnNavig
         scope.launch {
             try {
                 val userId = authManager.getUserId() ?: return@launch
-                val response = if (mode == MODE_RECENTLY_PLAYED) {
-                    jellyfinClient.api.getRecentlyPlayedAlbums(userId)
-                } else {
-                    jellyfinClient.api.getRecentlyAddedAlbums(userId)
-                }
 
-                if (response.isSuccessful) {
-                    val albums = response.body()?.Items ?: emptyList()
-                    albumsAdapter.setAlbums(albums)
-
-                    if (albums.isEmpty()) {
-                        val label = if (mode == MODE_RECENTLY_PLAYED) "recently played" else "recently added"
-                        Toast.makeText(
-                            this@JellyfinRecentAlbumsActivity,
-                            "No $label albums",
-                            Toast.LENGTH_LONG
-                        ).show()
+                val albums: List<JellyfinItem>
+                if (mode == MODE_RECENTLY_PLAYED) {
+                    // Query recently played tracks, then deduplicate by album
+                    val response = jellyfinClient.api.getRecentlyPlayedTracks(userId)
+                    if (!response.isSuccessful) { handleApiError(response.code()); return@launch }
+                    val tracks = response.body()?.Items ?: emptyList()
+                    val seenAlbumIds = mutableSetOf<String>()
+                    albums = tracks.mapNotNull { track ->
+                        val albumId = track.AlbumId ?: return@mapNotNull null
+                        if (!seenAlbumIds.add(albumId)) return@mapNotNull null
+                        val albumName = track.Album ?: return@mapNotNull null
+                        // Build a synthetic album item from the track's metadata
+                        JellyfinItem(
+                            Id = albumId,
+                            Name = albumName,
+                            Type = "MusicAlbum",
+                            AlbumArtist = track.AlbumArtist,
+                            Year = track.Year
+                        )
                     }
                 } else {
-                    handleApiError(response.code())
+                    val response = jellyfinClient.api.getRecentlyAddedAlbums(userId)
+                    if (!response.isSuccessful) { handleApiError(response.code()); return@launch }
+                    albums = response.body()?.Items ?: emptyList()
+                }
+
+                albumsAdapter.setAlbums(albums)
+
+                if (albums.isEmpty()) {
+                    val label = if (mode == MODE_RECENTLY_PLAYED) "recently played" else "recently added"
+                    Toast.makeText(
+                        this@JellyfinRecentAlbumsActivity,
+                        "No $label albums",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
