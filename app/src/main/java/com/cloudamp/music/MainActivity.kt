@@ -25,6 +25,7 @@ import com.cloudamp.music.models.Album
 import com.cloudamp.music.models.Artist
 import com.cloudamp.music.models.Track
 import com.cloudamp.music.models.SimplifiedTrack
+import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.PlaybackManager
 import com.cloudamp.music.ui.AlphabetSidebarView
 import com.cloudamp.music.ui.ExpandableLibraryAdapter
@@ -388,6 +389,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     private fun playTrackWithQueue(track: Track, allTracks: List<Track>, trackPosition: Int) {
         // Queue all tracks from the clicked track onwards
         val tracksToPlay = allTracks.drop(trackPosition)
+        CloudAmpService.ensureForeground(this)
         playbackManager.playTracks(tracksToPlay, 0)
         Toast.makeText(this, "Playing: ${track.name} (+${tracksToPlay.size - 1} in queue)", Toast.LENGTH_SHORT).show()
     }

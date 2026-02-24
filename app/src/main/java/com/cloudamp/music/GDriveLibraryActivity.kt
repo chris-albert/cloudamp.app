@@ -24,6 +24,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.cloudamp.music.api.DriveFile
 import com.cloudamp.music.api.GoogleDriveApiClient
 import com.cloudamp.music.auth.GoogleDriveAuthManager
+import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.ui.GDriveAdapter
 import com.google.android.material.navigation.NavigationView
@@ -241,6 +242,7 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
         val queueFiles = allAudioFiles.subList(position, allAudioFiles.size) +
                 allAudioFiles.subList(0, position)
 
+        CloudAmpService.ensureForeground(this)
         gdrivePlayback.playFiles(queueFiles, 0)
 
         Toast.makeText(
