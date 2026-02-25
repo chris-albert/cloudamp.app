@@ -6,7 +6,6 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.LinearLayout
-import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
@@ -49,7 +48,6 @@ class JellyfinHomeActivity : AppCompatActivity(), NavigationView.OnNavigationIte
 
         setupDrawer()
         setupRecyclerView()
-        setupLinks()
         loadRecentAlbums()
     }
 
@@ -94,20 +92,6 @@ class JellyfinHomeActivity : AppCompatActivity(), NavigationView.OnNavigationIte
         )
 
         recentAlbumsRecyclerView.adapter = homeAdapter
-    }
-
-    private fun setupLinks() {
-        findViewById<TextView>(R.id.linkLibrary).setOnClickListener {
-            startActivity(Intent(this, JellyfinLibraryActivity::class.java))
-        }
-        findViewById<TextView>(R.id.linkPlaylists).setOnClickListener {
-            startActivity(Intent(this, JellyfinPlaylistsActivity::class.java))
-        }
-        findViewById<TextView>(R.id.linkRecentAdded).setOnClickListener {
-            val intent = Intent(this, JellyfinRecentAlbumsActivity::class.java)
-            intent.putExtra(JellyfinRecentAlbumsActivity.EXTRA_MODE, JellyfinRecentAlbumsActivity.MODE_RECENTLY_ADDED)
-            startActivity(intent)
-        }
     }
 
     private fun showLoading(show: Boolean) {

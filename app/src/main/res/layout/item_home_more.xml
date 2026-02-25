@@ -1,14 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="100dp"
+    android:layout_width="140dp"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="4dp"
-    android:gravity="center_horizontal">
+    android:paddingStart="4dp"
+    android:paddingEnd="4dp"
+    android:paddingBottom="8dp"
+    android:gravity="center_horizontal"
+    android:background="?android:attr/selectableItemBackground">
 
     <FrameLayout
-        android:layout_width="80dp"
-        android:layout_height="80dp"
+        android:layout_width="130dp"
+        android:layout_height="130dp"
         android:background="@color/winamp_section_header">
 
         <TextView
@@ -17,20 +20,19 @@
             android:gravity="center"
             android:text="..."
             android:textColor="@color/winamp_text"
-            android:textSize="28sp"
+            android:textSize="32sp"
             android:fontFamily="monospace"
             android:textStyle="bold" />
 
     </FrameLayout>
 
     <TextView
-        android:layout_width="match_parent"
+        android:layout_width="130dp"
         android:layout_height="wrap_content"
         android:text="See All"
         android:textColor="@color/winamp_text"
-        android:textSize="11sp"
+        android:textSize="12sp"
         android:fontFamily="monospace"
-        android:gravity="center"
-        android:layout_marginTop="4dp" />
+        android:layout_marginTop="6dp" />
 
 </LinearLayout>

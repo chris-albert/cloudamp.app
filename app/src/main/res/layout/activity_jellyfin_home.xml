@@ -37,65 +37,12 @@
                     android:id="@+id/recentAlbumsRecyclerView"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:padding="4dp"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
                     android:clipToPadding="false"
                     android:background="@color/winamp_background" />
-
-                <!-- Quick Links Section -->
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="&#x25b6; BROWSE"
-                    android:textColor="@color/winamp_text"
-                    android:textSize="14sp"
-                    android:fontFamily="monospace"
-                    android:textStyle="bold"
-                    android:background="@color/winamp_section_header"
-                    android:padding="8dp"
-                    android:layout_marginTop="8dp" />
-
-                <TextView
-                    android:id="@+id/linkLibrary"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="  Library"
-                    android:textColor="@color/winamp_text"
-                    android:textSize="16sp"
-                    android:fontFamily="monospace"
-                    android:padding="14dp"
-                    android:background="?android:attr/selectableItemBackground" />
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:background="@color/winamp_section_header" />
-
-                <TextView
-                    android:id="@+id/linkPlaylists"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="  Playlists"
-                    android:textColor="@color/winamp_text"
-                    android:textSize="16sp"
-                    android:fontFamily="monospace"
-                    android:padding="14dp"
-                    android:background="?android:attr/selectableItemBackground" />
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:background="@color/winamp_section_header" />
-
-                <TextView
-                    android:id="@+id/linkRecentAdded"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="  Recently Added"
-                    android:textColor="@color/winamp_text"
-                    android:textSize="16sp"
-                    android:fontFamily="monospace"
-                    android:padding="14dp"
-                    android:background="?android:attr/selectableItemBackground" />
 
             </LinearLayout>
 
