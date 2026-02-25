@@ -188,6 +188,10 @@ class PlaylistsActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
                 startActivity(Intent(this, GDriveLibraryActivity::class.java))
                 finish()
             }
+            R.id.nav_jellyfin_home -> {
+                startActivity(Intent(this, JellyfinHomeActivity::class.java))
+                finish()
+            }
             R.id.nav_jellyfin_library -> {
                 startActivity(Intent(this, JellyfinLibraryActivity::class.java))
                 finish()

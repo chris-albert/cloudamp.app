@@ -87,6 +87,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         const val PLAYLISTS_ID = "playlists"
         const val GDRIVE_ID = "gdrive"
         const val JELLYFIN_ID = "jellyfin"
+        const val JELLYFIN_HOME_ID = "jellyfin_home"
         const val JELLYFIN_LIBRARY_ID = "jellyfin_library"
         const val JELLYFIN_PLAYLISTS_ID = "jellyfin_playlists"
         const val JELLYFIN_RECENT_PLAYED_ID = "jellyfin_recent_played"
@@ -624,8 +625,15 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 }
 
                 JELLYFIN_ID -> {
+                    mediaItems.add(createBrowsableItem(JELLYFIN_HOME_ID, "Home", "Jellyfin quick access"))
                     mediaItems.add(createBrowsableItem(JELLYFIN_RECENT_PLAYED_ID, "Recently Played", "Albums you've listened to"))
                     mediaItems.add(createBrowsableItem(JELLYFIN_RECENT_ADDED_ID, "Recently Added", "New albums in your library"))
+                    mediaItems.add(createBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "Jellyfin artists"))
+                    mediaItems.add(createBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "Jellyfin playlists"))
+                }
+
+                JELLYFIN_HOME_ID -> {
+                    mediaItems.add(createBrowsableItem(JELLYFIN_RECENT_PLAYED_ID, "Recently Played", "Albums you've listened to"))
                     mediaItems.add(createBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "Jellyfin artists"))
                     mediaItems.add(createBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "Jellyfin playlists"))
                 }

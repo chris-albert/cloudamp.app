@@ -498,6 +498,10 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 startActivity(Intent(this, GDriveLibraryActivity::class.java))
                 finish()
             }
+            R.id.nav_jellyfin_home -> {
+                startActivity(Intent(this, JellyfinHomeActivity::class.java))
+                finish()
+            }
             R.id.nav_jellyfin_library -> {
                 // Already here
             }

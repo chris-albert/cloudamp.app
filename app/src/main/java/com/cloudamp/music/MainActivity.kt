@@ -109,6 +109,9 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             R.id.nav_gdrive_library -> {
                 startActivity(Intent(this, GDriveLibraryActivity::class.java))
             }
+            R.id.nav_jellyfin_home -> {
+                startActivity(Intent(this, JellyfinHomeActivity::class.java))
+            }
             R.id.nav_jellyfin_library -> {
                 startActivity(Intent(this, JellyfinLibraryActivity::class.java))
             }

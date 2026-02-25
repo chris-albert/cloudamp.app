@@ -4,6 +4,10 @@
         <menu>
             <group android:checkableBehavior="single">
                 <item
+                    android:id="@+id/nav_jellyfin_home"
+                    android:icon="@drawable/ic_jellyfin"
+                    android:title="Home" />
+                <item
                     android:id="@+id/nav_jellyfin_library"
                     android:icon="@drawable/ic_jellyfin"
                     android:title="Jellyfin Library" />
