@@ -183,7 +183,13 @@ class JellyfinRecentAlbumsActivity : AppCompatActivity(), NavigationView.OnNavig
 
                 if (response.isSuccessful) {
                     val tracks = response.body()?.Items ?: emptyList()
-                    albumsAdapter.setAlbumTracks(position, tracks)
+                    val lastPlayedPos = albumsAdapter.setAlbumTracks(position, tracks)
+                    if (lastPlayedPos >= 0) {
+                        albumsRecyclerView.post {
+                            (albumsRecyclerView.layoutManager as? LinearLayoutManager)
+                                ?.scrollToPositionWithOffset(lastPlayedPos, albumsRecyclerView.height / 3)
+                        }
+                    }
                 } else {
                     handleApiError(response.code())
                 }
