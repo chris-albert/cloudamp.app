@@ -32,12 +32,11 @@ class JellyfinHomeActivity : AppCompatActivity(), NavigationView.OnNavigationIte
     private lateinit var navigationView: NavigationView
     private lateinit var toggle: ActionBarDrawerToggle
 
-    private lateinit var recentAlbumsRecyclerView: RecyclerView
-    private lateinit var homeAdapter: JellyfinHomeAdapter
+    private lateinit var recentPlayedRecyclerView: RecyclerView
+    private lateinit var recentAddedRecyclerView: RecyclerView
+    private lateinit var recentPlayedAdapter: JellyfinHomeAdapter
+    private lateinit var recentAddedAdapter: JellyfinHomeAdapter
     private lateinit var loadingContainer: LinearLayout
-
-    // Keep album list for playback
-    private val albumsList = mutableListOf<JellyfinItem>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,8 +46,8 @@ class JellyfinHomeActivity : AppCompatActivity(), NavigationView.OnNavigationIte
         authManager = JellyfinAuthManager(this)
 
         setupDrawer()
-        setupRecyclerView()
-        loadRecentAlbums()
+        setupRecyclerViews()
+        loadContent()
     }
 
     private fun setupDrawer() {
@@ -71,16 +70,16 @@ class JellyfinHomeActivity : AppCompatActivity(), NavigationView.OnNavigationIte
         navigationView.setCheckedItem(R.id.nav_jellyfin_home)
     }
 
-    private fun setupRecyclerView() {
-        recentAlbumsRecyclerView = findViewById(R.id.recentAlbumsRecyclerView)
+    private fun setupRecyclerViews() {
         loadingContainer = findViewById(R.id.loadingContainer)
-
-        recentAlbumsRecyclerView.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
 
         val serverUrl = authManager.getServerUrl()?.trimEnd('/') ?: ""
         val apiKey = authManager.getApiKey()
 
-        homeAdapter = JellyfinHomeAdapter(
+        // Recently Played
+        recentPlayedRecyclerView = findViewById(R.id.recentPlayedRecyclerView)
+        recentPlayedRecyclerView.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        recentPlayedAdapter = JellyfinHomeAdapter(
             serverUrl = serverUrl,
             apiKey = apiKey,
             onAlbumClick = { album -> playAlbum(album) },
@@ -90,52 +89,80 @@ class JellyfinHomeActivity : AppCompatActivity(), NavigationView.OnNavigationIte
                 startActivity(intent)
             }
         )
+        recentPlayedRecyclerView.adapter = recentPlayedAdapter
 
-        recentAlbumsRecyclerView.adapter = homeAdapter
+        // Recently Added
+        recentAddedRecyclerView = findViewById(R.id.recentAddedRecyclerView)
+        recentAddedRecyclerView.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        recentAddedAdapter = JellyfinHomeAdapter(
+            serverUrl = serverUrl,
+            apiKey = apiKey,
+            onAlbumClick = { album -> playAlbum(album) },
+            onMoreClick = {
+                val intent = Intent(this, JellyfinRecentAlbumsActivity::class.java)
+                intent.putExtra(JellyfinRecentAlbumsActivity.EXTRA_MODE, JellyfinRecentAlbumsActivity.MODE_RECENTLY_ADDED)
+                startActivity(intent)
+            }
+        )
+        recentAddedRecyclerView.adapter = recentAddedAdapter
     }
 
     private fun showLoading(show: Boolean) {
         loadingContainer.visibility = if (show) View.VISIBLE else View.GONE
     }
 
-    private fun loadRecentAlbums() {
+    private fun loadContent() {
         showLoading(true)
         scope.launch {
             try {
                 val userId = authManager.getUserId() ?: return@launch
 
-                val response = jellyfinClient.api.getRecentlyPlayedTracks(userId)
-                if (!response.isSuccessful) { handleApiError(response.code()); return@launch }
-                val tracks = response.body()?.Items ?: emptyList()
+                // Load both sections in parallel
+                val playedDeferred = async { loadRecentlyPlayed(userId) }
+                val addedDeferred = async { loadRecentlyAdded(userId) }
 
-                val seenAlbumIds = mutableSetOf<String>()
-                val albums = tracks.mapNotNull { track ->
-                    val albumId = track.AlbumId ?: return@mapNotNull null
-                    if (!seenAlbumIds.add(albumId)) return@mapNotNull null
-                    val albumName = track.Album ?: return@mapNotNull null
-                    JellyfinItem(
-                        Id = albumId,
-                        Name = albumName,
-                        Type = "MusicAlbum",
-                        AlbumArtist = track.AlbumArtist,
-                        Year = track.Year
-                    )
-                }.take(10)
+                val playedAlbums = playedDeferred.await()
+                val addedAlbums = addedDeferred.await()
 
-                albumsList.clear()
-                albumsList.addAll(albums)
-                homeAdapter.setAlbums(albums)
+                recentPlayedAdapter.setAlbums(playedAlbums)
+                recentAddedAdapter.setAlbums(addedAlbums)
             } catch (e: Exception) {
                 e.printStackTrace()
                 Toast.makeText(
                     this@JellyfinHomeActivity,
-                    "Error loading recent albums: ${e.message}",
+                    "Error loading content: ${e.message}",
                     Toast.LENGTH_LONG
                 ).show()
             } finally {
                 showLoading(false)
             }
         }
+    }
+
+    private suspend fun loadRecentlyPlayed(userId: String): List<JellyfinItem> {
+        val response = jellyfinClient.api.getRecentlyPlayedTracks(userId)
+        if (!response.isSuccessful) return emptyList()
+        val tracks = response.body()?.Items ?: emptyList()
+
+        val seenAlbumIds = mutableSetOf<String>()
+        return tracks.mapNotNull { track ->
+            val albumId = track.AlbumId ?: return@mapNotNull null
+            if (!seenAlbumIds.add(albumId)) return@mapNotNull null
+            val albumName = track.Album ?: return@mapNotNull null
+            JellyfinItem(
+                Id = albumId,
+                Name = albumName,
+                Type = "MusicAlbum",
+                AlbumArtist = track.AlbumArtist,
+                Year = track.Year
+            )
+        }.take(10)
+    }
+
+    private suspend fun loadRecentlyAdded(userId: String): List<JellyfinItem> {
+        val response = jellyfinClient.api.getRecentlyAddedAlbums(userId)
+        if (!response.isSuccessful) return emptyList()
+        return (response.body()?.Items ?: emptyList()).take(10)
     }
 
     private fun playAlbum(album: JellyfinItem) {
