@@ -633,9 +633,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 }
 
                 JELLYFIN_HOME_ID -> {
-                    mediaItems.add(createBrowsableItem(JELLYFIN_RECENT_PLAYED_ID, "Recently Played", "Albums you've listened to"))
-                    mediaItems.add(createBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "Jellyfin artists"))
-                    mediaItems.add(createBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "Jellyfin playlists"))
+                    loadJellyfinRecentlyPlayed(mediaItems)
                 }
 
                 JELLYFIN_LIBRARY_ID -> {
