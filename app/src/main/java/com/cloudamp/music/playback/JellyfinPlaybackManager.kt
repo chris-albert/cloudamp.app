@@ -32,6 +32,7 @@ class JellyfinPlaybackManager private constructor(
 
     companion object {
         private const val TAG = "JellyfinPlayback"
+        private const val PLAYED_THRESHOLD_MS = 10_000L
 
         @Volatile
         private var instance: JellyfinPlaybackManager? = null
@@ -54,6 +55,12 @@ class JellyfinPlaybackManager private constructor(
 
     // Fire-and-forget scope for reporting playback to Jellyfin server
     private val reportingScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    // 10-second played reporting state
+    private var playedReportJob: Job? = null
+    private var playedReportedForIndex: Int = -1
+    private var remainingPlayedDelayMs: Long = PLAYED_THRESHOLD_MS
+    private var playedTimerStartedAt: Long = 0L
 
     override val providerName: String = "Jellyfin"
 
@@ -112,6 +119,8 @@ class JellyfinPlaybackManager private constructor(
         Log.d(TAG, "playItems called: ${items.size} items, startIndex=$startIndex")
 
         ActivePlayback.activate(this)
+        resetPlayedTimer()
+        playedReportedForIndex = -1
         queue.clear()
         queue.addAll(items)
         currentIndex = startIndex
@@ -278,6 +287,35 @@ class JellyfinPlaybackManager private constructor(
         service?.updateQueue(tracks, currentIndex)
     }
 
+    private fun startPlayedTimer() {
+        if (playedReportedForIndex == currentIndex) return
+        playedReportJob?.cancel()
+        playedTimerStartedAt = System.currentTimeMillis()
+        playedReportJob = reportingScope.launch {
+            delay(remainingPlayedDelayMs)
+            if (currentIndex in queue.indices) {
+                reportTrackPlayed(queue[currentIndex])
+                playedReportedForIndex = currentIndex
+            }
+        }
+    }
+
+    private fun pausePlayedTimer() {
+        val job = playedReportJob ?: return
+        if (job.isActive) {
+            val elapsed = System.currentTimeMillis() - playedTimerStartedAt
+            remainingPlayedDelayMs = (remainingPlayedDelayMs - elapsed).coerceAtLeast(0)
+            job.cancel()
+        }
+    }
+
+    private fun resetPlayedTimer() {
+        playedReportJob?.cancel()
+        playedReportJob = null
+        remainingPlayedDelayMs = PLAYED_THRESHOLD_MS
+        playedTimerStartedAt = 0L
+    }
+
     private fun reportTrackPlayed(item: JellyfinItem) {
         reportingScope.launch {
             try {
@@ -310,10 +348,6 @@ class JellyfinPlaybackManager private constructor(
                     service?.updatePlaybackState(PlaybackStateCompat.STATE_BUFFERING, getCurrentPosition())
                 }
                 Player.STATE_ENDED -> {
-                    // Report the last track as played when the queue finishes
-                    if (currentIndex in queue.indices) {
-                        reportTrackPlayed(queue[currentIndex])
-                    }
                     service?.updatePlaybackState(PlaybackStateCompat.STATE_STOPPED)
                 }
                 Player.STATE_IDLE -> { }
@@ -322,6 +356,11 @@ class JellyfinPlaybackManager private constructor(
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             Log.d(TAG, "onIsPlayingChanged: $isPlaying")
+            if (isPlaying) {
+                startPlayedTimer()
+            } else {
+                pausePlayedTimer()
+            }
             val state = if (isPlaying) {
                 PlaybackStateCompat.STATE_PLAYING
             } else {
@@ -344,13 +383,13 @@ class JellyfinPlaybackManager private constructor(
 
         override fun onMediaItemTransition(mediaItem: com.google.android.exoplayer2.MediaItem?, reason: Int) {
             val player = exoPlayer ?: return
-            val previousIndex = currentIndex
             currentIndex = player.currentMediaItemIndex
             Log.d(TAG, "onMediaItemTransition: index=$currentIndex, reason=$reason")
 
-            // Report the previous track as played when it auto-advanced
-            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && previousIndex in queue.indices) {
-                reportTrackPlayed(queue[previousIndex])
+            // Reset the 10-second played timer for the new track
+            resetPlayedTimer()
+            if (player.isPlaying) {
+                startPlayedTimer()
             }
 
             updateServiceMetadata()
