@@ -45,6 +45,30 @@
                     android:nestedScrollingEnabled="false"
                     android:background="@color/winamp_background" />
 
+                <!-- Jump Back In Section -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="&#x25b6; JUMP BACK IN"
+                    android:textColor="@color/winamp_text"
+                    android:textSize="14sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:background="@color/winamp_section_header"
+                    android:padding="8dp" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/mostPlayedRecyclerView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:clipToPadding="false"
+                    android:nestedScrollingEnabled="false"
+                    android:background="@color/winamp_background" />
+
                 <!-- Recently Added Section -->
                 <TextView
                     android:layout_width="match_parent"
@@ -59,6 +83,30 @@
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/recentAddedRecyclerView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:clipToPadding="false"
+                    android:nestedScrollingEnabled="false"
+                    android:background="@color/winamp_background" />
+
+                <!-- Discover Section -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="&#x25b6; DISCOVER"
+                    android:textColor="@color/winamp_text"
+                    android:textSize="14sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:background="@color/winamp_section_header"
+                    android:padding="8dp" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/discoverRecyclerView"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:paddingStart="8dp"
