@@ -626,22 +626,17 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 }
 
                 JELLYFIN_ID -> {
-                    // Home item gets grid style extras so its children render as album art tiles
-                    val homeExtras = Bundle().apply {
-                        putInt(MediaConstants.DESCRIPTION_EXTRAS_KEY_CONTENT_STYLE_BROWSABLE,
-                               MediaConstants.DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_GRID_ITEM)
-                    }
-                    val homeDesc = MediaDescriptionCompat.Builder()
-                        .setMediaId(JELLYFIN_HOME_ID)
-                        .setTitle("Home")
-                        .setSubtitle("Jellyfin quick access")
-                        .setExtras(homeExtras)
-                        .build()
-                    mediaItems.add(MediaBrowserCompat.MediaItem(homeDesc, MediaBrowserCompat.MediaItem.FLAG_BROWSABLE))
-                    mediaItems.add(createBrowsableItem(JELLYFIN_RECENT_PLAYED_ID, "Recently Played", "Albums you've listened to"))
-                    mediaItems.add(createBrowsableItem(JELLYFIN_RECENT_ADDED_ID, "Recently Added", "New albums in your library"))
-                    mediaItems.add(createBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "Jellyfin artists"))
-                    mediaItems.add(createBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "Jellyfin playlists"))
+                    // All Jellyfin nav items get grid style so their children render as album art tiles
+                    val homeIcon = "android.resource://${packageName}/${R.drawable.ic_home}"
+                    val historyIcon = "android.resource://${packageName}/${R.drawable.ic_history}"
+                    val newReleasesIcon = "android.resource://${packageName}/${R.drawable.ic_new_releases}"
+                    val libraryIcon = "android.resource://${packageName}/${R.drawable.ic_library}"
+                    val playlistIcon = "android.resource://${packageName}/${R.drawable.ic_playlist}"
+                    mediaItems.add(createGridBrowsableItem(JELLYFIN_HOME_ID, "Home", "Jellyfin quick access", homeIcon))
+                    mediaItems.add(createGridBrowsableItem(JELLYFIN_RECENT_PLAYED_ID, "Recently Played", "Albums you've listened to", historyIcon))
+                    mediaItems.add(createGridBrowsableItem(JELLYFIN_RECENT_ADDED_ID, "Recently Added", "New albums in your library", newReleasesIcon))
+                    mediaItems.add(createGridBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "Jellyfin artists", libraryIcon))
+                    mediaItems.add(createGridBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "Jellyfin playlists", playlistIcon))
                 }
 
                 JELLYFIN_HOME_ID -> {
@@ -1866,6 +1861,30 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             .setMediaId(id)
             .setTitle(title)
             .setSubtitle(subtitle)
+            .apply {
+                iconUri?.let { setIconUri(android.net.Uri.parse(it)) }
+            }
+            .build()
+
+        return MediaBrowserCompat.MediaItem(description, MediaBrowserCompat.MediaItem.FLAG_BROWSABLE)
+    }
+
+    /** Browsable item whose children render as grid tiles on Android Auto. */
+    private fun createGridBrowsableItem(
+        id: String,
+        title: String,
+        subtitle: String,
+        iconUri: String? = null
+    ): MediaBrowserCompat.MediaItem {
+        val extras = Bundle().apply {
+            putInt(MediaConstants.DESCRIPTION_EXTRAS_KEY_CONTENT_STYLE_BROWSABLE,
+                   MediaConstants.DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_GRID_ITEM)
+        }
+        val description = MediaDescriptionCompat.Builder()
+            .setMediaId(id)
+            .setTitle(title)
+            .setSubtitle(subtitle)
+            .setExtras(extras)
             .apply {
                 iconUri?.let { setIconUri(android.net.Uri.parse(it)) }
             }
