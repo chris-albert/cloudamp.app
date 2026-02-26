@@ -20,6 +20,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.media.MediaBrowserServiceCompat
 import androidx.media.session.MediaButtonReceiver
+import androidx.media.utils.MediaConstants
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
@@ -574,7 +575,13 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         rootHints: Bundle?
     ): BrowserRoot {
         // Allow all clients (Android Auto, etc.)
-        return BrowserRoot(ROOT_ID, null)
+        val extras = Bundle().apply {
+            putInt(MediaConstants.DESCRIPTION_EXTRAS_KEY_CONTENT_STYLE_BROWSABLE,
+                   MediaConstants.DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_GRID_ITEM)
+            putInt(MediaConstants.DESCRIPTION_EXTRAS_KEY_CONTENT_STYLE_PLAYABLE,
+                   MediaConstants.DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_LIST_ITEM)
+        }
+        return BrowserRoot(ROOT_ID, extras)
     }
 
     override fun onLoadChildren(
@@ -633,7 +640,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 }
 
                 JELLYFIN_HOME_ID -> {
-                    loadJellyfinRecentlyPlayed(mediaItems)
+                    loadJellyfinHome(mediaItems)
                 }
 
                 JELLYFIN_LIBRARY_ID -> {
@@ -673,6 +680,11 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         parentId.startsWith("jellyfin_artist_") -> {
                             val artistId = parentId.removePrefix("jellyfin_artist_")
                             loadJellyfinArtistAlbums(artistId, mediaItems)
+                        }
+                        parentId.startsWith("jellyfin_home_") && parentId.contains("_album_") -> {
+                            // Strip section prefix: jellyfin_home_{section}_album_{id} → {id}
+                            val albumId = parentId.substringAfter("_album_")
+                            loadJellyfinAlbumTracks(albumId, mediaItems)
                         }
                         parentId.startsWith("jellyfin_album_") -> {
                             val albumId = parentId.removePrefix("jellyfin_album_")
@@ -1319,6 +1331,113 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         "$serverUrl/Items/$albumId/Images/Primary?maxWidth=300$apiKeySuffix")
                         ?: placeholderUri
                     items.add(createBrowsableItem("jellyfin_album_$albumId", albumName, subtitle, imageUrl))
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private suspend fun loadJellyfinHome(items: MutableList<MediaBrowserCompat.MediaItem>) {
+        try {
+            if (!jellyfinAuthManager.isConfigured()) {
+                items.add(createBrowsableItem("jellyfin_no_auth", "Connect Jellyfin", "Open CloudAmp app to configure"))
+                return
+            }
+            val userId = jellyfinAuthManager.getUserId() ?: return
+            val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
+            val apiKey = jellyfinAuthManager.getApiKey()
+            val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
+
+            // Load all four sections in parallel
+            val recentlyPlayedDeferred = serviceScope.async(Dispatchers.IO) {
+                try {
+                    val response = jellyfinClient.api.getRecentlyPlayedTracks(userId)
+                    if (!response.isSuccessful) return@async emptyList<JellyfinItem>()
+                    val tracks = response.body()?.Items ?: emptyList()
+                    val seenAlbumIds = mutableSetOf<String>()
+                    tracks.mapNotNull { track ->
+                        val albumId = track.AlbumId ?: return@mapNotNull null
+                        if (!seenAlbumIds.add(albumId)) return@mapNotNull null
+                        track
+                    }.take(10)
+                } catch (e: Exception) { emptyList() }
+            }
+            val mostPlayedDeferred = serviceScope.async(Dispatchers.IO) {
+                try {
+                    val response = jellyfinClient.api.getMostPlayedAlbums(userId)
+                    if (!response.isSuccessful) return@async emptyList<JellyfinItem>()
+                    (response.body()?.Items ?: emptyList()).take(10)
+                } catch (e: Exception) { emptyList() }
+            }
+            val recentlyAddedDeferred = serviceScope.async(Dispatchers.IO) {
+                try {
+                    val response = jellyfinClient.api.getRecentlyAddedAlbums(userId)
+                    if (!response.isSuccessful) return@async emptyList<JellyfinItem>()
+                    (response.body()?.Items ?: emptyList()).take(10)
+                } catch (e: Exception) { emptyList() }
+            }
+            val discoverDeferred = serviceScope.async(Dispatchers.IO) {
+                try {
+                    val response = jellyfinClient.api.getRandomAlbums(userId)
+                    if (!response.isSuccessful) return@async emptyList<JellyfinItem>()
+                    (response.body()?.Items ?: emptyList()).take(10)
+                } catch (e: Exception) { emptyList() }
+            }
+
+            val recentlyPlayed = recentlyPlayedDeferred.await()
+            val mostPlayed = mostPlayedDeferred.await()
+            val recentlyAdded = recentlyAddedDeferred.await()
+            val discover = discoverDeferred.await()
+
+            // Recently Played — derived from tracks, use track fields for album info
+            if (recentlyPlayed.isNotEmpty()) {
+                for (track in recentlyPlayed) {
+                    val albumId = track.AlbumId ?: continue
+                    val albumName = track.Album ?: continue
+                    val artist = track.AlbumArtist ?: ""
+                    val imageUrl = jellyfinContentUri(albumId,
+                        "$serverUrl/Items/$albumId/Images/Primary?maxWidth=300${if (apiKey != null) "&api_key=$apiKey" else ""}")
+                        ?: placeholderUri
+                    items.add(createBrowsableItemWithGroup(
+                        "jellyfin_home_played_album_$albumId", albumName, artist,
+                        "Recently Played", imageUrl))
+                }
+            }
+
+            // Jump Back In — album items directly
+            if (mostPlayed.isNotEmpty()) {
+                for (album in mostPlayed) {
+                    val artist = album.AlbumArtist ?: ""
+                    val imageUrl = jellyfinContentUri(album.Id, album.getPrimaryImageUrl(serverUrl, apiKey))
+                        ?: placeholderUri
+                    items.add(createBrowsableItemWithGroup(
+                        "jellyfin_home_jumpback_album_${album.Id}", album.Name, artist,
+                        "Jump Back In", imageUrl))
+                }
+            }
+
+            // Recently Added
+            if (recentlyAdded.isNotEmpty()) {
+                for (album in recentlyAdded) {
+                    val artist = album.AlbumArtist ?: ""
+                    val imageUrl = jellyfinContentUri(album.Id, album.getPrimaryImageUrl(serverUrl, apiKey))
+                        ?: placeholderUri
+                    items.add(createBrowsableItemWithGroup(
+                        "jellyfin_home_added_album_${album.Id}", album.Name, artist,
+                        "Recently Added", imageUrl))
+                }
+            }
+
+            // Discover
+            if (discover.isNotEmpty()) {
+                for (album in discover) {
+                    val artist = album.AlbumArtist ?: ""
+                    val imageUrl = jellyfinContentUri(album.Id, album.getPrimaryImageUrl(serverUrl, apiKey))
+                        ?: placeholderUri
+                    items.add(createBrowsableItemWithGroup(
+                        "jellyfin_home_discover_album_${album.Id}", album.Name, artist,
+                        "Discover", imageUrl))
                 }
             }
         } catch (e: Exception) {
