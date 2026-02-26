@@ -575,13 +575,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         rootHints: Bundle?
     ): BrowserRoot {
         // Allow all clients (Android Auto, etc.)
-        val extras = Bundle().apply {
-            putInt(MediaConstants.DESCRIPTION_EXTRAS_KEY_CONTENT_STYLE_BROWSABLE,
-                   MediaConstants.DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_GRID_ITEM)
-            putInt(MediaConstants.DESCRIPTION_EXTRAS_KEY_CONTENT_STYLE_PLAYABLE,
-                   MediaConstants.DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_LIST_ITEM)
-        }
-        return BrowserRoot(ROOT_ID, extras)
+        return BrowserRoot(ROOT_ID, null)
     }
 
     override fun onLoadChildren(
@@ -632,7 +626,18 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 }
 
                 JELLYFIN_ID -> {
-                    mediaItems.add(createBrowsableItem(JELLYFIN_HOME_ID, "Home", "Jellyfin quick access"))
+                    // Home item gets grid style extras so its children render as album art tiles
+                    val homeExtras = Bundle().apply {
+                        putInt(MediaConstants.DESCRIPTION_EXTRAS_KEY_CONTENT_STYLE_BROWSABLE,
+                               MediaConstants.DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_GRID_ITEM)
+                    }
+                    val homeDesc = MediaDescriptionCompat.Builder()
+                        .setMediaId(JELLYFIN_HOME_ID)
+                        .setTitle("Home")
+                        .setSubtitle("Jellyfin quick access")
+                        .setExtras(homeExtras)
+                        .build()
+                    mediaItems.add(MediaBrowserCompat.MediaItem(homeDesc, MediaBrowserCompat.MediaItem.FLAG_BROWSABLE))
                     mediaItems.add(createBrowsableItem(JELLYFIN_RECENT_PLAYED_ID, "Recently Played", "Albums you've listened to"))
                     mediaItems.add(createBrowsableItem(JELLYFIN_RECENT_ADDED_ID, "Recently Added", "New albums in your library"))
                     mediaItems.add(createBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "Jellyfin artists"))
