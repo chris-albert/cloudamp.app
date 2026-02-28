@@ -91,6 +91,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         const val JELLYFIN_HOME_ID = "jellyfin_home"
         const val JELLYFIN_LIBRARY_ID = "jellyfin_library"
         const val JELLYFIN_PLAYLISTS_ID = "jellyfin_playlists"
+        const val JELLYFIN_RECENT_ID = "jellyfin_recent"
         const val JELLYFIN_RECENT_PLAYED_ID = "jellyfin_recent_played"
         const val JELLYFIN_RECENT_ADDED_ID = "jellyfin_recent_added"
         const val SPOTIFY_ID = "spotify"
@@ -590,7 +591,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             when (parentId) {
                 ROOT_ID -> {
                     // Root menu - main categories
-                    mediaItems.add(createBrowsableItem(JELLYFIN_ID, "Jellyfin", "Browse your Jellyfin library"))
+                    mediaItems.add(createGridBrowsableItem(JELLYFIN_ID, "Jellyfin", "Browse your Jellyfin library"))
                     mediaItems.add(createBrowsableItem(SPOTIFY_ID, "Spotify", "Browse your Spotify library"))
                     mediaItems.add(createBrowsableItem(GDRIVE_ID, "Drive", "Browse your Drive music"))
                     mediaItems.add(createBrowsableItem(SAVED_QUEUES_ID, "Queues", "Resume where you left off"))
@@ -625,21 +626,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     loadGDriveFolder("root", mediaItems)
                 }
 
-                JELLYFIN_ID -> {
-                    // All Jellyfin nav items get grid style so their children render as album art tiles
-                    val homeIcon = "android.resource://${packageName}/${R.drawable.ic_home}"
-                    val historyIcon = "android.resource://${packageName}/${R.drawable.ic_history}"
-                    val newReleasesIcon = "android.resource://${packageName}/${R.drawable.ic_new_releases}"
-                    val libraryIcon = "android.resource://${packageName}/${R.drawable.ic_library}"
-                    val playlistIcon = "android.resource://${packageName}/${R.drawable.ic_playlist}"
-                    mediaItems.add(createGridBrowsableItem(JELLYFIN_HOME_ID, "Home", "Jellyfin quick access", homeIcon))
-                    mediaItems.add(createGridBrowsableItem(JELLYFIN_RECENT_PLAYED_ID, "Recently Played", "Albums you've listened to", historyIcon))
-                    mediaItems.add(createGridBrowsableItem(JELLYFIN_RECENT_ADDED_ID, "Recently Added", "New albums in your library", newReleasesIcon))
-                    mediaItems.add(createGridBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "Jellyfin artists", libraryIcon))
-                    mediaItems.add(createGridBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "Jellyfin playlists", playlistIcon))
-                }
-
-                JELLYFIN_HOME_ID -> {
+                JELLYFIN_ID, JELLYFIN_HOME_ID -> {
                     loadJellyfinHome(mediaItems)
                 }
 
@@ -649,6 +636,13 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
                 JELLYFIN_PLAYLISTS_ID -> {
                     loadJellyfinPlaylists(mediaItems)
+                }
+
+                JELLYFIN_RECENT_ID -> {
+                    val historyIcon = "android.resource://${packageName}/${R.drawable.ic_history}"
+                    val newReleasesIcon = "android.resource://${packageName}/${R.drawable.ic_new_releases}"
+                    mediaItems.add(createGridBrowsableItem(JELLYFIN_RECENT_PLAYED_ID, "Played", "Albums you've listened to", historyIcon))
+                    mediaItems.add(createGridBrowsableItem(JELLYFIN_RECENT_ADDED_ID, "Added", "New albums in your library", newReleasesIcon))
                 }
 
                 JELLYFIN_RECENT_PLAYED_ID -> {
@@ -1349,6 +1343,14 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             val apiKey = jellyfinAuthManager.getApiKey()
             val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
 
+            // Top nav links
+            val libraryIcon = "android.resource://${packageName}/${R.drawable.ic_library}"
+            val playlistIcon = "android.resource://${packageName}/${R.drawable.ic_playlist}"
+            val historyIcon = "android.resource://${packageName}/${R.drawable.ic_history}"
+            items.add(createGridBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "", libraryIcon))
+            items.add(createGridBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "", playlistIcon))
+            items.add(createBrowsableItem(JELLYFIN_RECENT_ID, "Recently", "", historyIcon))
+
             // Load all four sections in parallel
             val recentlyPlayedDeferred = serviceScope.async(Dispatchers.IO) {
                 try {
@@ -1360,33 +1362,26 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         val albumId = track.AlbumId ?: return@mapNotNull null
                         if (!seenAlbumIds.add(albumId)) return@mapNotNull null
                         track
-                    }.take(10)
+                    }.take(9)
                 } catch (e: Exception) { emptyList() }
             }
-            val mostPlayedDeferred = serviceScope.async(Dispatchers.IO) {
-                try {
-                    val response = jellyfinClient.api.getMostPlayedAlbums(userId)
-                    if (!response.isSuccessful) return@async emptyList<JellyfinItem>()
-                    (response.body()?.Items ?: emptyList()).take(10)
-                } catch (e: Exception) { emptyList() }
-            }
+
             val recentlyAddedDeferred = serviceScope.async(Dispatchers.IO) {
                 try {
                     val response = jellyfinClient.api.getRecentlyAddedAlbums(userId)
                     if (!response.isSuccessful) return@async emptyList<JellyfinItem>()
-                    (response.body()?.Items ?: emptyList()).take(10)
+                    (response.body()?.Items ?: emptyList()).take(9)
                 } catch (e: Exception) { emptyList() }
             }
             val discoverDeferred = serviceScope.async(Dispatchers.IO) {
                 try {
                     val response = jellyfinClient.api.getRandomAlbums(userId)
                     if (!response.isSuccessful) return@async emptyList<JellyfinItem>()
-                    (response.body()?.Items ?: emptyList()).take(10)
+                    (response.body()?.Items ?: emptyList()).take(9)
                 } catch (e: Exception) { emptyList() }
             }
 
             val recentlyPlayed = recentlyPlayedDeferred.await()
-            val mostPlayed = mostPlayedDeferred.await()
             val recentlyAdded = recentlyAddedDeferred.await()
             val discover = discoverDeferred.await()
 
@@ -1405,15 +1400,15 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 }
             }
 
-            // Jump Back In — album items directly
-            if (mostPlayed.isNotEmpty()) {
-                for (album in mostPlayed) {
+            // Discover
+            if (discover.isNotEmpty()) {
+                for (album in discover) {
                     val artist = album.AlbumArtist ?: ""
                     val imageUrl = jellyfinContentUri(album.Id, album.getPrimaryImageUrl(serverUrl, apiKey))
                         ?: placeholderUri
                     items.add(createBrowsableItemWithGroup(
-                        "jellyfin_home_jumpback_album_${album.Id}", album.Name, artist,
-                        "Jump Back In", imageUrl))
+                        "jellyfin_home_discover_album_${album.Id}", album.Name, artist,
+                        "Discover", imageUrl))
                 }
             }
 
@@ -1426,18 +1421,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     items.add(createBrowsableItemWithGroup(
                         "jellyfin_home_added_album_${album.Id}", album.Name, artist,
                         "Recently Added", imageUrl))
-                }
-            }
-
-            // Discover
-            if (discover.isNotEmpty()) {
-                for (album in discover) {
-                    val artist = album.AlbumArtist ?: ""
-                    val imageUrl = jellyfinContentUri(album.Id, album.getPrimaryImageUrl(serverUrl, apiKey))
-                        ?: placeholderUri
-                    items.add(createBrowsableItemWithGroup(
-                        "jellyfin_home_discover_album_${album.Id}", album.Name, artist,
-                        "Discover", imageUrl))
                 }
             }
         } catch (e: Exception) {
