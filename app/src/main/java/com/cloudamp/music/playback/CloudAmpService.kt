@@ -1361,8 +1361,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             val libraryIcon = "android.resource://${packageName}/${R.drawable.ic_library}"
             val playlistIcon = "android.resource://${packageName}/${R.drawable.ic_playlist}"
             val historyIcon = "android.resource://${packageName}/${R.drawable.ic_history}"
-            items.add(createBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "", libraryIcon))
-            items.add(createBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "", playlistIcon))
+            items.add(createGridBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "", libraryIcon))
+            items.add(createGridBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "", playlistIcon))
             items.add(createBrowsableItem(JELLYFIN_RECENT_ID, "Recently", "", historyIcon))
 
             // Load all four sections in parallel
