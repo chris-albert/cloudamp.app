@@ -626,21 +626,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     loadGDriveFolder("root", mediaItems)
                 }
 
-                JELLYFIN_ID -> {
-                    // All Jellyfin nav items get grid style so their children render as album art tiles
-                    val homeIcon = "android.resource://${packageName}/${R.drawable.ic_home}"
-                    val historyIcon = "android.resource://${packageName}/${R.drawable.ic_history}"
-                    val newReleasesIcon = "android.resource://${packageName}/${R.drawable.ic_new_releases}"
-                    val libraryIcon = "android.resource://${packageName}/${R.drawable.ic_library}"
-                    val playlistIcon = "android.resource://${packageName}/${R.drawable.ic_playlist}"
-                    mediaItems.add(createGridBrowsableItem(JELLYFIN_HOME_ID, "Home", "Jellyfin quick access", homeIcon))
-                    mediaItems.add(createGridBrowsableItem(JELLYFIN_RECENT_PLAYED_ID, "Recently Played", "Albums you've listened to", historyIcon))
-                    mediaItems.add(createGridBrowsableItem(JELLYFIN_RECENT_ADDED_ID, "Recently Added", "New albums in your library", newReleasesIcon))
-                    mediaItems.add(createGridBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "Jellyfin artists", libraryIcon))
-                    mediaItems.add(createGridBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "Jellyfin playlists", playlistIcon))
-                }
-
-                JELLYFIN_HOME_ID -> {
+                JELLYFIN_ID, JELLYFIN_HOME_ID -> {
                     loadJellyfinHome(mediaItems)
                 }
 
