@@ -591,7 +591,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             when (parentId) {
                 ROOT_ID -> {
                     // Root menu - main categories
-                    mediaItems.add(createBrowsableItem(JELLYFIN_ID, "Jellyfin", "Browse your Jellyfin library"))
+                    mediaItems.add(createGridBrowsableItem(JELLYFIN_ID, "Jellyfin", "Browse your Jellyfin library"))
                     mediaItems.add(createBrowsableItem(SPOTIFY_ID, "Spotify", "Browse your Spotify library"))
                     mediaItems.add(createBrowsableItem(GDRIVE_ID, "Drive", "Browse your Drive music"))
                     mediaItems.add(createBrowsableItem(SAVED_QUEUES_ID, "Queues", "Resume where you left off"))
