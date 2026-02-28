@@ -1352,8 +1352,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             // Top nav links
             val libraryIcon = "android.resource://${packageName}/${R.drawable.ic_library}"
             val playlistIcon = "android.resource://${packageName}/${R.drawable.ic_playlist}"
-            items.add(createGridBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "Jellyfin artists", libraryIcon))
-            items.add(createGridBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "Jellyfin playlists", playlistIcon))
+            items.add(createBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "Jellyfin artists", libraryIcon))
+            items.add(createBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "Jellyfin playlists", playlistIcon))
 
             // Load all four sections in parallel
             val recentlyPlayedDeferred = serviceScope.async(Dispatchers.IO) {
