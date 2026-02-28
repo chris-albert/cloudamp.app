@@ -20,6 +20,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.media.MediaBrowserServiceCompat
 import androidx.media.session.MediaButtonReceiver
+import androidx.media.utils.MediaConstants
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
@@ -87,6 +88,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         const val PLAYLISTS_ID = "playlists"
         const val GDRIVE_ID = "gdrive"
         const val JELLYFIN_ID = "jellyfin"
+        const val JELLYFIN_HOME_ID = "jellyfin_home"
         const val JELLYFIN_LIBRARY_ID = "jellyfin_library"
         const val JELLYFIN_PLAYLISTS_ID = "jellyfin_playlists"
         const val JELLYFIN_RECENT_PLAYED_ID = "jellyfin_recent_played"
@@ -624,10 +626,21 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 }
 
                 JELLYFIN_ID -> {
-                    mediaItems.add(createBrowsableItem(JELLYFIN_RECENT_PLAYED_ID, "Recently Played", "Albums you've listened to"))
-                    mediaItems.add(createBrowsableItem(JELLYFIN_RECENT_ADDED_ID, "Recently Added", "New albums in your library"))
-                    mediaItems.add(createBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "Jellyfin artists"))
-                    mediaItems.add(createBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "Jellyfin playlists"))
+                    // All Jellyfin nav items get grid style so their children render as album art tiles
+                    val homeIcon = "android.resource://${packageName}/${R.drawable.ic_home}"
+                    val historyIcon = "android.resource://${packageName}/${R.drawable.ic_history}"
+                    val newReleasesIcon = "android.resource://${packageName}/${R.drawable.ic_new_releases}"
+                    val libraryIcon = "android.resource://${packageName}/${R.drawable.ic_library}"
+                    val playlistIcon = "android.resource://${packageName}/${R.drawable.ic_playlist}"
+                    mediaItems.add(createGridBrowsableItem(JELLYFIN_HOME_ID, "Home", "Jellyfin quick access", homeIcon))
+                    mediaItems.add(createGridBrowsableItem(JELLYFIN_RECENT_PLAYED_ID, "Recently Played", "Albums you've listened to", historyIcon))
+                    mediaItems.add(createGridBrowsableItem(JELLYFIN_RECENT_ADDED_ID, "Recently Added", "New albums in your library", newReleasesIcon))
+                    mediaItems.add(createGridBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "Jellyfin artists", libraryIcon))
+                    mediaItems.add(createGridBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "Jellyfin playlists", playlistIcon))
+                }
+
+                JELLYFIN_HOME_ID -> {
+                    loadJellyfinHome(mediaItems)
                 }
 
                 JELLYFIN_LIBRARY_ID -> {
@@ -667,6 +680,11 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         parentId.startsWith("jellyfin_artist_") -> {
                             val artistId = parentId.removePrefix("jellyfin_artist_")
                             loadJellyfinArtistAlbums(artistId, mediaItems)
+                        }
+                        parentId.startsWith("jellyfin_home_") && parentId.contains("_album_") -> {
+                            // Strip section prefix: jellyfin_home_{section}_album_{id} → {id}
+                            val albumId = parentId.substringAfter("_album_")
+                            loadJellyfinAlbumTracks(albumId, mediaItems)
                         }
                         parentId.startsWith("jellyfin_album_") -> {
                             val albumId = parentId.removePrefix("jellyfin_album_")
@@ -1320,6 +1338,113 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         }
     }
 
+    private suspend fun loadJellyfinHome(items: MutableList<MediaBrowserCompat.MediaItem>) {
+        try {
+            if (!jellyfinAuthManager.isConfigured()) {
+                items.add(createBrowsableItem("jellyfin_no_auth", "Connect Jellyfin", "Open CloudAmp app to configure"))
+                return
+            }
+            val userId = jellyfinAuthManager.getUserId() ?: return
+            val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
+            val apiKey = jellyfinAuthManager.getApiKey()
+            val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
+
+            // Load all four sections in parallel
+            val recentlyPlayedDeferred = serviceScope.async(Dispatchers.IO) {
+                try {
+                    val response = jellyfinClient.api.getRecentlyPlayedTracks(userId)
+                    if (!response.isSuccessful) return@async emptyList<JellyfinItem>()
+                    val tracks = response.body()?.Items ?: emptyList()
+                    val seenAlbumIds = mutableSetOf<String>()
+                    tracks.mapNotNull { track ->
+                        val albumId = track.AlbumId ?: return@mapNotNull null
+                        if (!seenAlbumIds.add(albumId)) return@mapNotNull null
+                        track
+                    }.take(10)
+                } catch (e: Exception) { emptyList() }
+            }
+            val mostPlayedDeferred = serviceScope.async(Dispatchers.IO) {
+                try {
+                    val response = jellyfinClient.api.getMostPlayedAlbums(userId)
+                    if (!response.isSuccessful) return@async emptyList<JellyfinItem>()
+                    (response.body()?.Items ?: emptyList()).take(10)
+                } catch (e: Exception) { emptyList() }
+            }
+            val recentlyAddedDeferred = serviceScope.async(Dispatchers.IO) {
+                try {
+                    val response = jellyfinClient.api.getRecentlyAddedAlbums(userId)
+                    if (!response.isSuccessful) return@async emptyList<JellyfinItem>()
+                    (response.body()?.Items ?: emptyList()).take(10)
+                } catch (e: Exception) { emptyList() }
+            }
+            val discoverDeferred = serviceScope.async(Dispatchers.IO) {
+                try {
+                    val response = jellyfinClient.api.getRandomAlbums(userId)
+                    if (!response.isSuccessful) return@async emptyList<JellyfinItem>()
+                    (response.body()?.Items ?: emptyList()).take(10)
+                } catch (e: Exception) { emptyList() }
+            }
+
+            val recentlyPlayed = recentlyPlayedDeferred.await()
+            val mostPlayed = mostPlayedDeferred.await()
+            val recentlyAdded = recentlyAddedDeferred.await()
+            val discover = discoverDeferred.await()
+
+            // Recently Played — derived from tracks, use track fields for album info
+            if (recentlyPlayed.isNotEmpty()) {
+                for (track in recentlyPlayed) {
+                    val albumId = track.AlbumId ?: continue
+                    val albumName = track.Album ?: continue
+                    val artist = track.AlbumArtist ?: ""
+                    val imageUrl = jellyfinContentUri(albumId,
+                        "$serverUrl/Items/$albumId/Images/Primary?maxWidth=300${if (apiKey != null) "&api_key=$apiKey" else ""}")
+                        ?: placeholderUri
+                    items.add(createBrowsableItemWithGroup(
+                        "jellyfin_home_played_album_$albumId", albumName, artist,
+                        "Recently Played", imageUrl))
+                }
+            }
+
+            // Jump Back In — album items directly
+            if (mostPlayed.isNotEmpty()) {
+                for (album in mostPlayed) {
+                    val artist = album.AlbumArtist ?: ""
+                    val imageUrl = jellyfinContentUri(album.Id, album.getPrimaryImageUrl(serverUrl, apiKey))
+                        ?: placeholderUri
+                    items.add(createBrowsableItemWithGroup(
+                        "jellyfin_home_jumpback_album_${album.Id}", album.Name, artist,
+                        "Jump Back In", imageUrl))
+                }
+            }
+
+            // Recently Added
+            if (recentlyAdded.isNotEmpty()) {
+                for (album in recentlyAdded) {
+                    val artist = album.AlbumArtist ?: ""
+                    val imageUrl = jellyfinContentUri(album.Id, album.getPrimaryImageUrl(serverUrl, apiKey))
+                        ?: placeholderUri
+                    items.add(createBrowsableItemWithGroup(
+                        "jellyfin_home_added_album_${album.Id}", album.Name, artist,
+                        "Recently Added", imageUrl))
+                }
+            }
+
+            // Discover
+            if (discover.isNotEmpty()) {
+                for (album in discover) {
+                    val artist = album.AlbumArtist ?: ""
+                    val imageUrl = jellyfinContentUri(album.Id, album.getPrimaryImageUrl(serverUrl, apiKey))
+                        ?: placeholderUri
+                    items.add(createBrowsableItemWithGroup(
+                        "jellyfin_home_discover_album_${album.Id}", album.Name, artist,
+                        "Discover", imageUrl))
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     private suspend fun loadJellyfinRecentlyAdded(items: MutableList<MediaBrowserCompat.MediaItem>) {
         try {
             if (!jellyfinAuthManager.isConfigured()) {
@@ -1736,6 +1861,30 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             .setMediaId(id)
             .setTitle(title)
             .setSubtitle(subtitle)
+            .apply {
+                iconUri?.let { setIconUri(android.net.Uri.parse(it)) }
+            }
+            .build()
+
+        return MediaBrowserCompat.MediaItem(description, MediaBrowserCompat.MediaItem.FLAG_BROWSABLE)
+    }
+
+    /** Browsable item whose children render as grid tiles on Android Auto. */
+    private fun createGridBrowsableItem(
+        id: String,
+        title: String,
+        subtitle: String,
+        iconUri: String? = null
+    ): MediaBrowserCompat.MediaItem {
+        val extras = Bundle().apply {
+            putInt(MediaConstants.DESCRIPTION_EXTRAS_KEY_CONTENT_STYLE_BROWSABLE,
+                   MediaConstants.DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_GRID_ITEM)
+        }
+        val description = MediaDescriptionCompat.Builder()
+            .setMediaId(id)
+            .setTitle(title)
+            .setSubtitle(subtitle)
+            .setExtras(extras)
             .apply {
                 iconUri?.let { setIconUri(android.net.Uri.parse(it)) }
             }
