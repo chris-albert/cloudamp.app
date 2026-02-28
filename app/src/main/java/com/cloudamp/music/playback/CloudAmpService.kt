@@ -1376,7 +1376,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         val albumId = track.AlbumId ?: return@mapNotNull null
                         if (!seenAlbumIds.add(albumId)) return@mapNotNull null
                         track
-                    }.take(10)
+                    }.take(9)
                 } catch (e: Exception) { emptyList() }
             }
             val mostPlayedDeferred = serviceScope.async(Dispatchers.IO) {
@@ -1390,14 +1390,14 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 try {
                     val response = jellyfinClient.api.getRecentlyAddedAlbums(userId)
                     if (!response.isSuccessful) return@async emptyList<JellyfinItem>()
-                    (response.body()?.Items ?: emptyList()).take(10)
+                    (response.body()?.Items ?: emptyList()).take(9)
                 } catch (e: Exception) { emptyList() }
             }
             val discoverDeferred = serviceScope.async(Dispatchers.IO) {
                 try {
                     val response = jellyfinClient.api.getRandomAlbums(userId)
                     if (!response.isSuccessful) return@async emptyList<JellyfinItem>()
-                    (response.body()?.Items ?: emptyList()).take(10)
+                    (response.body()?.Items ?: emptyList()).take(9)
                 } catch (e: Exception) { emptyList() }
             }
 
