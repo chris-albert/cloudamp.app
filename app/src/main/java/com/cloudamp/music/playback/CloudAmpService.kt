@@ -1379,13 +1379,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     }.take(9)
                 } catch (e: Exception) { emptyList() }
             }
-            val mostPlayedDeferred = serviceScope.async(Dispatchers.IO) {
-                try {
-                    val response = jellyfinClient.api.getMostPlayedAlbums(userId)
-                    if (!response.isSuccessful) return@async emptyList<JellyfinItem>()
-                    (response.body()?.Items ?: emptyList()).take(9)
-                } catch (e: Exception) { emptyList() }
-            }
+
             val recentlyAddedDeferred = serviceScope.async(Dispatchers.IO) {
                 try {
                     val response = jellyfinClient.api.getRecentlyAddedAlbums(userId)
@@ -1402,7 +1396,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             }
 
             val recentlyPlayed = recentlyPlayedDeferred.await()
-            val mostPlayed = mostPlayedDeferred.await()
             val recentlyAdded = recentlyAddedDeferred.await()
             val discover = discoverDeferred.await()
 
@@ -1421,15 +1414,15 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 }
             }
 
-            // Jump Back In — album items directly
-            if (mostPlayed.isNotEmpty()) {
-                for (album in mostPlayed) {
+            // Discover
+            if (discover.isNotEmpty()) {
+                for (album in discover) {
                     val artist = album.AlbumArtist ?: ""
                     val imageUrl = jellyfinContentUri(album.Id, album.getPrimaryImageUrl(serverUrl, apiKey))
                         ?: placeholderUri
                     items.add(createBrowsableItemWithGroup(
-                        "jellyfin_home_jumpback_album_${album.Id}", album.Name, artist,
-                        "Jump Back In", imageUrl))
+                        "jellyfin_home_discover_album_${album.Id}", album.Name, artist,
+                        "Discover", imageUrl))
                 }
             }
 
@@ -1442,18 +1435,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     items.add(createBrowsableItemWithGroup(
                         "jellyfin_home_added_album_${album.Id}", album.Name, artist,
                         "Recently Added", imageUrl))
-                }
-            }
-
-            // Discover
-            if (discover.isNotEmpty()) {
-                for (album in discover) {
-                    val artist = album.AlbumArtist ?: ""
-                    val imageUrl = jellyfinContentUri(album.Id, album.getPrimaryImageUrl(serverUrl, apiKey))
-                        ?: placeholderUri
-                    items.add(createBrowsableItemWithGroup(
-                        "jellyfin_home_discover_album_${album.Id}", album.Name, artist,
-                        "Discover", imageUrl))
                 }
             }
         } catch (e: Exception) {
