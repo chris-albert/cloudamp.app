@@ -1383,7 +1383,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 try {
                     val response = jellyfinClient.api.getMostPlayedAlbums(userId)
                     if (!response.isSuccessful) return@async emptyList<JellyfinItem>()
-                    (response.body()?.Items ?: emptyList()).take(10)
+                    (response.body()?.Items ?: emptyList()).take(9)
                 } catch (e: Exception) { emptyList() }
             }
             val recentlyAddedDeferred = serviceScope.async(Dispatchers.IO) {
