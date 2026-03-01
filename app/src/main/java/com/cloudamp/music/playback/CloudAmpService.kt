@@ -32,6 +32,7 @@ import com.cloudamp.music.api.JellyfinApiClient
 import com.cloudamp.music.api.JellyfinItem
 import com.cloudamp.music.auth.JellyfinAuthManager
 import com.cloudamp.music.cache.JellyfinLibraryCache
+import com.cloudamp.music.cache.PlaybackStateStore
 import com.cloudamp.music.cache.SavedQueuesManager
 import com.cloudamp.music.models.Track
 import android.util.Log
@@ -48,6 +49,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     private lateinit var jellyfinAuthManager: JellyfinAuthManager
     private lateinit var jellyfinLibraryCache: JellyfinLibraryCache
     private lateinit var savedQueuesManager: SavedQueuesManager
+    private lateinit var playbackStateStore: PlaybackStateStore
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var currentAlbumArt: Bitmap? = null
     private var playbackPollingJob: Job? = null
@@ -113,6 +115,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         jellyfinAuthManager = JellyfinAuthManager(this)
         jellyfinLibraryCache = JellyfinLibraryCache.getInstance(this)
         savedQueuesManager = SavedQueuesManager.getInstance(this)
+        playbackStateStore = PlaybackStateStore.getInstance(this)
 
         // Create MediaSession
         mediaSession = MediaSessionCompat(this, "CloudAmpService").apply {
@@ -153,6 +156,9 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
         // Start polling for playback state
         startPlaybackPolling()
+
+        // Auto-restore last playback state if available
+        restorePlaybackState()
     }
 
     private fun createNotificationChannel() {
@@ -481,6 +487,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         }
                         updatePlaybackState(state, position, 1.0f)
                     }
+                    // Auto-save playback state (throttled internally to every ~10s)
+                    playbackStateStore.save()
                 } catch (e: Exception) {
                     Log.w(TAG, "Playback polling error: ${e.message}")
                 }
@@ -1178,6 +1186,58 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         return MediaBrowserCompat.MediaItem(description, MediaBrowserCompat.MediaItem.FLAG_PLAYABLE)
     }
 
+    // ── Playback state persistence ────────────────────────────────────
+
+    /**
+     * Restores the last auto-saved playback state (if any).
+     * Called during onCreate to resume where the user left off.
+     * Always restores paused — the user presses play when ready.
+     */
+    private fun restorePlaybackState() {
+        val state = playbackStateStore.load() ?: return
+        Log.d(TAG, "Restoring playback state: ${state.provider} index=${state.currentIndex} pos=${state.currentPositionMs}ms")
+
+        when (state.provider) {
+            com.cloudamp.music.models.SavedQueue.PROVIDER_GDRIVE -> {
+                if (state.driveFiles.isEmpty()) return
+                gdrivePlaybackManager.playFiles(state.driveFiles, state.currentIndex)
+                serviceScope.launch {
+                    delay(1500)
+                    gdrivePlaybackManager.seekTo(state.currentPositionMs)
+                    gdrivePlaybackManager.pause()
+                }
+            }
+            com.cloudamp.music.models.SavedQueue.PROVIDER_JELLYFIN -> {
+                val items = state.jellyfinItems.orEmpty()
+                if (items.isEmpty()) return
+                jellyfinPlaybackManager.playItems(items, state.currentIndex)
+                serviceScope.launch {
+                    delay(1500)
+                    jellyfinPlaybackManager.seekTo(state.currentPositionMs)
+                    jellyfinPlaybackManager.pause()
+                }
+            }
+        }
+
+        // Clear persisted state after restore to avoid double-restores
+        playbackStateStore.clear()
+    }
+
+    /** Force-save on pause — user might not come back for a while. */
+    fun notifyPaused() {
+        playbackStateStore.save(force = true)
+    }
+
+    /** Force-save on track transition — index changed. */
+    fun notifyTrackTransition() {
+        playbackStateStore.save(force = true)
+    }
+
+    /** Clear persisted state on explicit stop / queue end. */
+    fun notifyStopped() {
+        playbackStateStore.clear()
+    }
+
     // ── Saved Queues browsing ──────────────────────────────────────────
 
     private fun loadSavedQueues(items: MutableList<MediaBrowserCompat.MediaItem>) {
@@ -1366,6 +1426,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     }
 
     override fun onDestroy() {
+        // Force-save playback state before teardown
+        playbackStateStore.save(force = true)
         playbackPollingJob?.cancel()
         serviceScope.cancel()
         mediaSession.isActive = false

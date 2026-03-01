@@ -59,6 +59,7 @@ class PlaybackManager private constructor(
                     val active = ActivePlayback.provider ?: return@launch
                     active.pause()
                     service?.updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, active.getCurrentPosition())
+                    service?.notifyPaused()
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
@@ -122,6 +123,7 @@ class PlaybackManager private constructor(
                     val active = ActivePlayback.provider ?: return@launch
                     active.stop()
                     service?.updatePlaybackState(PlaybackStateCompat.STATE_STOPPED)
+                    service?.notifyStopped()
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }

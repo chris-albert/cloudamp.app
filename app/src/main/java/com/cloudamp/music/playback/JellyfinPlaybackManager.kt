@@ -330,6 +330,7 @@ class JellyfinPlaybackManager private constructor(
                         reportTrackPlayed(queue[currentIndex])
                     }
                     service?.updatePlaybackState(PlaybackStateCompat.STATE_STOPPED)
+                    service?.notifyStopped()
                 }
                 Player.STATE_IDLE -> { }
             }
@@ -362,6 +363,7 @@ class JellyfinPlaybackManager private constructor(
             val previousIndex = currentIndex
             currentIndex = player.currentMediaItemIndex
             Log.d(TAG, "onMediaItemTransition: index=$currentIndex, reason=$reason")
+            service?.notifyTrackTransition()
 
             // Report the previous track as played when it auto-advanced
             if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && previousIndex in queue.indices) {
