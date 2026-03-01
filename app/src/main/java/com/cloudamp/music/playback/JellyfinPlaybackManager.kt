@@ -207,8 +207,9 @@ class JellyfinPlaybackManager private constructor(
         val imageUrl = item.getPrimaryImageUrl(serverUrl, apiKey)
 
         // Build album art from the album ID if the track itself has no image
-        val albumImageUrl = if (imageUrl == null && item.AlbumId != null) {
-            "$serverUrl/Items/${item.AlbumId}/Images/Primary?maxWidth=300$apiKeySuffix"
+        // Only use album URL when Jellyfin confirms the album has art via AlbumPrimaryImageTag
+        val albumImageUrl = if (imageUrl == null) {
+            item.getAlbumPrimaryImageUrl(serverUrl, apiKey)
         } else {
             imageUrl
         }

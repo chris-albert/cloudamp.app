@@ -18,6 +18,7 @@ data class JellyfinItem(
     val RunTimeTicks: Long? = null,
     @SerializedName("IndexNumber") val TrackNumber: Int? = null,
     val ImageTags: Map<String, String>? = null,
+    val AlbumPrimaryImageTag: String? = null,
     val Path: String? = null,
     val ParentId: String? = null,
     val ChildCount: Int? = null,
@@ -42,6 +43,16 @@ data class JellyfinItem(
     fun getPrimaryImageUrl(serverUrl: String, apiKey: String? = null): String? {
         if (!hasPrimaryImage()) return null
         val base = "$serverUrl/Items/$Id/Images/Primary?maxWidth=300"
+        return if (apiKey != null) "$base&api_key=$apiKey" else base
+    }
+
+    /**
+     * Build the URL for the parent album's primary image (for Audio items).
+     * Only returns a URL when Jellyfin confirms the album has art via AlbumPrimaryImageTag.
+     */
+    fun getAlbumPrimaryImageUrl(serverUrl: String, apiKey: String? = null): String? {
+        if (AlbumPrimaryImageTag == null || AlbumId == null) return null
+        val base = "$serverUrl/Items/$AlbumId/Images/Primary?maxWidth=300"
         return if (apiKey != null) "$base&api_key=$apiKey" else base
     }
 

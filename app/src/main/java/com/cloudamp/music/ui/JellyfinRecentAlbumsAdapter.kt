@@ -152,17 +152,17 @@ class JellyfinRecentAlbumsAdapter(
             subtitleTextView.text = parts.joinToString(" \u00b7 ")
             expandIcon.text = if (item.isExpanded) "\u25bc" else "\u25b6"
 
-            // Use getPrimaryImageUrl if the item has ImageTags, otherwise build URL from album ID
             val imageUrl = item.album.getPrimaryImageUrl(serverUrl, apiKey)
-                ?: run {
-                    val apiKeySuffix = if (apiKey != null) "&api_key=$apiKey" else ""
-                    "$serverUrl/Items/${item.album.Id}/Images/Primary?maxWidth=300$apiKeySuffix"
-                }
-            Glide.with(itemView.context)
-                .load(imageUrl)
-                .placeholder(R.drawable.ic_album_placeholder)
-                .error(R.drawable.ic_album_placeholder)
-                .into(imageView)
+            if (imageUrl != null) {
+                Glide.with(itemView.context)
+                    .load(imageUrl)
+                    .placeholder(R.drawable.ic_album_placeholder)
+                    .error(R.drawable.ic_album_placeholder)
+                    .into(imageView)
+            } else {
+                Glide.with(itemView.context).clear(imageView)
+                imageView.setImageResource(R.drawable.ic_album_placeholder)
+            }
 
             itemView.setOnClickListener {
                 toggleAlbum(bindingAdapterPosition)

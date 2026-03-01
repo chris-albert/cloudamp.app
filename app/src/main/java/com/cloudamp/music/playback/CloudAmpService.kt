@@ -830,9 +830,9 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     parts.add(track.Name)
                     val subtitle = parts.joinToString(" \u00b7 ")
                     val displayName = if (isPlaying) "\u25b6 $albumName" else albumName
-                    val imageUrl = jellyfinContentUri(albumId,
-                        "$serverUrl/Items/$albumId/Images/Primary?maxWidth=300$apiKeySuffix")
-                        ?: placeholderUri
+                    val imageUrl = track.getAlbumPrimaryImageUrl(serverUrl, apiKey)?.let {
+                        jellyfinContentUri(albumId, it)
+                    } ?: placeholderUri
                     items.add(createBrowsableItem("jellyfin_album_$albumId", displayName, subtitle, imageUrl))
                 }
             }
@@ -900,9 +900,9 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     val albumId = track.AlbumId ?: continue
                     val albumName = track.Album ?: continue
                     val artist = track.AlbumArtist ?: ""
-                    val imageUrl = jellyfinContentUri(albumId,
-                        "$serverUrl/Items/$albumId/Images/Primary?maxWidth=300${if (apiKey != null) "&api_key=$apiKey" else ""}")
-                        ?: placeholderUri
+                    val imageUrl = track.getAlbumPrimaryImageUrl(serverUrl, apiKey)?.let {
+                        jellyfinContentUri(albumId, it)
+                    } ?: placeholderUri
                     items.add(createBrowsableItemWithGroup(
                         "jellyfin_home_played_album_$albumId", albumName, artist,
                         "Recently Played", imageUrl))
@@ -1055,7 +1055,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
                     // Use album art URL if track has no image
                     val rawImageUrl = track.getPrimaryImageUrl(serverUrl, apiKey)
-                        ?: "$serverUrl/Items/$albumId/Images/Primary?maxWidth=300$apiKeySuffix"
+                        ?: track.getAlbumPrimaryImageUrl(serverUrl, apiKey)
                     val imageUrl = jellyfinContentUri(track.Id, rawImageUrl)
 
                     items.add(createJellyfinPlayableItem(
@@ -1105,7 +1105,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     val displayName = if (isPlaying) "\u25b6 ${track.Name}" else track.Name
 
                     val rawImageUrl = track.getPrimaryImageUrl(serverUrl, apiKey)
-                        ?: if (track.AlbumId != null) "$serverUrl/Items/${track.AlbumId}/Images/Primary?maxWidth=300$apiKeySuffix" else null
+                        ?: track.getAlbumPrimaryImageUrl(serverUrl, apiKey)
                     val imageUrl = jellyfinContentUri(track.Id, rawImageUrl)
 
                     items.add(createJellyfinPlayableItem(

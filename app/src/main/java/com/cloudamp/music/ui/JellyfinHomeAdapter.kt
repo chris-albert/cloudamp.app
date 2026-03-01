@@ -55,15 +55,17 @@ class JellyfinHomeAdapter(
                 val album = albums[position]
                 holder.albumName.text = album.Name
 
-                val imageUrl = "$serverUrl/Items/${album.Id}/Images/Primary?maxWidth=200&quality=80" +
-                    (if (apiKey != null) "&api_key=$apiKey" else "")
-
-                Glide.with(holder.itemView.context)
-                    .load(imageUrl)
-                    .placeholder(R.drawable.ic_jellyfin)
-                    .error(R.drawable.ic_jellyfin)
-                    .centerCrop()
-                    .into(holder.albumArt)
+                val imageUrl = album.getPrimaryImageUrl(serverUrl, apiKey)
+                if (imageUrl != null) {
+                    Glide.with(holder.itemView.context)
+                        .load(imageUrl)
+                        .placeholder(R.drawable.ic_jellyfin)
+                        .centerCrop()
+                        .into(holder.albumArt)
+                } else {
+                    Glide.with(holder.itemView.context).clear(holder.albumArt)
+                    holder.albumArt.setImageResource(R.drawable.ic_album_placeholder)
+                }
 
                 holder.itemView.setOnClickListener { onAlbumClick(album) }
             }
