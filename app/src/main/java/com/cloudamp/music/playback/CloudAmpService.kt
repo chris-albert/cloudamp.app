@@ -797,6 +797,13 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             val apiKeySuffix = if (apiKey != null) "&api_key=$apiKey" else ""
             val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
 
+            // Determine currently playing album ID (if Jellyfin)
+            val currentAlbumId = (ActivePlayback.provider as? JellyfinPlaybackManager)?.let { jfm ->
+                val q = jfm.getQueue()
+                val idx = jfm.getCurrentIndex()
+                if (idx in q.indices) q[idx].AlbumId else null
+            }
+
             // Query recently played tracks, then deduplicate by album
             val response = jellyfinClient.api.getRecentlyPlayedTracks(userId)
             if (response.isSuccessful) {
@@ -808,15 +815,17 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     val albumName = track.Album ?: continue
                     val artist = track.AlbumArtist ?: ""
                     val year = track.Year?.toString()
+                    val isPlaying = albumId == currentAlbumId
                     val parts = mutableListOf<String>()
                     if (artist.isNotEmpty()) parts.add(artist)
                     if (year != null) parts.add(year)
                     parts.add(track.Name)
                     val subtitle = parts.joinToString(" \u00b7 ")
+                    val displayName = if (isPlaying) "\u25b6 $albumName" else albumName
                     val imageUrl = jellyfinContentUri(albumId,
                         "$serverUrl/Items/$albumId/Images/Primary?maxWidth=300$apiKeySuffix")
                         ?: placeholderUri
-                    items.add(createBrowsableItem("jellyfin_album_$albumId", albumName, subtitle, imageUrl))
+                    items.add(createBrowsableItem("jellyfin_album_$albumId", displayName, subtitle, imageUrl))
                 }
             }
         } catch (e: Exception) {
@@ -1017,6 +1026,13 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 // Populate runtime map for playback queue building
                 jellyfinTracksByAlbum[albumId] = tracks
 
+                // Determine currently playing track ID (if Jellyfin)
+                val currentTrackId = (ActivePlayback.provider as? JellyfinPlaybackManager)?.let { jfm ->
+                    val q = jfm.getQueue()
+                    val idx = jfm.getCurrentIndex()
+                    if (idx in q.indices) q[idx].Id else null
+                }
+
                 for (track in tracks) {
                     val durationMs = track.getDurationMs()
                     val durationStr = if (durationMs > 0) {
@@ -1025,7 +1041,9 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         val seconds = totalSeconds % 60
                         String.format("%d:%02d", minutes, seconds)
                     } else ""
-                    val subtitle = "${track.getArtistDisplay()} · $durationStr"
+                    val subtitle = "${track.getArtistDisplay()} \u00b7 $durationStr"
+                    val isPlaying = track.Id == currentTrackId
+                    val displayName = if (isPlaying) "\u25b6 ${track.Name}" else track.Name
 
                     // Use album art URL if track has no image
                     val rawImageUrl = track.getPrimaryImageUrl(serverUrl, apiKey)
@@ -1034,7 +1052,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
                     items.add(createJellyfinPlayableItem(
                         "jellyfin_track_${track.Id}",
-                        track.Name,
+                        displayName,
                         subtitle,
                         albumId,
                         imageUrl
@@ -1059,6 +1077,13 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 // Cache tracks for playback queue building
                 jellyfinTracksByAlbum[playlistId] = tracks
 
+                // Determine currently playing track ID (if Jellyfin)
+                val currentTrackId = (ActivePlayback.provider as? JellyfinPlaybackManager)?.let { jfm ->
+                    val q = jfm.getQueue()
+                    val idx = jfm.getCurrentIndex()
+                    if (idx in q.indices) q[idx].Id else null
+                }
+
                 for (track in tracks) {
                     val durationMs = track.getDurationMs()
                     val durationStr = if (durationMs > 0) {
@@ -1067,7 +1092,9 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         val seconds = totalSeconds % 60
                         String.format("%d:%02d", minutes, seconds)
                     } else ""
-                    val subtitle = "${track.getArtistDisplay()} · $durationStr"
+                    val subtitle = "${track.getArtistDisplay()} \u00b7 $durationStr"
+                    val isPlaying = track.Id == currentTrackId
+                    val displayName = if (isPlaying) "\u25b6 ${track.Name}" else track.Name
 
                     val rawImageUrl = track.getPrimaryImageUrl(serverUrl, apiKey)
                         ?: if (track.AlbumId != null) "$serverUrl/Items/${track.AlbumId}/Images/Primary?maxWidth=300$apiKeySuffix" else null
@@ -1075,7 +1102,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
                     items.add(createJellyfinPlayableItem(
                         "jellyfin_track_${track.Id}",
-                        track.Name,
+                        displayName,
                         subtitle,
                         playlistId,
                         imageUrl

@@ -1,5 +1,6 @@
 package com.cloudamp.music.ui
 
+import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -21,7 +22,8 @@ sealed class JellyfinPlaylistItem {
     data class TrackItem(
         val track: JellyfinItem,
         val parentPlaylistId: String,
-        val trackIndex: Int
+        val trackIndex: Int,
+        val isCurrentlyPlaying: Boolean = false
     ) : JellyfinPlaylistItem()
 
     data class FooterItem(
@@ -105,21 +107,28 @@ class JellyfinPlaylistsAdapter(
         }
     }
 
-    fun setPlaylistTracks(position: Int, tracks: List<JellyfinItem>) {
-        val item = items[position] as? JellyfinPlaylistItem.PlaylistHeader ?: return
+    /**
+     * @return the adapter position of the currently playing track, or -1 if none
+     */
+    fun setPlaylistTracks(position: Int, tracks: List<JellyfinItem>, currentlyPlayingTrackId: String? = null): Int {
+        val item = items[position] as? JellyfinPlaylistItem.PlaylistHeader ?: return -1
         item.tracks = tracks
         item.isLoadingTracks = false
 
+        var currentTrackAdapterPos = -1
         if (item.isExpanded && tracks.isNotEmpty()) {
             val itemsToAdd = mutableListOf<JellyfinPlaylistItem>()
             itemsToAdd.addAll(tracks.mapIndexed { index, track ->
-                JellyfinPlaylistItem.TrackItem(track, item.playlist.Id, index)
+                val isCurrent = currentlyPlayingTrackId != null && track.Id == currentlyPlayingTrackId
+                if (isCurrent) currentTrackAdapterPos = position + 1 + index
+                JellyfinPlaylistItem.TrackItem(track, item.playlist.Id, index, isCurrent)
             })
             itemsToAdd.add(JellyfinPlaylistItem.FooterItem(item.playlist.Id))
             items.addAll(position + 1, itemsToAdd)
             notifyItemChanged(position)
             notifyItemRangeInserted(position + 1, itemsToAdd.size)
         }
+        return currentTrackAdapterPos
     }
 
     private fun formatDuration(ms: Long): String {
@@ -166,7 +175,15 @@ class JellyfinPlaylistsAdapter(
         private val durationTextView: TextView = itemView.findViewById(R.id.trackDurationTextView)
 
         fun bind(item: JellyfinPlaylistItem.TrackItem) {
-            trackNumberTextView.text = (item.trackIndex + 1).toString()
+            if (item.isCurrentlyPlaying) {
+                trackNumberTextView.text = "\u25b6"
+                trackNumberTextView.setTextColor(Color.parseColor("#FFFF00"))
+                nameTextView.setTextColor(Color.parseColor("#FFFF00"))
+            } else {
+                trackNumberTextView.text = (item.trackIndex + 1).toString()
+                trackNumberTextView.setTextColor(itemView.context.getColor(R.color.winamp_display_text))
+                nameTextView.setTextColor(itemView.context.getColor(R.color.winamp_text))
+            }
             nameTextView.text = item.track.Name
             artistTextView.text = item.track.getArtistDisplay()
             durationTextView.text = formatDuration(item.track.getDurationMs())

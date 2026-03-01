@@ -47,6 +47,7 @@ class NowPlayingActivity : AppCompatActivity() {
     private var isPlaying = false
     private var currentPosition = 0L
     private var totalDuration = 0L
+    private var lastScrolledIndex = -1
 
     private val updateHandler = Handler(Looper.getMainLooper())
     private val updateRunnable = object : Runnable {
@@ -379,6 +380,15 @@ class NowPlayingActivity : AppCompatActivity() {
         }
 
         queueAdapter.updateQueue(queue, currentIndex)
+
+        // Scroll to current track when it changes
+        if (currentIndex != lastScrolledIndex && queue.isNotEmpty() && currentIndex in queue.indices) {
+            lastScrolledIndex = currentIndex
+            queueRecyclerView.post {
+                (queueRecyclerView.layoutManager as? LinearLayoutManager)
+                    ?.scrollToPositionWithOffset(currentIndex, queueRecyclerView.height / 3)
+            }
+        }
     }
 
     private fun formatTime(milliseconds: Long): String {
