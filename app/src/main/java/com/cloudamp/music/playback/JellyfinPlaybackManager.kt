@@ -10,6 +10,7 @@ import com.cloudamp.music.models.Album
 import com.cloudamp.music.models.Artist
 import com.cloudamp.music.models.Track
 import com.google.android.exoplayer2.C
+import com.google.android.exoplayer2.DefaultLoadControl
 import com.google.android.exoplayer2.ExoPlayer
 import com.google.android.exoplayer2.MediaItem
 import com.google.android.exoplayer2.PlaybackException
@@ -74,8 +75,22 @@ class JellyfinPlaybackManager private constructor(
                 .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
                 .build()
 
+            // Buffer aggressively to pre-cache upcoming tracks in the playlist.
+            // With maxBufferMs set to 5 minutes, once the current track is mostly
+            // buffered ExoPlayer will continue loading the next track(s) in the queue.
+            val loadControl = DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                    30_000,   // minBufferMs: keep at least 30s buffered ahead
+                    300_000,  // maxBufferMs: buffer up to 5 min ahead (into next tracks)
+                    2_000,    // bufferForPlaybackMs: start playback after 2s of data
+                    5_000     // bufferForPlaybackAfterRebufferMs: 5s after a rebuffer
+                )
+                .setBackBuffer(30_000, false)
+                .build()
+
             exoPlayer = ExoPlayer.Builder(context)
                 .setMediaSourceFactory(mediaSourceFactory)
+                .setLoadControl(loadControl)
                 .setAudioAttributes(audioAttributes, true)
                 .build()
                 .apply {
