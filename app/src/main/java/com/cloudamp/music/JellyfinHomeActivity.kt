@@ -229,17 +229,6 @@ class JellyfinHomeActivity : AppCompatActivity(), NavigationView.OnNavigationIte
 
     override fun onNavigationItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
-            R.id.nav_library -> {
-                val intent = Intent(this, MainActivity::class.java)
-                intent.putExtra("from_nav", true)
-                intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                startActivity(intent)
-                finish()
-            }
-            R.id.nav_playlists -> {
-                startActivity(Intent(this, PlaylistsActivity::class.java))
-                finish()
-            }
             R.id.nav_gdrive_library -> {
                 startActivity(Intent(this, GDriveLibraryActivity::class.java))
                 finish()

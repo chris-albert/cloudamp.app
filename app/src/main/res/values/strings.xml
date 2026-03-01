@@ -6,7 +6,7 @@
     <string name="artists">Artists</string>
     <string name="albums">Albums</string>
     <string name="tracks">Tracks</string>
-    <string name="spotify_token">Spotify Access Token</string>
+
     <string name="save">Save</string>
     <string name="clear">Clear</string>
     <string name="navigation_drawer_open">Open navigation drawer</string>

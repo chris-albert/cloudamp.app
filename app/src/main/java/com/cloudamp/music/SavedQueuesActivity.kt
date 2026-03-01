@@ -15,13 +15,11 @@ import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.cache.SavedQueuesManager
 import com.cloudamp.music.models.SavedQueue
 import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.playback.JellyfinPlaybackManager
-import com.cloudamp.music.playback.PlaybackManager
 import com.cloudamp.music.ui.SavedQueuesAdapter
 import com.google.android.material.navigation.NavigationView
 import kotlinx.coroutines.*
@@ -29,8 +27,6 @@ import kotlinx.coroutines.*
 class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelectedListener {
 
     private lateinit var savedQueuesManager: SavedQueuesManager
-    private lateinit var playbackManager: PlaybackManager
-    private lateinit var spotifyClient: SpotifyApiClient
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private lateinit var drawerLayout: DrawerLayout
@@ -46,8 +42,6 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
         setContentView(R.layout.activity_saved_queues)
 
         savedQueuesManager = SavedQueuesManager.getInstance(this)
-        playbackManager = PlaybackManager.getInstance(this)
-        spotifyClient = SpotifyApiClient.getInstance(this)
 
         setupDrawer()
         setupRecyclerView()
@@ -108,46 +102,9 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
 
     private fun loadQueue(queue: SavedQueue) {
         when (queue.provider) {
-            SavedQueue.PROVIDER_SPOTIFY -> loadSpotifyQueue(queue)
             SavedQueue.PROVIDER_GDRIVE -> loadGDriveQueue(queue)
             SavedQueue.PROVIDER_JELLYFIN -> loadJellyfinQueue(queue)
         }
-    }
-
-    private fun loadSpotifyQueue(queue: SavedQueue) {
-        if (queue.tracks.isEmpty()) {
-            Toast.makeText(this, "Queue is empty", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        // Save position of the currently active queue before switching
-        savedQueuesManager.saveActiveQueuePosition()
-
-        CloudAmpService.ensureForeground(this)
-        playbackManager.playTracks(queue.tracks, queue.currentIndex)
-
-        // Seek to saved position within the track after playback starts
-        if (queue.currentPositionMs > 0) {
-            scope.launch {
-                delay(2000)
-                try { spotifyClient.api.seek(queue.currentPositionMs) } catch (_: Exception) { }
-            }
-        }
-
-        // Mark this queue as active and update last played time
-        savedQueuesManager.setActiveQueue(queue.id)
-        savedQueuesManager.updateQueuePosition(
-            queue.id, queue.currentIndex, queue.currentPositionMs
-        )
-
-        Toast.makeText(
-            this,
-            "Loading: ${queue.name} (${queue.getTrackCount()} tracks)",
-            Toast.LENGTH_SHORT
-        ).show()
-
-        // Open now playing
-        startActivity(Intent(this, NowPlayingActivity::class.java))
     }
 
     private fun loadGDriveQueue(queue: SavedQueue) {
@@ -264,17 +221,6 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
 
     override fun onNavigationItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
-            R.id.nav_library -> {
-                val intent = Intent(this, MainActivity::class.java)
-                intent.putExtra("from_nav", true)
-                intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                startActivity(intent)
-                finish()
-            }
-            R.id.nav_playlists -> {
-                startActivity(Intent(this, PlaylistsActivity::class.java))
-                finish()
-            }
             R.id.nav_gdrive_library -> {
                 startActivity(Intent(this, GDriveLibraryActivity::class.java))
                 finish()

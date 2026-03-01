@@ -3,10 +3,10 @@ package com.cloudamp.music.playback
 import com.cloudamp.music.models.Track
 
 /**
- * Common interface for playback providers (Spotify, Google Drive).
+ * Common interface for playback providers (Google Drive, Jellyfin).
  *
  * State-query methods are non-suspend (return locally cached values).
- * Transport controls are suspend because some providers (Spotify) need network I/O.
+ * Transport controls are suspend because some providers need network I/O.
  */
 interface PlaybackProvider {
     val providerName: String

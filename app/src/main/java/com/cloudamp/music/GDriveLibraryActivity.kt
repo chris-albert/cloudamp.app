@@ -238,7 +238,7 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
     private fun onAudioFileClicked(file: DriveFile, allAudioFiles: List<DriveFile>, position: Int) {
         val gdrivePlayback = GDrivePlaybackManager.getInstance(this)
 
-        // Build queue: all audio files from clicked position onwards (like Spotify album behavior)
+        // Build queue: all audio files from clicked position onwards
         val queueFiles = allAudioFiles.subList(position, allAudioFiles.size) +
                 allAudioFiles.subList(0, position)
 
@@ -267,17 +267,6 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
 
     override fun onNavigationItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
-            R.id.nav_library -> {
-                val intent = Intent(this, MainActivity::class.java)
-                intent.putExtra("from_nav", true)
-                intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                startActivity(intent)
-                finish()
-            }
-            R.id.nav_playlists -> {
-                startActivity(Intent(this, PlaylistsActivity::class.java))
-                finish()
-            }
             R.id.nav_gdrive_library -> {
                 // Already here
             }

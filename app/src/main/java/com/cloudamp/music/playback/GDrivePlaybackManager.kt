@@ -241,7 +241,6 @@ class GDrivePlaybackManager private constructor(
 
     /**
      * Deactivates GDrive as the provider and releases the player.
-     * Called when the user switches back to Spotify.
      */
     fun deactivate() {
         exoPlayer?.stop()

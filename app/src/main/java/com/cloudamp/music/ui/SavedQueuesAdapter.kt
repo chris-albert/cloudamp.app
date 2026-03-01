@@ -42,10 +42,10 @@ class SavedQueuesAdapter(
         holder.nameTextView.text = queue.name
 
         // Provider icon
-        val iconRes = if (queue.provider == SavedQueue.PROVIDER_GDRIVE) {
-            R.drawable.ic_gdrive
-        } else {
-            R.drawable.ic_spotify
+        val iconRes = when (queue.provider) {
+            SavedQueue.PROVIDER_GDRIVE -> R.drawable.ic_gdrive
+            SavedQueue.PROVIDER_JELLYFIN -> R.drawable.ic_jellyfin
+            else -> R.drawable.ic_jellyfin
         }
         holder.providerIcon.setImageResource(iconRes)
 

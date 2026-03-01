@@ -30,14 +30,9 @@ import com.cloudamp.music.api.DriveFile
 import com.cloudamp.music.api.GoogleDriveApiClient
 import com.cloudamp.music.api.JellyfinApiClient
 import com.cloudamp.music.api.JellyfinItem
-import com.cloudamp.music.api.SpotifyApiClient
 import com.cloudamp.music.auth.JellyfinAuthManager
 import com.cloudamp.music.cache.JellyfinLibraryCache
-import com.cloudamp.music.cache.LibraryCache
 import com.cloudamp.music.cache.SavedQueuesManager
-import com.cloudamp.music.api.Playlist
-import com.cloudamp.music.models.Album
-import com.cloudamp.music.models.Artist
 import com.cloudamp.music.models.Track
 import android.util.Log
 import kotlinx.coroutines.*
@@ -45,14 +40,12 @@ import kotlinx.coroutines.*
 class CloudAmpService : MediaBrowserServiceCompat() {
 
     private lateinit var mediaSession: MediaSessionCompat
-    private lateinit var spotifyClient: SpotifyApiClient
     private lateinit var playbackManager: PlaybackManager
     private lateinit var gdrivePlaybackManager: GDrivePlaybackManager
     private lateinit var gdriveClient: GoogleDriveApiClient
     private lateinit var jellyfinPlaybackManager: JellyfinPlaybackManager
     private lateinit var jellyfinClient: JellyfinApiClient
     private lateinit var jellyfinAuthManager: JellyfinAuthManager
-    private lateinit var libraryCache: LibraryCache
     private lateinit var jellyfinLibraryCache: JellyfinLibraryCache
     private lateinit var savedQueuesManager: SavedQueuesManager
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -69,23 +62,10 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     private var jellyfinArtistMediaItems: List<MediaBrowserCompat.MediaItem>? = null
     private var jellyfinArtistCacheTimestamp: Long = 0
 
-    // Cache of tracks per Spotify playlist, populated when browsing playlists
-    private val playlistTracksCache = mutableMapOf<String, List<Track>>()
-
-    // When true, playback polling skips state updates (e.g., during Spotify wake flow)
-    var suppressPollingUpdates = false
 
     companion object {
         private const val TAG = "CloudAmpService"
         const val ROOT_ID = "root"
-        const val ARTISTS_ID = "artists"
-        const val ALBUMS_ID = "albums"
-        const val TRACKS_ID = "tracks"
-        const val TOP_ARTISTS_ID = "top_artists"
-        const val TOP_TRACKS_ID = "top_tracks"
-        const val SAVED_ALBUMS_ID = "saved_albums"
-        const val LIBRARY_ID = "library"
-        const val PLAYLISTS_ID = "playlists"
         const val GDRIVE_ID = "gdrive"
         const val JELLYFIN_ID = "jellyfin"
         const val JELLYFIN_HOME_ID = "jellyfin_home"
@@ -94,9 +74,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         const val JELLYFIN_RECENT_ID = "jellyfin_recent"
         const val JELLYFIN_RECENT_PLAYED_ID = "jellyfin_recent_played"
         const val JELLYFIN_RECENT_ADDED_ID = "jellyfin_recent_added"
-        const val SPOTIFY_ID = "spotify"
-        const val SPOTIFY_LIBRARY_ID = "spotify_library"
-        const val SPOTIFY_PLAYLISTS_ID = "spotify_playlists"
+
         const val SAVED_QUEUES_ID = "saved_queues"
         const val SEARCH_ID = "search"
         const val CUSTOM_ACTION_SAVE_QUEUE = "save_queue"
@@ -127,14 +105,12 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
         createNotificationChannel()
 
-        spotifyClient = SpotifyApiClient.getInstance(this)
         playbackManager = PlaybackManager.getInstance(this)
         gdrivePlaybackManager = GDrivePlaybackManager.getInstance(this)
         gdriveClient = GoogleDriveApiClient.getInstance(this)
         jellyfinPlaybackManager = JellyfinPlaybackManager.getInstance(this)
         jellyfinClient = JellyfinApiClient.getInstance(this)
         jellyfinAuthManager = JellyfinAuthManager(this)
-        libraryCache = LibraryCache.getInstance(this)
         jellyfinLibraryCache = JellyfinLibraryCache.getInstance(this)
         savedQueuesManager = SavedQueuesManager.getInstance(this)
 
@@ -175,7 +151,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
         sessionToken = mediaSession.sessionToken
 
-        // Start polling for playback state from Spotify
+        // Start polling for playback state
         startPlaybackPolling()
     }
 
@@ -436,7 +412,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     }
 
     /**
-     * Sets metadata to show a status message (e.g., "Waking Spotify...") during loading.
+     * Sets metadata to show a status message during loading.
      */
     fun updateStatusMetadata(message: String) {
         val metadataBuilder = MediaMetadataCompat.Builder()
@@ -473,99 +449,42 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     private fun startPlaybackPolling() {
         playbackPollingJob?.cancel()
         playbackPollingJob = serviceScope.launch {
-            // Track whether we've detected active playback yet.
-            // Until we do, use a shorter poll interval so the "now playing"
-            // bar appears quickly when the user opens CloudAmp in Android Auto
-            // while Spotify is already playing.
             var detectedPlayback = false
 
             while (isActive) {
                 try {
-                    if (!suppressPollingUpdates) {
-                        val active = ActivePlayback.provider
-                        if (active is GDrivePlaybackManager) {
-                            if (!detectedPlayback) {
-                                Log.d(TAG, "Detected active GDrive playback, pushing metadata")
-                                active.refreshSessionMetadata()
-                            }
-                            detectedPlayback = true
-                            // Poll ExoPlayer position for Google Drive playback
-                            val position = active.getCurrentPosition()
-                            val state = if (active.isPlaying()) {
-                                PlaybackStateCompat.STATE_PLAYING
-                            } else {
-                                PlaybackStateCompat.STATE_PAUSED
-                            }
-                            updatePlaybackState(state, position, 1.0f)
-                        } else if (active is JellyfinPlaybackManager) {
-                            if (!detectedPlayback) {
-                                Log.d(TAG, "Detected active Jellyfin playback, pushing metadata")
-                                active.refreshSessionMetadata()
-                            }
-                            detectedPlayback = true
-                            // Poll ExoPlayer position for Jellyfin playback
-                            val position = active.getCurrentPosition()
-                            val state = if (active.isPlaying()) {
-                                PlaybackStateCompat.STATE_PLAYING
-                            } else {
-                                PlaybackStateCompat.STATE_PAUSED
-                            }
-                            updatePlaybackState(state, position, 1.0f)
-                        } else {
-                            // Spotify: must poll remote API for metadata
-                            val response = spotifyClient.api.getCurrentPlayback()
-                            if (response.isSuccessful) {
-                                val playback = response.body()
-                                if (playback != null) {
-                                    if (!detectedPlayback) {
-                                        Log.d(TAG, "Detected active Spotify playback: ${playback.item?.name}")
-                                    }
-                                    detectedPlayback = true
-
-                                    val state = if (playback.isPlaying) {
-                                        PlaybackStateCompat.STATE_PLAYING
-                                    } else {
-                                        PlaybackStateCompat.STATE_PAUSED
-                                    }
-
-                                    // Feed state into PlaybackManager for the interface
-                                    playbackManager.updateSpotifyState(
-                                        playback.progressMs.toLong(),
-                                        playback.item?.durationMs?.toLong() ?: 0L,
-                                        playback.isPlaying
-                                    )
-
-                                    // Update metadata BEFORE playback state so that
-                                    // Android Auto has track info when the state changes.
-                                    playback.item?.let { track ->
-                                        playbackManager.updateCurrentIndexFromTrack(track.id)
-                                        playbackManager.lastKnownTrack = track
-                                        updateMetadata(track, track.album?.images?.firstOrNull()?.url)
-                                    }
-
-                                    updatePlaybackState(
-                                        state,
-                                        playback.progressMs.toLong(),
-                                        1.0f
-                                    )
-                                }
-                            } else {
-                                Log.w(TAG, "Spotify playback poll failed: HTTP ${response.code()}")
-                            }
+                    val active = ActivePlayback.provider
+                    if (active is GDrivePlaybackManager) {
+                        if (!detectedPlayback) {
+                            Log.d(TAG, "Detected active GDrive playback, pushing metadata")
+                            active.refreshSessionMetadata()
                         }
+                        detectedPlayback = true
+                        val position = active.getCurrentPosition()
+                        val state = if (active.isPlaying()) {
+                            PlaybackStateCompat.STATE_PLAYING
+                        } else {
+                            PlaybackStateCompat.STATE_PAUSED
+                        }
+                        updatePlaybackState(state, position, 1.0f)
+                    } else if (active is JellyfinPlaybackManager) {
+                        if (!detectedPlayback) {
+                            Log.d(TAG, "Detected active Jellyfin playback, pushing metadata")
+                            active.refreshSessionMetadata()
+                        }
+                        detectedPlayback = true
+                        val position = active.getCurrentPosition()
+                        val state = if (active.isPlaying()) {
+                            PlaybackStateCompat.STATE_PLAYING
+                        } else {
+                            PlaybackStateCompat.STATE_PAUSED
+                        }
+                        updatePlaybackState(state, position, 1.0f)
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "Playback polling error: ${e.message}")
                 }
-                // Use a shorter interval until we first detect active playback,
-                // so the "now playing" bar appears promptly in Android Auto.
-                val delayMs = when {
-                    !detectedPlayback -> 1000L
-                    ActivePlayback.provider is GDrivePlaybackManager -> 1000L
-                    ActivePlayback.provider is JellyfinPlaybackManager -> 1000L
-                    else -> 3000L
-                }
-                delay(delayMs)
+                delay(1000L)
             }
         }
     }
@@ -592,35 +511,10 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 ROOT_ID -> {
                     // Root menu - main categories
                     mediaItems.add(createGridBrowsableItem(JELLYFIN_ID, "Jellyfin", "Browse your Jellyfin library"))
-                    mediaItems.add(createBrowsableItem(SPOTIFY_ID, "Spotify", "Browse your Spotify library"))
                     mediaItems.add(createBrowsableItem(GDRIVE_ID, "Drive", "Browse your Drive music"))
                     mediaItems.add(createBrowsableItem(SAVED_QUEUES_ID, "Queues", "Resume where you left off"))
                 }
 
-                TOP_TRACKS_ID -> {
-                    loadTopTracks(mediaItems)
-                }
-
-                TOP_ARTISTS_ID -> {
-                    loadTopArtists(mediaItems)
-                }
-
-                SPOTIFY_ID -> {
-                    mediaItems.add(createBrowsableItem(SPOTIFY_LIBRARY_ID, "Library", "Your followed artists"))
-                    mediaItems.add(createBrowsableItem(SPOTIFY_PLAYLISTS_ID, "Playlists", "Your playlists"))
-                }
-
-                SPOTIFY_LIBRARY_ID, LIBRARY_ID -> {
-                    loadTopArtists(mediaItems)
-                }
-
-                SPOTIFY_PLAYLISTS_ID, PLAYLISTS_ID -> {
-                    loadPlaylists(mediaItems)
-                }
-
-                SAVED_ALBUMS_ID -> {
-                    loadSavedAlbums(mediaItems)
-                }
 
                 GDRIVE_ID -> {
                     loadGDriveFolder("root", mediaItems)
@@ -657,10 +551,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     loadSavedQueues(mediaItems)
                 }
 
-                ARTISTS_ID -> {
-                    loadTopArtists(mediaItems)
-                }
-
                 else -> {
                     // Handle dynamic IDs
                     when {
@@ -676,7 +566,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                             loadJellyfinArtistAlbums(artistId, mediaItems)
                         }
                         parentId.startsWith("jellyfin_home_") && parentId.contains("_album_") -> {
-                            // Strip section prefix: jellyfin_home_{section}_album_{id} → {id}
                             val albumId = parentId.substringAfter("_album_")
                             loadJellyfinAlbumTracks(albumId, mediaItems)
                         }
@@ -688,393 +577,11 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                             val playlistId = parentId.removePrefix("jellyfin_playlist_")
                             loadJellyfinPlaylistTracks(playlistId, mediaItems)
                         }
-                        parentId.startsWith("section_letter_artist_") -> {
-                            // Show artists for this letter
-                            val letter = parentId.removePrefix("section_letter_artist_")
-                            loadArtistsForLetter(letter, mediaItems)
-                        }
-                        parentId.startsWith("section_letter_album_") -> {
-                            // Show albums for this letter
-                            val letter = parentId.removePrefix("section_letter_album_")
-                            loadAlbumsForLetter(letter, mediaItems)
-                        }
-                        parentId.startsWith("section_letter_playlist_") -> {
-                            // Show playlists for this letter
-                            val letter = parentId.removePrefix("section_letter_playlist_")
-                            loadPlaylistsForLetter(letter, mediaItems)
-                        }
-                        parentId.startsWith("section_type_") -> {
-                            // Type headers don't navigate - return empty
-                        }
-                        parentId.startsWith("playlist_") -> {
-                            val playlistId = parentId.removePrefix("playlist_")
-                            loadPlaylistTracks(playlistId, mediaItems)
-                        }
-                        parentId.startsWith("artist_") -> {
-                            val artistId = parentId.removePrefix("artist_")
-                            loadArtistAlbums(artistId, mediaItems)
-                        }
-                        parentId.startsWith("album_") -> {
-                            val albumId = parentId.removePrefix("album_")
-                            loadAlbumTracks(albumId, mediaItems)
-                        }
                     }
                 }
             }
 
             result.sendResult(mediaItems)
-        }
-    }
-
-    private suspend fun loadTopTracks(items: MutableList<MediaBrowserCompat.MediaItem>) {
-        try {
-            val response = spotifyClient.api.getTopTracks(limit = 50)
-            if (response.isSuccessful) {
-                response.body()?.items?.forEach { track ->
-                    items.add(createPlayableItem(
-                        track.uri,
-                        track.name,
-                        track.artists.joinToString(", ") { it.name },
-                        track.album?.images?.firstOrNull()?.url
-                    ))
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private suspend fun loadTopArtists(items: MutableList<MediaBrowserCompat.MediaItem>) {
-        try {
-            // Try to use cached artists first
-            val artists = libraryCache.getArtists()?.sortedBy { it.name }
-                ?: loadFollowedArtistsFromApi()?.sortedBy { it.name }
-                ?: emptyList()
-
-            for (artist in artists) {
-                items.add(createBrowsableItem(
-                    "artist_${artist.id}",
-                    artist.name,
-                    "Artist",
-                    artist.images?.firstOrNull()?.url
-                ))
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private suspend fun loadArtistsForLetter(letter: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
-        try {
-            val artists = libraryCache.getArtists()?.sortedBy { it.name }
-                ?: loadFollowedArtistsFromApi()?.sortedBy { it.name }
-                ?: emptyList()
-
-            val targetLetter = letter.firstOrNull()?.uppercaseChar() ?: '#'
-
-            for (artist in artists) {
-                val firstLetter = artist.name.firstOrNull()?.uppercaseChar() ?: '#'
-                val artistLetter = if (firstLetter.isLetter()) firstLetter else '#'
-
-                if (artistLetter == targetLetter) {
-                    items.add(createBrowsableItem(
-                        "artist_${artist.id}",
-                        artist.name,
-                        "Artist",
-                        artist.images?.firstOrNull()?.url
-                    ))
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private suspend fun loadAlbumsForLetter(letter: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
-        try {
-            val allAlbums = loadAllSavedAlbumsFromApi()
-            val sortedAlbums = allAlbums.sortedBy { it.name }
-            val targetLetter = letter.firstOrNull()?.uppercaseChar() ?: '#'
-
-            for (album in sortedAlbums) {
-                val firstLetter = album.name.firstOrNull()?.uppercaseChar() ?: '#'
-                val albumLetter = if (firstLetter.isLetter()) firstLetter else '#'
-
-                if (albumLetter == targetLetter) {
-                    items.add(createBrowsableItem(
-                        "album_${album.id}",
-                        album.name,
-                        album.artists.joinToString(", ") { it.name },
-                        album.images?.firstOrNull()?.url
-                    ))
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private suspend fun loadPlaylists(items: MutableList<MediaBrowserCompat.MediaItem>) {
-        try {
-            val allPlaylists = loadAllPlaylistsFromApi()
-
-            // Sort by playlist name and group by first letter using group title hint
-            val sortedPlaylists = allPlaylists.sortedBy { it.name }
-
-            for (playlist in sortedPlaylists) {
-                val firstLetter = playlist.name.firstOrNull()?.uppercaseChar() ?: '#'
-                val letter = if (firstLetter.isLetter()) firstLetter else '#'
-
-                items.add(createBrowsableItemWithGroup(
-                    "playlist_${playlist.id}",
-                    playlist.name,
-                    "${playlist.tracks.total} tracks",
-                    letter.toString(),
-                    playlist.images?.firstOrNull()?.url
-                ))
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private suspend fun loadPlaylistsForLetter(letter: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
-        try {
-            val allPlaylists = loadAllPlaylistsFromApi()
-            val sortedPlaylists = allPlaylists.sortedBy { it.name }
-            val targetLetter = letter.firstOrNull()?.uppercaseChar() ?: '#'
-
-            for (playlist in sortedPlaylists) {
-                val firstLetter = playlist.name.firstOrNull()?.uppercaseChar() ?: '#'
-                val playlistLetter = if (firstLetter.isLetter()) firstLetter else '#'
-
-                if (playlistLetter == targetLetter) {
-                    items.add(createBrowsableItem(
-                        "playlist_${playlist.id}",
-                        playlist.name,
-                        "${playlist.tracks.total} tracks",
-                        playlist.images?.firstOrNull()?.url
-                    ))
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private suspend fun loadAllPlaylistsFromApi(): List<Playlist> {
-        val allPlaylists = mutableListOf<Playlist>()
-        var offset = 0
-        val limit = 50
-
-        do {
-            val response = spotifyClient.api.getMyPlaylists(limit = limit, offset = offset)
-            if (response.isSuccessful) {
-                val playlists = response.body()?.items ?: emptyList()
-                allPlaylists.addAll(playlists)
-                offset += limit
-                if (playlists.size < limit) break
-            } else {
-                break
-            }
-        } while (true)
-
-        return allPlaylists
-    }
-
-    private suspend fun loadPlaylistTracks(playlistId: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
-        try {
-            val response = spotifyClient.api.getPlaylistTracks(playlistId)
-            if (response.isSuccessful) {
-                val tracks = response.body()?.items?.mapNotNull { it.track } ?: emptyList()
-
-                // Cache tracks so playback can build the full queue
-                playlistTracksCache[playlistId] = tracks
-
-                for (track in tracks) {
-                    items.add(createPlayableItem(
-                        track.uri,
-                        track.name,
-                        track.artists.joinToString(", ") { it.name },
-                        track.album?.images?.firstOrNull()?.url,
-                        albumId = null,
-                        playlistId = playlistId
-                    ))
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private suspend fun loadFollowedArtistsFromApi(): List<Artist>? {
-        val allArtists = mutableListOf<Artist>()
-        var after: String? = null
-
-        do {
-            val response = spotifyClient.api.getFollowedArtists(limit = 50, after = after)
-            if (response.isSuccessful) {
-                val artistsPage = response.body()?.artists
-                val artists = artistsPage?.items ?: emptyList()
-                allArtists.addAll(artists)
-                after = artistsPage?.cursors?.after
-            } else {
-                return if (allArtists.isNotEmpty()) allArtists else null
-            }
-        } while (after != null)
-
-        return allArtists
-    }
-
-    private suspend fun loadSavedAlbums(items: MutableList<MediaBrowserCompat.MediaItem>) {
-        try {
-            val allAlbums = loadAllSavedAlbumsFromApi()
-            val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
-
-            // Sort by album name and group by first letter using group title hint
-            val sortedAlbums = allAlbums.sortedBy { it.name }
-
-            for (album in sortedAlbums) {
-                val firstLetter = album.name.firstOrNull()?.uppercaseChar() ?: '#'
-                val letter = if (firstLetter.isLetter()) firstLetter else '#'
-
-                items.add(createBrowsableItemWithGroup(
-                    "album_${album.id}",
-                    album.name,
-                    album.artists.joinToString(", ") { it.name },
-                    letter.toString(),
-                    album.images?.firstOrNull()?.url ?: placeholderUri
-                ))
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private suspend fun loadAllSavedAlbumsFromApi(): List<Album> {
-        val allAlbums = mutableListOf<Album>()
-        var offset = 0
-        val limit = 50
-
-        do {
-            val response = spotifyClient.api.getSavedAlbums(limit = limit, offset = offset)
-            if (response.isSuccessful) {
-                val albums = response.body()?.items?.map { it.album } ?: emptyList()
-                allAlbums.addAll(albums)
-                offset += limit
-                if (albums.size < limit) break
-            } else {
-                break
-            }
-        } while (true)
-
-        return allAlbums
-    }
-
-    private suspend fun loadArtistAlbums(artistId: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
-        try {
-            val response = spotifyClient.api.getArtistAlbums(artistId)
-            if (response.isSuccessful) {
-                val albums = response.body()?.items ?: emptyList()
-
-                // Get saved album IDs for categorization
-                val savedAlbumIds = libraryCache.getSavedAlbumIds()
-
-                // Fallback image from latest album that has one
-                val fallbackImageUrl = albums
-                    .sortedByDescending { it.releaseDate ?: "" }
-                    .firstNotNullOfOrNull { it.images?.firstOrNull()?.url }
-                val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
-
-                // Group albums into categories
-                val savedAlbums = mutableListOf<Album>()
-                val lps = mutableListOf<Album>()
-                val eps = mutableListOf<Album>()
-                val singles = mutableListOf<Album>()
-
-                for (album in albums) {
-                    when {
-                        savedAlbumIds.contains(album.id) -> savedAlbums.add(album)
-                        album.getAlbumCategory() == "single" -> singles.add(album)
-                        album.getAlbumCategory() == "ep" -> eps.add(album)
-                        else -> lps.add(album)
-                    }
-                }
-
-                // Sort each group by release date (newest first)
-                val sortByReleaseDate: (Album) -> String = { it.releaseDate ?: "" }
-
-                // Add Saved Albums section using group title hint
-                savedAlbums.sortedByDescending(sortByReleaseDate).forEach { album ->
-                    items.add(createBrowsableItemWithGroup(
-                        "album_${album.id}",
-                        album.name,
-                        album.releaseDate?.take(4) ?: "",
-                        "♥ SAVED",
-                        album.images?.firstOrNull()?.url ?: fallbackImageUrl ?: placeholderUri
-                    ))
-                }
-
-                // Add LP's section
-                lps.sortedByDescending(sortByReleaseDate).forEach { album ->
-                    items.add(createBrowsableItemWithGroup(
-                        "album_${album.id}",
-                        album.name,
-                        album.releaseDate?.take(4) ?: "",
-                        "LP's",
-                        album.images?.firstOrNull()?.url ?: fallbackImageUrl ?: placeholderUri
-                    ))
-                }
-
-                // Add EP's section
-                eps.sortedByDescending(sortByReleaseDate).forEach { album ->
-                    items.add(createBrowsableItemWithGroup(
-                        "album_${album.id}",
-                        album.name,
-                        album.releaseDate?.take(4) ?: "",
-                        "EP's",
-                        album.images?.firstOrNull()?.url ?: fallbackImageUrl ?: placeholderUri
-                    ))
-                }
-
-                // Add Singles section
-                singles.sortedByDescending(sortByReleaseDate).forEach { album ->
-                    items.add(createBrowsableItemWithGroup(
-                        "album_${album.id}",
-                        album.name,
-                        album.releaseDate?.take(4) ?: "",
-                        "SINGLES",
-                        album.images?.firstOrNull()?.url ?: fallbackImageUrl ?: placeholderUri
-                    ))
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private suspend fun loadAlbumTracks(albumId: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
-        try {
-            // First fetch album info to get artwork
-            val albumResponse = spotifyClient.api.getAlbum(albumId)
-            val album = albumResponse.body()
-            val albumArtUrl = album?.images?.firstOrNull()?.url
-
-            // Then fetch tracks
-            val tracksResponse = spotifyClient.api.getAlbumTracks(albumId)
-            if (tracksResponse.isSuccessful) {
-                tracksResponse.body()?.items?.forEach { track ->
-                    items.add(createPlayableItem(
-                        track.uri,
-                        track.name,
-                        track.artists.joinToString(", ") { it.name },
-                        albumArtUrl,
-                        albumId
-                    ))
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
         }
     }
 
@@ -1141,21 +648,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         }
     }
 
-    /**
-     * Called by PlaybackManager when a playlist track is selected from Android Auto.
-     * Looks up the cached playlist contents to build the playback queue,
-     * converging on the same playTracks() path used by the mobile app.
-     */
-    fun playPlaylistFromMediaId(playlistId: String, trackUri: String) {
-        val tracks = playlistTracksCache[playlistId]
-        if (tracks.isNullOrEmpty()) {
-            playbackManager.playTrack(trackUri)
-            return
-        }
-
-        val startIndex = tracks.indexOfFirst { it.uri == trackUri }.takeIf { it >= 0 } ?: 0
-        playbackManager.playTracks(tracks, startIndex)
-    }
 
     /**
      * Called by PlaybackManager when a Google Drive file is selected from Android Auto.
@@ -1699,17 +1191,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         savedQueuesManager.saveActiveQueuePosition()
 
         when (queue.provider) {
-            com.cloudamp.music.models.SavedQueue.PROVIDER_SPOTIFY -> {
-                if (queue.tracks.isEmpty()) return
-                playbackManager.playTracks(queue.tracks, queue.currentIndex)
-                // Seek to saved position within the track after playback starts
-                if (queue.currentPositionMs > 0) {
-                    serviceScope.launch {
-                        delay(2000)
-                        try { spotifyClient.api.seek(queue.currentPositionMs) } catch (_: Exception) { }
-                    }
-                }
-            }
             com.cloudamp.music.models.SavedQueue.PROVIDER_GDRIVE -> {
                 if (queue.driveFiles.isEmpty()) return
                 gdrivePlaybackManager.playFiles(queue.driveFiles, queue.currentIndex)
@@ -1762,52 +1243,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     }
 
     override fun onSearch(query: String, extras: Bundle?, result: Result<MutableList<MediaBrowserCompat.MediaItem>>) {
-        result.detach()
-
-        serviceScope.launch {
-            val mediaItems = mutableListOf<MediaBrowserCompat.MediaItem>()
-
-            try {
-                val response = spotifyClient.api.search(query, "artist,album,track")
-                if (response.isSuccessful) {
-                    val searchResult = response.body()
-
-                    // Add tracks first (most likely what user wants)
-                    searchResult?.tracks?.items?.forEach { track ->
-                        mediaItems.add(createPlayableItem(
-                            track.uri,
-                            track.name,
-                            track.artists.joinToString(", ") { it.name },
-                            track.album?.images?.firstOrNull()?.url
-                        ))
-                    }
-
-                    // Add artists
-                    searchResult?.artists?.items?.forEach { artist ->
-                        mediaItems.add(createBrowsableItem(
-                            "artist_${artist.id}",
-                            artist.name,
-                            "Artist",
-                            artist.images?.firstOrNull()?.url
-                        ))
-                    }
-
-                    // Add albums
-                    searchResult?.albums?.items?.forEach { album ->
-                        mediaItems.add(createBrowsableItem(
-                            "album_${album.id}",
-                            album.name,
-                            album.artists.joinToString(", ") { it.name },
-                            album.images?.firstOrNull()?.url
-                        ))
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-
-            result.sendResult(mediaItems)
-        }
+        result.sendResult(mutableListOf())
     }
 
     private fun createBrowsableItemWithGroup(

@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.cloudamp.music.api.DriveFile
 import com.cloudamp.music.models.SavedQueue
-import com.cloudamp.music.models.Track
 import com.cloudamp.music.playback.ActivePlayback
 import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.playback.JellyfinPlaybackManager
@@ -110,7 +109,6 @@ class SavedQueuesManager private constructor(context: Context) {
                     id = UUID.randomUUID().toString(),
                     name = name,
                     provider = SavedQueue.PROVIDER_JELLYFIN,
-                    tracks = emptyList(),
                     driveFiles = emptyList(),
                     jellyfinItems = items,
                     currentIndex = active.getCurrentIndex(),
@@ -119,22 +117,7 @@ class SavedQueuesManager private constructor(context: Context) {
                     lastPlayedAt = System.currentTimeMillis()
                 )
             }
-            else -> {
-                val tracks = active.getQueueAsTracks()
-                if (tracks.isEmpty()) return null
-
-                SavedQueue(
-                    id = UUID.randomUUID().toString(),
-                    name = name,
-                    provider = SavedQueue.PROVIDER_SPOTIFY,
-                    tracks = tracks,
-                    driveFiles = emptyList(),
-                    currentIndex = active.getCurrentIndex(),
-                    currentPositionMs = positionMs ?: active.getCurrentPosition(),
-                    createdAt = System.currentTimeMillis(),
-                    lastPlayedAt = System.currentTimeMillis()
-                )
-            }
+            else -> return null
         }
 
         val queues = getSavedQueues().toMutableList()
