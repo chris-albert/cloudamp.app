@@ -302,6 +302,7 @@ class GDrivePlaybackManager private constructor(
                 }
                 Player.STATE_ENDED -> {
                     service?.updatePlaybackState(PlaybackStateCompat.STATE_STOPPED)
+                    service?.notifyStopped()
                 }
                 Player.STATE_IDLE -> { }
             }
@@ -337,6 +338,7 @@ class GDrivePlaybackManager private constructor(
             Log.d(TAG, "onMediaItemTransition: index=$currentIndex, reason=$reason")
             updateServiceMetadata()
             updateServiceQueue()
+            service?.notifyTrackTransition()
         }
     }
 }
