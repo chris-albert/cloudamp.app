@@ -16,6 +16,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.cloudamp.music.api.JellyfinApiClient
 import com.cloudamp.music.api.JellyfinItem
 import com.cloudamp.music.auth.JellyfinAuthManager
+import com.cloudamp.music.playback.ActivePlayback
 import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.JellyfinPlaybackManager
 import com.cloudamp.music.ui.JellyfinPlaylistsAdapter
@@ -136,7 +137,19 @@ class JellyfinPlaylistsActivity : AppCompatActivity(), NavigationView.OnNavigati
 
                 if (response.isSuccessful) {
                     val tracks = response.body()?.Items ?: emptyList()
-                    playlistsAdapter.setPlaylistTracks(position, tracks)
+                    // Determine currently playing track ID (if Jellyfin)
+                    val currentTrackId = (ActivePlayback.provider as? JellyfinPlaybackManager)?.let { jfm ->
+                        val q = jfm.getQueue()
+                        val idx = jfm.getCurrentIndex()
+                        if (idx in q.indices) q[idx].Id else null
+                    }
+                    val currentTrackPos = playlistsAdapter.setPlaylistTracks(position, tracks, currentTrackId)
+                    if (currentTrackPos >= 0) {
+                        playlistsRecyclerView.post {
+                            (playlistsRecyclerView.layoutManager as? LinearLayoutManager)
+                                ?.scrollToPositionWithOffset(currentTrackPos, playlistsRecyclerView.height / 3)
+                        }
+                    }
                 } else {
                     handleApiError(response.code())
                 }
