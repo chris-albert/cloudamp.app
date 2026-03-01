@@ -5,13 +5,13 @@ import com.cloudamp.music.api.JellyfinItem
 
 /**
  * Represents a saved playback queue that preserves the user's position.
- * Supports Spotify, Google Drive, and Jellyfin queues (but not mixed).
+ * Supports Google Drive and Jellyfin queues (but not mixed).
  */
 data class SavedQueue(
     val id: String,
     val name: String,
-    val provider: String, // "spotify", "gdrive", or "jellyfin"
-    val tracks: List<Track>, // Spotify tracks (empty for other providers)
+    val provider: String, // "gdrive" or "jellyfin"
+    val tracks: List<Track> = emptyList(), // Legacy field, kept for serialization compatibility
     val driveFiles: List<DriveFile>, // GDrive files (empty for other providers)
     val jellyfinItems: List<JellyfinItem>? = null, // Jellyfin items (empty for other providers)
     val currentIndex: Int,
@@ -20,7 +20,6 @@ data class SavedQueue(
     val lastPlayedAt: Long
 ) {
     companion object {
-        const val PROVIDER_SPOTIFY = "spotify"
         const val PROVIDER_GDRIVE = "gdrive"
         const val PROVIDER_JELLYFIN = "jellyfin"
     }
@@ -29,7 +28,7 @@ data class SavedQueue(
         return when (provider) {
             PROVIDER_GDRIVE -> driveFiles.size
             PROVIDER_JELLYFIN -> jellyfinItems?.size ?: 0
-            else -> tracks.size
+            else -> 0
         }
     }
 
@@ -37,7 +36,7 @@ data class SavedQueue(
         return when (provider) {
             PROVIDER_GDRIVE -> "Google Drive"
             PROVIDER_JELLYFIN -> "Jellyfin"
-            else -> "Spotify"
+            else -> provider
         }
     }
 
@@ -54,11 +53,7 @@ data class SavedQueue(
                     items[currentIndex].Name
                 } else null
             }
-            else -> {
-                if (currentIndex in tracks.indices) {
-                    tracks[currentIndex].name
-                } else null
-            }
+            else -> null
         }
     }
 }

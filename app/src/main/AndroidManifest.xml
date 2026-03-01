@@ -7,11 +7,6 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- Required for Spotify App Remote SDK (Android 11+ package visibility) -->
-    <queries>
-        <package android:name="com.spotify.music" />
-    </queries>
-
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -40,12 +35,6 @@
         <!-- Settings Activity -->
         <activity
             android:name=".SettingsActivity"
-            android:exported="false"
-            android:parentActivityName=".MainActivity" />
-
-        <!-- Playlists Activity -->
-        <activity
-            android:name=".PlaylistsActivity"
             android:exported="false"
             android:parentActivityName=".MainActivity" />
 
@@ -84,21 +73,6 @@
             android:name=".SavedQueuesActivity"
             android:exported="false"
             android:parentActivityName=".MainActivity" />
-
-        <!-- Spotify OAuth Callback Activity -->
-        <activity
-            android:name=".auth.SpotifyCallbackActivity"
-            android:exported="true"
-            android:launchMode="singleTask">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="cloudamp"
-                    android:host="callback" />
-            </intent-filter>
-        </activity>
 
         <!-- Media Browser Service for Android Auto -->
         <service
