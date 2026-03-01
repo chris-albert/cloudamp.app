@@ -17,6 +17,8 @@ data class JellyfinItem(
     val Artists: List<String>? = null,
     val RunTimeTicks: Long? = null,
     @SerializedName("IndexNumber") val TrackNumber: Int? = null,
+    @SerializedName("ParentIndexNumber") val DiscNumber: Int? = null,
+    val AlbumArtists: List<JellyfinNameIdPair>? = null,
     val ImageTags: Map<String, String>? = null,
     val Path: String? = null,
     val ParentId: String? = null,

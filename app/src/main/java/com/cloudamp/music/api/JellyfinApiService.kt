@@ -62,6 +62,32 @@ interface JellyfinApiService {
         @Query("Fields") fields: String = "PrimaryImageAspectRatio,Artists"
     ): Response<JellyfinItemsResponse>
 
+    /** Bulk-fetch all albums in the library (no parent filter). */
+    @GET("Users/{userId}/Items")
+    suspend fun getAllAlbums(
+        @Path("userId") userId: String,
+        @Query("IncludeItemTypes") types: String = "MusicAlbum",
+        @Query("SortBy") sortBy: String = "ProductionYear,SortName",
+        @Query("SortOrder") sortOrder: String = "Descending",
+        @Query("Recursive") recursive: Boolean = true,
+        @Query("Fields") fields: String = "PrimaryImageAspectRatio,ProductionYear,AlbumArtists",
+        @Query("StartIndex") startIndex: Int = 0,
+        @Query("Limit") limit: Int = 500
+    ): Response<JellyfinItemsResponse>
+
+    /** Bulk-fetch all tracks in the library (no parent filter). */
+    @GET("Users/{userId}/Items")
+    suspend fun getAllTracks(
+        @Path("userId") userId: String,
+        @Query("IncludeItemTypes") types: String = "Audio",
+        @Query("SortBy") sortBy: String = "ParentIndexNumber,IndexNumber",
+        @Query("SortOrder") sortOrder: String = "Ascending",
+        @Query("Recursive") recursive: Boolean = true,
+        @Query("Fields") fields: String = "PrimaryImageAspectRatio,Artists,AlbumId",
+        @Query("StartIndex") startIndex: Int = 0,
+        @Query("Limit") limit: Int = 500
+    ): Response<JellyfinItemsResponse>
+
     /** Get all playlists. */
     @GET("Users/{userId}/Items")
     suspend fun getPlaylists(

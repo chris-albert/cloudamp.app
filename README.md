@@ -257,6 +257,157 @@ See [AGENTS.md](AGENTS.md) for information on using AI development agents to con
 
 Private repository - All rights reserved.
 
+## Jellyfin API Reference
+
+CloudAmp uses the following Jellyfin REST API endpoints. All authenticated requests require the `Authorization` header:
+
+```
+Authorization: MediaBrowser Client="CloudAmp", Device="<device>", DeviceId="<id>", Version="1.0", Token="<access_token>"
+```
+
+Replace `SERVER` with your Jellyfin server URL (e.g. `https://jellyfin.example.com`).
+
+### Authentication
+
+**Authenticate by username/password** — returns an access token and user info.
+
+```bash
+curl -X POST "SERVER/Users/AuthenticateByName" \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: MediaBrowser Client="CloudAmp", Device="Pixel", DeviceId="abc123", Version="1.0"' \
+  -d '{"Username": "chris", "Pw": "secret"}'
+```
+
+**Get current user** — validate token and retrieve user profile.
+
+```bash
+curl "SERVER/Users/Me" \
+  -H 'Authorization: MediaBrowser Client="CloudAmp", Device="Pixel", DeviceId="abc123", Version="1.0", Token="TOKEN"'
+```
+
+### Artists
+
+**Get album artists** — paginated list of album artists in the library.
+
+```bash
+curl "SERVER/Artists/AlbumArtists?UserId=USER_ID&SortBy=SortName&SortOrder=Ascending&Recursive=true&Fields=PrimaryImageAspectRatio,SortName,ChildCount,Path&StartIndex=0&Limit=500" \
+  -H 'Authorization: MediaBrowser Client="CloudAmp", Device="Pixel", DeviceId="abc123", Version="1.0", Token="TOKEN"'
+```
+
+### Albums
+
+**Get albums by artist (folder structure)** — albums nested under an artist's folder.
+
+```bash
+curl "SERVER/Users/USER_ID/Items?ParentId=ARTIST_ID&IncludeItemTypes=MusicAlbum&SortBy=ProductionYear,SortName&SortOrder=Descending&Recursive=true&Fields=PrimaryImageAspectRatio,ProductionYear" \
+  -H 'Authorization: MediaBrowser Client="CloudAmp", Device="Pixel", DeviceId="abc123", Version="1.0", Token="TOKEN"'
+```
+
+**Get albums by artist (metadata)** — fallback using AlbumArtistIds metadata.
+
+```bash
+curl "SERVER/Users/USER_ID/Items?AlbumArtistIds=ARTIST_ID&IncludeItemTypes=MusicAlbum&SortBy=ProductionYear,SortName&SortOrder=Descending&Recursive=true&Fields=PrimaryImageAspectRatio,ProductionYear" \
+  -H 'Authorization: MediaBrowser Client="CloudAmp", Device="Pixel", DeviceId="abc123", Version="1.0", Token="TOKEN"'
+```
+
+**Get all albums** — bulk-fetch all albums in the library (paginated).
+
+```bash
+curl "SERVER/Users/USER_ID/Items?IncludeItemTypes=MusicAlbum&SortBy=ProductionYear,SortName&SortOrder=Descending&Recursive=true&Fields=PrimaryImageAspectRatio,ProductionYear,AlbumArtists&StartIndex=0&Limit=500" \
+  -H 'Authorization: MediaBrowser Client="CloudAmp", Device="Pixel", DeviceId="abc123", Version="1.0", Token="TOKEN"'
+```
+
+**Recently added albums** — sorted by date added to library.
+
+```bash
+curl "SERVER/Users/USER_ID/Items?SortBy=DateCreated&SortOrder=Descending&IncludeItemTypes=MusicAlbum&Recursive=true&Limit=50&Fields=PrimaryImageAspectRatio,ProductionYear" \
+  -H 'Authorization: MediaBrowser Client="CloudAmp", Device="Pixel", DeviceId="abc123", Version="1.0", Token="TOKEN"'
+```
+
+**Random albums** — for discovery/shuffle.
+
+```bash
+curl "SERVER/Users/USER_ID/Items?SortBy=Random&IncludeItemTypes=MusicAlbum&Recursive=true&Limit=10&Fields=PrimaryImageAspectRatio,ProductionYear" \
+  -H 'Authorization: MediaBrowser Client="CloudAmp", Device="Pixel", DeviceId="abc123", Version="1.0", Token="TOKEN"'
+```
+
+### Tracks
+
+**Get album tracks** — tracks in a specific album.
+
+```bash
+curl "SERVER/Users/USER_ID/Items?ParentId=ALBUM_ID&IncludeItemTypes=Audio&SortBy=ParentIndexNumber,IndexNumber&SortOrder=Ascending&Fields=PrimaryImageAspectRatio,Artists" \
+  -H 'Authorization: MediaBrowser Client="CloudAmp", Device="Pixel", DeviceId="abc123", Version="1.0", Token="TOKEN"'
+```
+
+**Get all tracks** — bulk-fetch all tracks in the library (paginated).
+
+```bash
+curl "SERVER/Users/USER_ID/Items?IncludeItemTypes=Audio&SortBy=ParentIndexNumber,IndexNumber&SortOrder=Ascending&Recursive=true&Fields=PrimaryImageAspectRatio,Artists,AlbumId&StartIndex=0&Limit=500" \
+  -H 'Authorization: MediaBrowser Client="CloudAmp", Device="Pixel", DeviceId="abc123", Version="1.0", Token="TOKEN"'
+```
+
+**Recently played tracks** — tracks sorted by last played date.
+
+```bash
+curl "SERVER/Users/USER_ID/Items?SortBy=DatePlayed&SortOrder=Descending&IncludeItemTypes=Audio&Filters=IsPlayed&Recursive=true&Limit=200&Fields=AlbumId,Album,AlbumArtist,ProductionYear,PrimaryImageAspectRatio" \
+  -H 'Authorization: MediaBrowser Client="CloudAmp", Device="Pixel", DeviceId="abc123", Version="1.0", Token="TOKEN"'
+```
+
+**Mark track as played**
+
+```bash
+curl -X POST "SERVER/Users/USER_ID/PlayedItems/ITEM_ID" \
+  -H 'Authorization: MediaBrowser Client="CloudAmp", Device="Pixel", DeviceId="abc123", Version="1.0", Token="TOKEN"'
+```
+
+### Playlists
+
+**Get all playlists**
+
+```bash
+curl "SERVER/Users/USER_ID/Items?IncludeItemTypes=Playlist&SortBy=SortName&SortOrder=Ascending&Recursive=true&Fields=PrimaryImageAspectRatio,ChildCount" \
+  -H 'Authorization: MediaBrowser Client="CloudAmp", Device="Pixel", DeviceId="abc123", Version="1.0", Token="TOKEN"'
+```
+
+**Get playlist items**
+
+```bash
+curl "SERVER/Playlists/PLAYLIST_ID/Items?UserId=USER_ID&Fields=PrimaryImageAspectRatio,Artists" \
+  -H 'Authorization: MediaBrowser Client="CloudAmp", Device="Pixel", DeviceId="abc123", Version="1.0", Token="TOKEN"'
+```
+
+### Search
+
+**Search across artists, albums, and tracks**
+
+```bash
+curl "SERVER/Users/USER_ID/Items?SearchTerm=radiohead&IncludeItemTypes=MusicArtist,MusicAlbum,Audio&Recursive=true&Limit=50&Fields=PrimaryImageAspectRatio,Artists" \
+  -H 'Authorization: MediaBrowser Client="CloudAmp", Device="Pixel", DeviceId="abc123", Version="1.0", Token="TOKEN"'
+```
+
+### Streaming & Images
+
+**Stream audio** — universal audio endpoint used by ExoPlayer (auth via header).
+
+```bash
+curl "SERVER/Audio/ITEM_ID/universal?audioCodec=aac&container=mp3,aac,opus,flac|aac,flac" \
+  -H 'Authorization: MediaBrowser Client="CloudAmp", Device="Pixel", DeviceId="abc123", Version="1.0", Token="TOKEN"' \
+  --output track.mp3
+```
+
+**Get item image** — primary artwork for artists, albums, or tracks.
+
+```bash
+curl "SERVER/Items/ITEM_ID/Images/Primary?maxWidth=300" \
+  -H 'Authorization: MediaBrowser Client="CloudAmp", Device="Pixel", DeviceId="abc123", Version="1.0", Token="TOKEN"' \
+  --output cover.jpg
+
+# Or with API key in URL (used by Android Auto / Glide):
+curl "SERVER/Items/ITEM_ID/Images/Primary?maxWidth=300&api_key=TOKEN" \
+  --output cover.jpg
+```
+
 ## Acknowledgments
 
 - Inspired by [Winamp](https://www.winamp.com/) - the classic media player

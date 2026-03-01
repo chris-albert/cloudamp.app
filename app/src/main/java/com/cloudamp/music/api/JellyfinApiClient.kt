@@ -7,6 +7,7 @@ import com.cloudamp.music.auth.JellyfinAuthManager
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
@@ -72,14 +73,14 @@ class JellyfinApiClient private constructor(private val context: Context) {
     }
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
+        level = HttpLoggingInterceptor.Level.HEADERS
     }
 
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor(authInterceptor)
         .addInterceptor(loggingInterceptor)
         .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
         .build()
 
     /**
@@ -117,6 +118,28 @@ class JellyfinApiClient private constructor(private val context: Context) {
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .build()
+    }
+
+    /**
+     * Fetch all items by paging through a Jellyfin list endpoint.
+     * [fetch] is called with (startIndex, limit) and must return the API response.
+     */
+    suspend fun fetchAllPaginated(
+        pageSize: Int = 500,
+        fetch: suspend (startIndex: Int, limit: Int) -> Response<JellyfinItemsResponse>
+    ): List<JellyfinItem> {
+        val all = mutableListOf<JellyfinItem>()
+        var startIndex = 0
+        while (true) {
+            val response = fetch(startIndex, pageSize)
+            if (!response.isSuccessful) break
+            val body = response.body() ?: break
+            all.addAll(body.Items)
+            val total = body.TotalRecordCount ?: body.Items.size
+            if (all.size >= total || body.Items.isEmpty()) break
+            startIndex += body.Items.size
+        }
+        return all
     }
 
     fun isConfigured(): Boolean = authManager.isConfigured()

@@ -194,7 +194,7 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
             try {
                 val userId = authManager.getUserId() ?: return@launch
 
-                // 1. Fetch all artists from API
+                // 1. Fetch all artists from API (single call)
                 pathTextView.text = "JELLYFIN / loading artists..."
                 val response = jellyfinClient.api.getArtists(userId)
                 val allArtists = if (response.isSuccessful) {
@@ -233,50 +233,81 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 }
                 libraryCache.saveArtistGroups(groupMap)
 
-                // 3. For each artist group: fetch albums, save to cache, preload into adapter
-                // Also build fallback image map for artists without primary images
+                // Build lookup sets for artist matching
                 val artistsById = artists.associateBy { it.Id }
+                val allArtistIds = artists.map { it.Id }.toSet()
+                // Map every artist ID (including grouped ones) to its representative
+                val artistIdToRepresentative = mutableMapOf<String, String>()
+                for ((repId, joinedIds) in artistGroups) {
+                    for (id in joinedIds.split(",")) {
+                        artistIdToRepresentative[id] = repId
+                    }
+                }
+
+                // 3. Bulk-fetch ALL albums (1-2 paginated calls instead of N per-artist calls)
+                pathTextView.text = "JELLYFIN / loading all albums..."
+                val allAlbums = jellyfinClient.fetchAllPaginated { startIndex, limit ->
+                    jellyfinClient.api.getAllAlbums(userId, startIndex = startIndex, limit = limit)
+                }
+
+                // Group albums by artist: use AlbumArtists metadata first, fall back to ParentId
+                val albumsByArtist = mutableMapOf<String, MutableList<JellyfinItem>>()
+                for (album in allAlbums) {
+                    var matched = false
+                    // Try AlbumArtists metadata field
+                    val albumArtistIds = album.AlbumArtists?.map { it.Id } ?: emptyList()
+                    for (aaId in albumArtistIds) {
+                        val repId = artistIdToRepresentative[aaId]
+                        if (repId != null) {
+                            albumsByArtist.getOrPut(repId) { mutableListOf() }.add(album)
+                            matched = true
+                            break
+                        }
+                    }
+                    // Fall back to ParentId (folder-based matching)
+                    if (!matched && album.ParentId != null) {
+                        val repId = artistIdToRepresentative[album.ParentId]
+                            ?: if (album.ParentId in allArtistIds) album.ParentId else null
+                        if (repId != null) {
+                            albumsByArtist.getOrPut(repId) { mutableListOf() }.add(album)
+                        }
+                    }
+                }
+
+                // Save albums per artist to cache and preload into adapter
                 val fallbackImages = mutableMapOf<String, String>()
-                val totalGroups = artistGroups.size
-                var albumsCompleted = 0
-                for ((representativeId, groupedIds) in artistGroups) {
-                    try {
-                        val albumResponse = jellyfinClient.api.getArtistAlbums(userId, representativeId)
-                        var albums = if (albumResponse.isSuccessful) albumResponse.body()?.Items ?: emptyList() else emptyList()
-                        // Fallback for metadata-only artists (no folder children)
-                        if (albums.isEmpty()) {
-                            val fallbackResponse = jellyfinClient.api.getArtistAlbumsByArtistId(userId, representativeId)
-                            if (fallbackResponse.isSuccessful) albums = fallbackResponse.body()?.Items ?: emptyList()
-                        }
-                        if (albums.isNotEmpty()) {
-                            libraryCache.saveArtistAlbums(representativeId, albums)
-                            adapter.preloadArtistAlbums(representativeId, albums)
+                for ((representativeId, albums) in albumsByArtist) {
+                    libraryCache.saveArtistAlbums(representativeId, albums)
+                    adapter.preloadArtistAlbums(representativeId, albums)
 
-                            // Cache fallback album image for artists without primary image
-                            val repArtist = artistsById[representativeId]
-                            if (repArtist != null && !repArtist.hasPrimaryImage()) {
-                                val fallbackAlbum = albums
-                                    .sortedBy { it.Year ?: Int.MAX_VALUE }
-                                    .firstOrNull { it.hasPrimaryImage() }
-                                if (fallbackAlbum != null) {
-                                    fallbackImages[representativeId] = fallbackAlbum.Id
-                                }
-                            }
-
-                            // 4. For each album: fetch tracks, save to cache
-                            for (album in albums) {
-                                try {
-                                    val trackResponse = jellyfinClient.api.getAlbumTracks(userId, album.Id)
-                                    if (trackResponse.isSuccessful) {
-                                        val tracks = trackResponse.body()?.Items ?: emptyList()
-                                        libraryCache.saveAlbumTracks(album.Id, tracks)
-                                    }
-                                } catch (_: Exception) { }
-                            }
+                    // Cache fallback album image for artists without primary image
+                    val repArtist = artistsById[representativeId]
+                    if (repArtist != null && !repArtist.hasPrimaryImage()) {
+                        val fallbackAlbum = albums
+                            .sortedBy { it.Year ?: Int.MAX_VALUE }
+                            .firstOrNull { it.hasPrimaryImage() }
+                        if (fallbackAlbum != null) {
+                            fallbackImages[representativeId] = fallbackAlbum.Id
                         }
-                    } catch (_: Exception) { }
-                    albumsCompleted++
-                    pathTextView.text = "JELLYFIN / albums $albumsCompleted/$totalGroups..."
+                    }
+                }
+
+                // 4. Bulk-fetch ALL tracks (1-10 paginated calls instead of N per-album calls)
+                pathTextView.text = "JELLYFIN / loading all tracks..."
+                val allTracks = jellyfinClient.fetchAllPaginated { startIndex, limit ->
+                    jellyfinClient.api.getAllTracks(userId, startIndex = startIndex, limit = limit)
+                }
+
+                // Group tracks by AlbumId and save to cache
+                val tracksByAlbum = allTracks.groupBy { it.AlbumId ?: it.ParentId ?: "" }
+                for ((albumId, tracks) in tracksByAlbum) {
+                    if (albumId.isNotEmpty()) {
+                        // Sort by disc number then track number
+                        val sorted = tracks.sortedWith(
+                            compareBy({ it.DiscNumber ?: 0 }, { it.TrackNumber ?: 0 })
+                        )
+                        libraryCache.saveAlbumTracks(albumId, sorted)
+                    }
                 }
 
                 // 5. Save fallback images and mark cache complete
