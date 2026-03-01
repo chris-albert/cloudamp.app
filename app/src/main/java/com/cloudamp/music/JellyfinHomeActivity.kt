@@ -33,7 +33,6 @@ class JellyfinHomeActivity : AppCompatActivity(), NavigationView.OnNavigationIte
     private lateinit var toggle: ActionBarDrawerToggle
 
     private lateinit var recentPlayedAdapter: JellyfinHomeAdapter
-    private lateinit var mostPlayedAdapter: JellyfinHomeAdapter
     private lateinit var recentAddedAdapter: JellyfinHomeAdapter
     private lateinit var discoverAdapter: JellyfinHomeAdapter
     private lateinit var loadingContainer: LinearLayout
@@ -105,9 +104,6 @@ class JellyfinHomeActivity : AppCompatActivity(), NavigationView.OnNavigationIte
             findViewById(R.id.recentPlayedRecyclerView),
             JellyfinRecentAlbumsActivity.MODE_RECENTLY_PLAYED
         )
-        mostPlayedAdapter = setupHorizontalRecyclerView(
-            findViewById(R.id.mostPlayedRecyclerView)
-        )
         recentAddedAdapter = setupHorizontalRecyclerView(
             findViewById(R.id.recentAddedRecyclerView),
             JellyfinRecentAlbumsActivity.MODE_RECENTLY_ADDED
@@ -129,12 +125,10 @@ class JellyfinHomeActivity : AppCompatActivity(), NavigationView.OnNavigationIte
 
                 // Load all sections in parallel
                 val playedDeferred = async { loadRecentlyPlayed(userId) }
-                val mostPlayedDeferred = async { loadMostPlayed(userId) }
                 val addedDeferred = async { loadRecentlyAdded(userId) }
                 val discoverDeferred = async { loadDiscover(userId) }
 
                 recentPlayedAdapter.setAlbums(playedDeferred.await())
-                mostPlayedAdapter.setAlbums(mostPlayedDeferred.await())
                 recentAddedAdapter.setAlbums(addedDeferred.await())
                 discoverAdapter.setAlbums(discoverDeferred.await())
             } catch (e: Exception) {
@@ -168,12 +162,6 @@ class JellyfinHomeActivity : AppCompatActivity(), NavigationView.OnNavigationIte
                 Year = track.Year
             )
         }.take(10)
-    }
-
-    private suspend fun loadMostPlayed(userId: String): List<JellyfinItem> {
-        val response = jellyfinClient.api.getMostPlayedAlbums(userId)
-        if (!response.isSuccessful) return emptyList()
-        return (response.body()?.Items ?: emptyList()).take(10)
     }
 
     private suspend fun loadRecentlyAdded(userId: String): List<JellyfinItem> {

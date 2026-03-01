@@ -123,19 +123,6 @@ interface JellyfinApiService {
         @Query("Fields") fields: String = "PrimaryImageAspectRatio,ProductionYear"
     ): Response<JellyfinItemsResponse>
 
-    /** Frequently played albums (most played). */
-    @GET("Users/{userId}/Items")
-    suspend fun getMostPlayedAlbums(
-        @Path("userId") userId: String,
-        @Query("SortBy") sortBy: String = "PlayCount",
-        @Query("SortOrder") sortOrder: String = "Descending",
-        @Query("IncludeItemTypes") types: String = "MusicAlbum",
-        @Query("Filters") filters: String = "IsPlayed",
-        @Query("Recursive") recursive: Boolean = true,
-        @Query("Limit") limit: Int = 10,
-        @Query("Fields") fields: String = "PrimaryImageAspectRatio,ProductionYear"
-    ): Response<JellyfinItemsResponse>
-
     /** Recently added albums (sorted by date added to library). */
     @GET("Users/{userId}/Items")
     suspend fun getRecentlyAddedAlbums(
