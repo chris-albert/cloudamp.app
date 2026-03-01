@@ -514,6 +514,9 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 startActivity(Intent(this, SavedQueuesActivity::class.java))
                 finish()
             }
+            R.id.nav_settings -> {
+                startActivity(Intent(this, SettingsActivity::class.java))
+            }
         }
         drawerLayout.closeDrawer(GravityCompat.START)
         return true
@@ -526,10 +529,6 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
         return when (item.itemId) {
             R.id.action_now_playing -> {
                 startActivity(Intent(this, NowPlayingActivity::class.java))
-                true
-            }
-            R.id.action_settings -> {
-                startActivity(Intent(this, SettingsActivity::class.java))
                 true
             }
             R.id.action_search -> {

@@ -12,11 +12,6 @@
         android:id="@+id/action_search"
         android:title="@string/search"
         android:icon="@android:drawable/ic_menu_search"
-        app:showAsAction="ifRoom"/>
+        app:showAsAction="always"/>
 
-    <item
-        android:id="@+id/action_settings"
-        android:title="@string/settings"
-        android:icon="@android:drawable/ic_menu_preferences"
-        app:showAsAction="never"/>
 </menu>
