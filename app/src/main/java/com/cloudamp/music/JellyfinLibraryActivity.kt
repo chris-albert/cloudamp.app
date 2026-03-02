@@ -23,6 +23,7 @@ import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
 import com.cloudamp.music.api.JellyfinApiClient
 import com.cloudamp.music.api.JellyfinItem
 import com.cloudamp.music.auth.JellyfinAuthManager
@@ -361,6 +362,8 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
 
     fun reloadLibrary() {
         libraryCache.clearCache()
+        Glide.get(this).clearMemory()
+        scope.launch(Dispatchers.IO) { Glide.get(this@JellyfinLibraryActivity).clearDiskCache() }
         hasLoadedContent = false
         adapter.setArtists(emptyList(), emptyList())
         showAlphabetSidebar(false)
