@@ -240,9 +240,15 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 val allArtistIds = artists.map { it.Id }.toSet()
                 // Map every artist ID (including grouped ones) to its representative
                 val artistIdToRepresentative = mutableMapOf<String, String>()
+                // Also map artist names (lowercase) to representative for fallback matching
+                val artistNameToRepresentative = mutableMapOf<String, String>()
                 for ((repId, joinedIds) in artistGroups) {
                     for (id in joinedIds.split(",")) {
                         artistIdToRepresentative[id] = repId
+                        val artist = artistsById[id]
+                        if (artist != null) {
+                            artistNameToRepresentative[artist.Name.lowercase().trim()] = repId
+                        }
                     }
                 }
 
@@ -264,6 +270,18 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                             albumsByArtist.getOrPut(repId) { mutableListOf() }.add(album)
                             matched = true
                             break
+                        }
+                    }
+                    // Fall back to AlbumArtists name matching (handles ghost/metadata ID mismatches)
+                    if (!matched) {
+                        val albumArtistNames = album.AlbumArtists?.map { it.Name } ?: emptyList()
+                        for (aaName in albumArtistNames) {
+                            val repId = artistNameToRepresentative[aaName.lowercase().trim()]
+                            if (repId != null) {
+                                albumsByArtist.getOrPut(repId) { mutableListOf() }.add(album)
+                                matched = true
+                                break
+                            }
                         }
                     }
                     // Fall back to ParentId (folder-based matching)

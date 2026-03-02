@@ -70,7 +70,7 @@ interface JellyfinApiService {
         @Query("SortBy") sortBy: String = "ProductionYear,SortName",
         @Query("SortOrder") sortOrder: String = "Descending",
         @Query("Recursive") recursive: Boolean = true,
-        @Query("Fields") fields: String = "PrimaryImageAspectRatio,ProductionYear,AlbumArtists",
+        @Query("Fields") fields: String = "PrimaryImageAspectRatio,ProductionYear,AlbumArtists,ParentId",
         @Query("StartIndex") startIndex: Int = 0,
         @Query("Limit") limit: Int = 500
     ): Response<JellyfinItemsResponse>
