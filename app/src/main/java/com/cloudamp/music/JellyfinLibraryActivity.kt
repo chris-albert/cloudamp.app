@@ -174,6 +174,8 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
             val cachedArtists = libraryCache.getArtists()
             if (cachedArtists != null && cachedArtists.isNotEmpty()) {
                 adapter.setArtists(cachedArtists, emptyList())
+                val fallbacks = libraryCache.getArtistFallbackImages()
+                if (fallbacks != null) adapter.setArtistFallbackImages(fallbacks)
                 showAlphabetSidebar(true)
                 hasLoadedContent = true
                 scrollToRandomArtist()
@@ -291,6 +293,8 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                         }
                     }
                 }
+
+                adapter.setArtistFallbackImages(fallbackImages)
 
                 // 4. Bulk-fetch ALL tracks (1-10 paginated calls instead of N per-album calls)
                 pathTextView.text = "JELLYFIN / loading all tracks..."
