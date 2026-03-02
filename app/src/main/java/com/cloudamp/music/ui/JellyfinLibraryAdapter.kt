@@ -430,8 +430,30 @@ class JellyfinLibraryAdapter(
             val displayImageUrl = artistImageUrl ?: albumImageUrl ?: fallbackUrl
 
             if (displayImageUrl != null) {
-                Glide.with(itemView.context).load(displayImageUrl).into(imageView)
                 letterAvatar.visibility = View.GONE
+                Glide.with(itemView.context)
+                    .load(displayImageUrl)
+                    .error(android.R.color.transparent)
+                    .listener(object : com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable> {
+                        override fun onLoadFailed(
+                            e: com.bumptech.glide.load.engine.GlideException?,
+                            model: Any?,
+                            target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>,
+                            isFirstResource: Boolean
+                        ): Boolean {
+                            letterAvatar.text = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+                            letterAvatar.visibility = View.VISIBLE
+                            return false
+                        }
+                        override fun onResourceReady(
+                            resource: android.graphics.drawable.Drawable,
+                            model: Any,
+                            target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>?,
+                            dataSource: com.bumptech.glide.load.DataSource,
+                            isFirstResource: Boolean
+                        ): Boolean = false
+                    })
+                    .into(imageView)
             } else {
                 Glide.with(itemView.context).clear(imageView)
                 imageView.setImageDrawable(null)
