@@ -23,6 +23,7 @@ import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
 import com.cloudamp.music.api.JellyfinApiClient
 import com.cloudamp.music.api.JellyfinItem
 import com.cloudamp.music.auth.JellyfinAuthManager
@@ -174,6 +175,8 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
             val cachedArtists = libraryCache.getArtists()
             if (cachedArtists != null && cachedArtists.isNotEmpty()) {
                 adapter.setArtists(cachedArtists, emptyList())
+                val fallbacks = libraryCache.getArtistFallbackImages()
+                if (fallbacks != null) adapter.setArtistFallbackImages(fallbacks)
                 showAlphabetSidebar(true)
                 hasLoadedContent = true
                 scrollToRandomArtist()
@@ -238,9 +241,15 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                 val allArtistIds = artists.map { it.Id }.toSet()
                 // Map every artist ID (including grouped ones) to its representative
                 val artistIdToRepresentative = mutableMapOf<String, String>()
+                // Also map artist names (lowercase) to representative for fallback matching
+                val artistNameToRepresentative = mutableMapOf<String, String>()
                 for ((repId, joinedIds) in artistGroups) {
                     for (id in joinedIds.split(",")) {
                         artistIdToRepresentative[id] = repId
+                        val artist = artistsById[id]
+                        if (artist != null) {
+                            artistNameToRepresentative[artist.Name.lowercase().trim()] = repId
+                        }
                     }
                 }
 
@@ -262,6 +271,18 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                             albumsByArtist.getOrPut(repId) { mutableListOf() }.add(album)
                             matched = true
                             break
+                        }
+                    }
+                    // Fall back to AlbumArtists name matching (handles ghost/metadata ID mismatches)
+                    if (!matched) {
+                        val albumArtistNames = album.AlbumArtists?.map { it.Name } ?: emptyList()
+                        for (aaName in albumArtistNames) {
+                            val repId = artistNameToRepresentative[aaName.lowercase().trim()]
+                            if (repId != null) {
+                                albumsByArtist.getOrPut(repId) { mutableListOf() }.add(album)
+                                matched = true
+                                break
+                            }
                         }
                     }
                     // Fall back to ParentId (folder-based matching)
@@ -291,6 +312,8 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
                         }
                     }
                 }
+
+                adapter.setArtistFallbackImages(fallbackImages)
 
                 // 4. Bulk-fetch ALL tracks (1-10 paginated calls instead of N per-album calls)
                 pathTextView.text = "JELLYFIN / loading all tracks..."
@@ -339,6 +362,8 @@ class JellyfinLibraryActivity : AppCompatActivity(), NavigationView.OnNavigation
 
     fun reloadLibrary() {
         libraryCache.clearCache()
+        Glide.get(this).clearMemory()
+        scope.launch(Dispatchers.IO) { Glide.get(this@JellyfinLibraryActivity).clearDiskCache() }
         hasLoadedContent = false
         adapter.setArtists(emptyList(), emptyList())
         showAlphabetSidebar(false)

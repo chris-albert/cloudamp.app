@@ -20,7 +20,8 @@ sealed class JellyfinLibraryItem {
         var isLoadingAlbums: Boolean = false,
         val groupedArtistIds: List<String> = emptyList(),
         val displayName: String? = null,
-        val totalAlbumCount: Int = 0
+        val totalAlbumCount: Int = 0,
+        var fallbackImageAlbumId: String? = null
     ) : JellyfinLibraryItem()
 
     data class AlbumItem(
@@ -293,6 +294,19 @@ class JellyfinLibraryAdapter(
         }
     }
 
+    fun setArtistFallbackImages(fallbacks: Map<String, String>) {
+        for (i in items.indices) {
+            val item = items[i]
+            if (item is JellyfinLibraryItem.ArtistItem) {
+                val albumId = fallbacks[item.item.Id]
+                if (albumId != null && item.fallbackImageAlbumId != albumId) {
+                    item.fallbackImageAlbumId = albumId
+                    notifyItemChanged(i)
+                }
+            }
+        }
+    }
+
     fun setArtistAlbums(position: Int, albums: List<JellyfinItem>) {
         val item = items[position] as? JellyfinLibraryItem.ArtistItem ?: return
         item.albums = albums
@@ -402,18 +416,44 @@ class JellyfinLibraryAdapter(
                 subtitleTextView.visibility = View.GONE
             }
 
-            // Fallback chain: artist image → latest album art → letter avatar
+            // Fallback chain: artist image → loaded album art → cached fallback album → letter avatar
             val artistImageUrl = item.item.getPrimaryImageUrl(serverUrl, apiKey)
             val albumImageUrl = if (artistImageUrl == null) {
                 item.albums
                     .sortedBy { it.Year ?: Int.MAX_VALUE }
                     .firstNotNullOfOrNull { it.getPrimaryImageUrl(serverUrl, apiKey) }
             } else null
-            val displayImageUrl = artistImageUrl ?: albumImageUrl
+            val fallbackUrl = if (artistImageUrl == null && albumImageUrl == null && item.fallbackImageAlbumId != null) {
+                val base = "$serverUrl/Items/${item.fallbackImageAlbumId}/Images/Primary?maxWidth=300"
+                if (apiKey != null) "$base&api_key=$apiKey" else base
+            } else null
+            val displayImageUrl = artistImageUrl ?: albumImageUrl ?: fallbackUrl
 
             if (displayImageUrl != null) {
-                Glide.with(itemView.context).load(displayImageUrl).into(imageView)
                 letterAvatar.visibility = View.GONE
+                Glide.with(itemView.context)
+                    .load(displayImageUrl)
+                    .error(android.R.color.transparent)
+                    .listener(object : com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable> {
+                        override fun onLoadFailed(
+                            e: com.bumptech.glide.load.engine.GlideException?,
+                            model: Any?,
+                            target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>,
+                            isFirstResource: Boolean
+                        ): Boolean {
+                            letterAvatar.text = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+                            letterAvatar.visibility = View.VISIBLE
+                            return false
+                        }
+                        override fun onResourceReady(
+                            resource: android.graphics.drawable.Drawable,
+                            model: Any,
+                            target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>?,
+                            dataSource: com.bumptech.glide.load.DataSource,
+                            isFirstResource: Boolean
+                        ): Boolean = false
+                    })
+                    .into(imageView)
             } else {
                 Glide.with(itemView.context).clear(imageView)
                 imageView.setImageDrawable(null)
