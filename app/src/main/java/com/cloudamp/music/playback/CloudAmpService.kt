@@ -852,13 +852,10 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             val apiKey = jellyfinAuthManager.getApiKey()
             val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
 
-            // Top nav links
-            val libraryIcon = "android.resource://${packageName}/${R.drawable.ic_library}"
-            val playlistIcon = "android.resource://${packageName}/${R.drawable.ic_playlist}"
-            val historyIcon = "android.resource://${packageName}/${R.drawable.ic_history}"
-            items.add(createBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "", libraryIcon))
-            items.add(createBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "", playlistIcon))
-            items.add(createBrowsableItem(JELLYFIN_RECENT_ID, "Recently", "", historyIcon))
+            // Top nav links (no icons → compact text-only items in Android Auto)
+            items.add(createBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", ""))
+            items.add(createBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", ""))
+            items.add(createBrowsableItem(JELLYFIN_RECENT_ID, "Recently", ""))
 
             // Load all four sections in parallel
             val recentlyPlayedDeferred = serviceScope.async(Dispatchers.IO) {
