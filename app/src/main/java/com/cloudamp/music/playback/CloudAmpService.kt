@@ -520,6 +520,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 ROOT_ID -> {
                     // Root menu - main categories
                     mediaItems.add(createGridBrowsableItem(JELLYFIN_ID, "Jellyfin", "Browse your Jellyfin library"))
+                    mediaItems.add(createListBrowsableItem(JELLYFIN_BROWSE_ID, "Browse", "Library, Playlists, Recently"))
                     mediaItems.add(createBrowsableItem(GDRIVE_ID, "Drive", "Browse your Drive music"))
                     mediaItems.add(createBrowsableItem(SAVED_QUEUES_ID, "Queues", "Resume where you left off"))
                 }
@@ -861,10 +862,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
             val apiKey = jellyfinAuthManager.getApiKey()
             val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
-
-            // Single "Browse" item whose children (Library, Playlists, Recently) render as list
-            val browseIcon = "android.resource://${packageName}/${R.drawable.ic_library}"
-            items.add(createListBrowsableItem(JELLYFIN_BROWSE_ID, "Browse", "", browseIcon))
 
             // Load all four sections in parallel
             val recentlyPlayedDeferred = serviceScope.async(Dispatchers.IO) {
