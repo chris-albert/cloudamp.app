@@ -74,6 +74,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         const val JELLYFIN_LIBRARY_ID = "jellyfin_library"
         const val JELLYFIN_PLAYLISTS_ID = "jellyfin_playlists"
         const val JELLYFIN_RECENT_ID = "jellyfin_recent"
+        const val JELLYFIN_BROWSE_ID = "jellyfin_browse"
         const val JELLYFIN_RECENT_PLAYED_ID = "jellyfin_recent_played"
         const val JELLYFIN_RECENT_ADDED_ID = "jellyfin_recent_added"
 
@@ -532,6 +533,15 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     loadJellyfinHome(mediaItems)
                 }
 
+                JELLYFIN_BROWSE_ID -> {
+                    val libraryIcon = "android.resource://${packageName}/${R.drawable.ic_library}"
+                    val playlistIcon = "android.resource://${packageName}/${R.drawable.ic_playlist}"
+                    val historyIcon = "android.resource://${packageName}/${R.drawable.ic_history}"
+                    mediaItems.add(createBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "", libraryIcon))
+                    mediaItems.add(createBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "", playlistIcon))
+                    mediaItems.add(createBrowsableItem(JELLYFIN_RECENT_ID, "Recently", "", historyIcon))
+                }
+
                 JELLYFIN_LIBRARY_ID -> {
                     loadJellyfinArtists(mediaItems)
                 }
@@ -852,13 +862,9 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             val apiKey = jellyfinAuthManager.getApiKey()
             val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
 
-            // Top nav links — category list style for compact rendering
-            val libraryIcon = "android.resource://${packageName}/${R.drawable.ic_library}"
-            val playlistIcon = "android.resource://${packageName}/${R.drawable.ic_playlist}"
-            val historyIcon = "android.resource://${packageName}/${R.drawable.ic_history}"
-            items.add(createCategoryBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", libraryIcon))
-            items.add(createCategoryBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", playlistIcon))
-            items.add(createCategoryBrowsableItem(JELLYFIN_RECENT_ID, "Recently", historyIcon))
+            // Single "Browse" item whose children (Library, Playlists, Recently) render as list
+            val browseIcon = "android.resource://${packageName}/${R.drawable.ic_library}"
+            items.add(createListBrowsableItem(JELLYFIN_BROWSE_ID, "Browse", "", browseIcon))
 
             // Load all four sections in parallel
             val recentlyPlayedDeferred = serviceScope.async(Dispatchers.IO) {
@@ -1375,19 +1381,21 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         return MediaBrowserCompat.MediaItem(description, MediaBrowserCompat.MediaItem.FLAG_BROWSABLE)
     }
 
-    /** Compact category-style browsable item for nav links in Android Auto. */
-    private fun createCategoryBrowsableItem(
+    /** Browsable item whose children render as list items on Android Auto. */
+    private fun createListBrowsableItem(
         id: String,
         title: String,
+        subtitle: String,
         iconUri: String? = null
     ): MediaBrowserCompat.MediaItem {
         val extras = Bundle().apply {
             putInt(MediaConstants.DESCRIPTION_EXTRAS_KEY_CONTENT_STYLE_BROWSABLE,
-                   MediaConstants.DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_CATEGORY_LIST_ITEM)
+                   MediaConstants.DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_LIST_ITEM)
         }
         val description = MediaDescriptionCompat.Builder()
             .setMediaId(id)
             .setTitle(title)
+            .setSubtitle(subtitle)
             .setExtras(extras)
             .apply {
                 iconUri?.let { setIconUri(android.net.Uri.parse(it)) }
