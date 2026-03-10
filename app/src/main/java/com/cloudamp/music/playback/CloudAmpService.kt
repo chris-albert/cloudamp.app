@@ -503,7 +503,18 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         rootHints: Bundle?
     ): BrowserRoot {
         // Allow all clients (Android Auto, etc.)
-        return BrowserRoot(ROOT_ID, null)
+        // Use list style for top-level browsable items so they render compact in Android Auto
+        val extras = Bundle().apply {
+            putInt(
+                MediaConstants.BROWSER_ROOT_HINTS_KEY_ROOT_CHILDREN_SUPPORTED_FLAGS,
+                MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
+            )
+            putInt(
+                MediaConstants.DESCRIPTION_EXTRAS_KEY_CONTENT_STYLE_BROWSABLE,
+                MediaConstants.DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_LIST_ITEM
+            )
+        }
+        return BrowserRoot(ROOT_ID, extras)
     }
 
     override fun onLoadChildren(
@@ -852,10 +863,13 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             val apiKey = jellyfinAuthManager.getApiKey()
             val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
 
-            // Top nav links (no icons → compact text-only items in Android Auto)
-            items.add(createBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", ""))
-            items.add(createBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", ""))
-            items.add(createBrowsableItem(JELLYFIN_RECENT_ID, "Recently", ""))
+            // Top nav links
+            val libraryIcon = "android.resource://${packageName}/${R.drawable.ic_library}"
+            val playlistIcon = "android.resource://${packageName}/${R.drawable.ic_playlist}"
+            val historyIcon = "android.resource://${packageName}/${R.drawable.ic_history}"
+            items.add(createBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "", libraryIcon))
+            items.add(createBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "", playlistIcon))
+            items.add(createBrowsableItem(JELLYFIN_RECENT_ID, "Recently", "", historyIcon))
 
             // Load all four sections in parallel
             val recentlyPlayedDeferred = serviceScope.async(Dispatchers.IO) {
