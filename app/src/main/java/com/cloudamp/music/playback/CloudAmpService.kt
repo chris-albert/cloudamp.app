@@ -503,18 +503,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         rootHints: Bundle?
     ): BrowserRoot {
         // Allow all clients (Android Auto, etc.)
-        // Use list style for top-level browsable items so they render compact in Android Auto
-        val extras = Bundle().apply {
-            putInt(
-                MediaConstants.BROWSER_ROOT_HINTS_KEY_ROOT_CHILDREN_SUPPORTED_FLAGS,
-                MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
-            )
-            putInt(
-                MediaConstants.DESCRIPTION_EXTRAS_KEY_CONTENT_STYLE_BROWSABLE,
-                MediaConstants.DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_LIST_ITEM
-            )
-        }
-        return BrowserRoot(ROOT_ID, extras)
+        return BrowserRoot(ROOT_ID, null)
     }
 
     override fun onLoadChildren(
@@ -863,13 +852,13 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             val apiKey = jellyfinAuthManager.getApiKey()
             val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
 
-            // Top nav links
+            // Top nav links — category list style for compact rendering
             val libraryIcon = "android.resource://${packageName}/${R.drawable.ic_library}"
             val playlistIcon = "android.resource://${packageName}/${R.drawable.ic_playlist}"
             val historyIcon = "android.resource://${packageName}/${R.drawable.ic_history}"
-            items.add(createBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "", libraryIcon))
-            items.add(createBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "", playlistIcon))
-            items.add(createBrowsableItem(JELLYFIN_RECENT_ID, "Recently", "", historyIcon))
+            items.add(createCategoryBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", libraryIcon))
+            items.add(createCategoryBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", playlistIcon))
+            items.add(createCategoryBrowsableItem(JELLYFIN_RECENT_ID, "Recently", historyIcon))
 
             // Load all four sections in parallel
             val recentlyPlayedDeferred = serviceScope.async(Dispatchers.IO) {
@@ -1378,6 +1367,28 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             .setMediaId(id)
             .setTitle(title)
             .setSubtitle(subtitle)
+            .apply {
+                iconUri?.let { setIconUri(android.net.Uri.parse(it)) }
+            }
+            .build()
+
+        return MediaBrowserCompat.MediaItem(description, MediaBrowserCompat.MediaItem.FLAG_BROWSABLE)
+    }
+
+    /** Compact category-style browsable item for nav links in Android Auto. */
+    private fun createCategoryBrowsableItem(
+        id: String,
+        title: String,
+        iconUri: String? = null
+    ): MediaBrowserCompat.MediaItem {
+        val extras = Bundle().apply {
+            putInt(MediaConstants.DESCRIPTION_EXTRAS_KEY_CONTENT_STYLE_BROWSABLE,
+                   MediaConstants.DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_CATEGORY_LIST_ITEM)
+        }
+        val description = MediaDescriptionCompat.Builder()
+            .setMediaId(id)
+            .setTitle(title)
+            .setExtras(extras)
             .apply {
                 iconUri?.let { setIconUri(android.net.Uri.parse(it)) }
             }
