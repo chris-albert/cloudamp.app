@@ -74,6 +74,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         const val JELLYFIN_LIBRARY_ID = "jellyfin_library"
         const val JELLYFIN_PLAYLISTS_ID = "jellyfin_playlists"
         const val JELLYFIN_RECENT_ID = "jellyfin_recent"
+        const val JELLYFIN_BROWSE_ID = "jellyfin_browse"
         const val JELLYFIN_RECENT_PLAYED_ID = "jellyfin_recent_played"
         const val JELLYFIN_RECENT_ADDED_ID = "jellyfin_recent_added"
 
@@ -519,6 +520,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 ROOT_ID -> {
                     // Root menu - main categories
                     mediaItems.add(createGridBrowsableItem(JELLYFIN_ID, "Jellyfin", "Browse your Jellyfin library"))
+                    mediaItems.add(createListBrowsableItem(JELLYFIN_BROWSE_ID, "Browse", "Library, Playlists, Recently"))
                     mediaItems.add(createBrowsableItem(GDRIVE_ID, "Drive", "Browse your Drive music"))
                     mediaItems.add(createBrowsableItem(SAVED_QUEUES_ID, "Queues", "Resume where you left off"))
                 }
@@ -530,6 +532,15 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
                 JELLYFIN_ID, JELLYFIN_HOME_ID -> {
                     loadJellyfinHome(mediaItems)
+                }
+
+                JELLYFIN_BROWSE_ID -> {
+                    val libraryIcon = "android.resource://${packageName}/${R.drawable.ic_library}"
+                    val playlistIcon = "android.resource://${packageName}/${R.drawable.ic_playlist}"
+                    val historyIcon = "android.resource://${packageName}/${R.drawable.ic_history}"
+                    mediaItems.add(createBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "", libraryIcon))
+                    mediaItems.add(createBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "", playlistIcon))
+                    mediaItems.add(createBrowsableItem(JELLYFIN_RECENT_ID, "Recently", "", historyIcon))
                 }
 
                 JELLYFIN_LIBRARY_ID -> {
@@ -851,14 +862,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
             val apiKey = jellyfinAuthManager.getApiKey()
             val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
-
-            // Top nav links
-            val libraryIcon = "android.resource://${packageName}/${R.drawable.ic_library}"
-            val playlistIcon = "android.resource://${packageName}/${R.drawable.ic_playlist}"
-            val historyIcon = "android.resource://${packageName}/${R.drawable.ic_history}"
-            items.add(createBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "", libraryIcon))
-            items.add(createBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "", playlistIcon))
-            items.add(createBrowsableItem(JELLYFIN_RECENT_ID, "Recently", "", historyIcon))
 
             // Load all four sections in parallel
             val recentlyPlayedDeferred = serviceScope.async(Dispatchers.IO) {
@@ -1367,6 +1370,30 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             .setMediaId(id)
             .setTitle(title)
             .setSubtitle(subtitle)
+            .apply {
+                iconUri?.let { setIconUri(android.net.Uri.parse(it)) }
+            }
+            .build()
+
+        return MediaBrowserCompat.MediaItem(description, MediaBrowserCompat.MediaItem.FLAG_BROWSABLE)
+    }
+
+    /** Browsable item whose children render as list items on Android Auto. */
+    private fun createListBrowsableItem(
+        id: String,
+        title: String,
+        subtitle: String,
+        iconUri: String? = null
+    ): MediaBrowserCompat.MediaItem {
+        val extras = Bundle().apply {
+            putInt(MediaConstants.DESCRIPTION_EXTRAS_KEY_CONTENT_STYLE_BROWSABLE,
+                   MediaConstants.DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_LIST_ITEM)
+        }
+        val description = MediaDescriptionCompat.Builder()
+            .setMediaId(id)
+            .setTitle(title)
+            .setSubtitle(subtitle)
+            .setExtras(extras)
             .apply {
                 iconUri?.let { setIconUri(android.net.Uri.parse(it)) }
             }
