@@ -1203,22 +1203,12 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         when (state.provider) {
             com.cloudamp.music.models.SavedQueue.PROVIDER_GDRIVE -> {
                 if (state.driveFiles.isEmpty()) return
-                gdrivePlaybackManager.playFiles(state.driveFiles, state.currentIndex)
-                serviceScope.launch {
-                    delay(1500)
-                    gdrivePlaybackManager.seekTo(state.currentPositionMs)
-                    gdrivePlaybackManager.pause()
-                }
+                gdrivePlaybackManager.restoreFiles(state.driveFiles, state.currentIndex, state.currentPositionMs)
             }
             com.cloudamp.music.models.SavedQueue.PROVIDER_JELLYFIN -> {
                 val items = state.jellyfinItems.orEmpty()
                 if (items.isEmpty()) return
-                jellyfinPlaybackManager.playItems(items, state.currentIndex)
-                serviceScope.launch {
-                    delay(1500)
-                    jellyfinPlaybackManager.seekTo(state.currentPositionMs)
-                    jellyfinPlaybackManager.pause()
-                }
+                jellyfinPlaybackManager.restoreItems(items, state.currentIndex, state.currentPositionMs)
             }
         }
 

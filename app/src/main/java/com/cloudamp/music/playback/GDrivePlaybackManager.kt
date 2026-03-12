@@ -153,8 +153,48 @@ class GDrivePlaybackManager private constructor(
         service?.updatePlaybackState(PlaybackStateCompat.STATE_BUFFERING)
     }
 
+    /**
+     * Restore a queue without starting playback. Prepares ExoPlayer in paused
+     * state and seeks to the given position so the user can press play to resume.
+     */
+    fun restoreFiles(files: List<DriveFile>, startIndex: Int, positionMs: Long) {
+        Log.d(TAG, "restoreFiles: ${files.size} files, index=$startIndex, pos=${positionMs}ms")
+
+        val driveClient = GoogleDriveApiClient.getInstance(context)
+        if (!driveClient.hasAccessToken()) {
+            Log.e(TAG, "restoreFiles: NO ACCESS TOKEN! Playback will fail.")
+        }
+
+        ActivePlayback.activate(this)
+        queue.clear()
+        queue.addAll(files)
+        currentIndex = startIndex
+
+        val player = getPlayer()
+        player.stop()
+        player.clearMediaItems()
+
+        files.forEach { file ->
+            player.addMediaItem(MediaItem.fromUri(buildStreamUri(file.id)))
+        }
+
+        player.playWhenReady = false
+        player.seekTo(startIndex, positionMs)
+        player.prepare()
+
+        updateServiceMetadata()
+        updateServiceQueue()
+        service?.updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, positionMs)
+    }
+
     override suspend fun play() {
-        getPlayer().play()
+        val player = getPlayer()
+        // Re-prepare if player is idle (e.g. after an error during restore)
+        if (player.playbackState == Player.STATE_IDLE && queue.isNotEmpty()) {
+            Log.d(TAG, "play(): player idle, re-preparing")
+            player.prepare()
+        }
+        player.play()
         updateServiceMetadata()
         updateServiceQueue()
     }

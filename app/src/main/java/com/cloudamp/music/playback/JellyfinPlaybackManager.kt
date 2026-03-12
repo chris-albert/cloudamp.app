@@ -150,8 +150,43 @@ class JellyfinPlaybackManager private constructor(
         service?.updatePlaybackState(PlaybackStateCompat.STATE_BUFFERING)
     }
 
+    /**
+     * Restore a queue without starting playback. Prepares ExoPlayer in paused
+     * state and seeks to the given position so the user can press play to resume.
+     */
+    fun restoreItems(items: List<JellyfinItem>, startIndex: Int, positionMs: Long) {
+        Log.d(TAG, "restoreItems: ${items.size} items, index=$startIndex, pos=${positionMs}ms")
+
+        ActivePlayback.activate(this)
+        queue.clear()
+        queue.addAll(items)
+        currentIndex = startIndex
+
+        val player = getPlayer()
+        player.stop()
+        player.clearMediaItems()
+
+        items.forEach { item ->
+            player.addMediaItem(MediaItem.fromUri(buildStreamUri(item.Id)))
+        }
+
+        player.playWhenReady = false
+        player.seekTo(startIndex, positionMs)
+        player.prepare()
+
+        updateServiceMetadata()
+        updateServiceQueue()
+        service?.updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, positionMs)
+    }
+
     override suspend fun play() {
-        getPlayer().play()
+        val player = getPlayer()
+        // Re-prepare if player is idle (e.g. after an error during restore)
+        if (player.playbackState == Player.STATE_IDLE && queue.isNotEmpty()) {
+            Log.d(TAG, "play(): player idle, re-preparing")
+            player.prepare()
+        }
+        player.play()
         updateServiceMetadata()
         updateServiceQueue()
     }
