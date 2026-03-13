@@ -23,7 +23,8 @@ data class JellyfinItem(
     val Path: String? = null,
     val ParentId: String? = null,
     val ChildCount: Int? = null,
-    @SerializedName("ProductionYear") val Year: Int? = null
+    @SerializedName("ProductionYear") val Year: Int? = null,
+    val UserData: JellyfinUserData? = null
 ) {
     /** Duration in milliseconds (Jellyfin uses ticks = 100-nanosecond units). */
     fun getDurationMs(): Long {
@@ -66,6 +67,27 @@ data class JellyfinUser(
 data class JellyfinNameIdPair(
     val Name: String,
     val Id: String
+)
+
+/** Per-user playback state for an item (position, play count, etc.). */
+data class JellyfinUserData(
+    val PlaybackPositionTicks: Long = 0,
+    val PlayCount: Int = 0,
+    val Played: Boolean = false,
+    val IsFavorite: Boolean = false
+)
+
+/** Request body for reporting playback progress to the Jellyfin server. */
+data class PlaybackProgressInfo(
+    @SerializedName("ItemId") val itemId: String,
+    @SerializedName("PositionTicks") val positionTicks: Long,
+    @SerializedName("IsPaused") val isPaused: Boolean = false
+)
+
+/** Request body for reporting playback stop to the Jellyfin server. */
+data class PlaybackStopInfo(
+    @SerializedName("ItemId") val itemId: String,
+    @SerializedName("PositionTicks") val positionTicks: Long
 )
 
 /** Request body for authenticating by username/password. */

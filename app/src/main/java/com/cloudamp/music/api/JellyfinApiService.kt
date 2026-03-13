@@ -51,7 +51,7 @@ interface JellyfinApiService {
         @Query("Fields") fields: String = "PrimaryImageAspectRatio,ProductionYear"
     ): Response<JellyfinItemsResponse>
 
-    /** Get tracks in an album. */
+    /** Get tracks in an album (includes UserData for playback position tracking). */
     @GET("Users/{userId}/Items")
     suspend fun getAlbumTracks(
         @Path("userId") userId: String,
@@ -59,7 +59,7 @@ interface JellyfinApiService {
         @Query("IncludeItemTypes") types: String = "Audio",
         @Query("SortBy") sortBy: String = "ParentIndexNumber,IndexNumber",
         @Query("SortOrder") sortOrder: String = "Ascending",
-        @Query("Fields") fields: String = "PrimaryImageAspectRatio,Artists"
+        @Query("Fields") fields: String = "PrimaryImageAspectRatio,Artists,UserData"
     ): Response<JellyfinItemsResponse>
 
     /** Bulk-fetch all albums in the library (no parent filter). */
@@ -160,4 +160,16 @@ interface JellyfinApiService {
         @Query("Limit") limit: Int = 50,
         @Query("Fields") fields: String = "PrimaryImageAspectRatio,ProductionYear"
     ): Response<JellyfinItemsResponse>
+
+    /** Report playback progress to the server (updates UserData.PlaybackPositionTicks). */
+    @POST("Sessions/Playing/Progress")
+    suspend fun reportPlaybackProgress(
+        @Body info: PlaybackProgressInfo
+    ): Response<Void>
+
+    /** Report playback stopped to the server. */
+    @POST("Sessions/Playing/Stopped")
+    suspend fun reportPlaybackStopped(
+        @Body info: PlaybackStopInfo
+    ): Response<Void>
 }

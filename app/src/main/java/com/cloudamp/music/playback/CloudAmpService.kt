@@ -60,9 +60,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     // Cache of Jellyfin tracks by album/playlist for building playback queues
     private val jellyfinTracksByAlbum = mutableMapOf<String, List<JellyfinItem>>()
 
-    // Cache of last-played track ID per album (populated from recently-played API)
-    private val jellyfinLastPlayedTrackByAlbum = mutableMapOf<String, String>()
-
     // In-memory cache of built Jellyfin artist MediaItems for Android Auto browsing
     private var jellyfinArtistMediaItems: List<MediaBrowserCompat.MediaItem>? = null
     private var jellyfinArtistCacheTimestamp: Long = 0
@@ -460,6 +457,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         playbackPollingJob?.cancel()
         playbackPollingJob = serviceScope.launch {
             var detectedPlayback = false
+            var lastJellyfinReportTime = 0L
 
             while (isActive) {
                 try {
@@ -490,6 +488,13 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                             PlaybackStateCompat.STATE_PAUSED
                         }
                         updatePlaybackState(state, position, 1.0f)
+
+                        // Report progress to Jellyfin server (~every 10s)
+                        val now = System.currentTimeMillis()
+                        if (now - lastJellyfinReportTime >= 10_000L) {
+                            lastJellyfinReportTime = now
+                            reportJellyfinProgress(isPaused = !active.isPlaying())
+                        }
                     }
                     // Auto-save playback state (throttled internally to every ~10s)
                     playbackStateStore.save()
@@ -848,9 +853,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         "$serverUrl/Items/$albumId/Images/Primary?maxWidth=300$apiKeySuffix")
                         ?: placeholderUri
                     items.add(createBrowsableItem("jellyfin_album_$albumId", displayName, subtitle, imageUrl))
-
-                    // Remember the last-played track for this album
-                    jellyfinLastPlayedTrackByAlbum[albumId] = track.Id
                 }
             }
         } catch (e: Exception) {
@@ -915,9 +917,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     items.add(createBrowsableItemWithGroup(
                         "jellyfin_home_played_album_$albumId", albumName, artist,
                         "Recently Played", imageUrl))
-
-                    // Remember the last-played track for this album
-                    jellyfinLastPlayedTrackByAlbum[albumId] = track.Id
                 }
             }
 
@@ -1028,18 +1027,19 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
             val apiKey = jellyfinAuthManager.getApiKey()
             val apiKeySuffix = if (apiKey != null) "&api_key=$apiKey" else ""
+            val userId = jellyfinAuthManager.getUserId() ?: return
 
-            // Try cache first
-            var tracks = jellyfinLibraryCache.getAlbumTracks(albumId)
+            // Always fetch fresh from API to get current UserData (playback positions)
+            var tracks: List<JellyfinItem>? = null
+            val response = jellyfinClient.api.getAlbumTracks(userId, albumId)
+            if (response.isSuccessful) {
+                tracks = response.body()?.Items ?: emptyList()
+                jellyfinLibraryCache.saveAlbumTracks(albumId, tracks)
+            }
 
-            // Cache miss - fetch from API
+            // Fallback to cache if API fails
             if (tracks == null) {
-                val userId = jellyfinAuthManager.getUserId() ?: return
-                val response = jellyfinClient.api.getAlbumTracks(userId, albumId)
-                if (response.isSuccessful) {
-                    tracks = response.body()?.Items ?: emptyList()
-                    jellyfinLibraryCache.saveAlbumTracks(albumId, tracks)
-                }
+                tracks = jellyfinLibraryCache.getAlbumTracks(albumId)
             }
 
             if (tracks != null) {
@@ -1052,10 +1052,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     val idx = jfm.getCurrentIndex()
                     if (idx in q.indices) q[idx].Id else null
                 }
-
-                // Determine last-played track and its progress for this album
-                val lastPlayedTrackId = jellyfinLastPlayedTrackByAlbum[albumId]
-                val lastPlayedProgress = lastPlayedTrackId?.let { getTrackCompletionPercentage(it) }
 
                 for (track in tracks) {
                     val durationMs = track.getDurationMs()
@@ -1074,11 +1070,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         ?: "$serverUrl/Items/$albumId/Images/Primary?maxWidth=300$apiKeySuffix"
                     val imageUrl = jellyfinContentUri(track.Id, rawImageUrl)
 
-                    // Completion status for the last-played track
-                    val completionStatus = when {
-                        track.Id == lastPlayedTrackId -> MediaConstants.DESCRIPTION_EXTRAS_VALUE_COMPLETION_STATUS_PARTIALLY_PLAYED
-                        else -> null
-                    }
+                    // Completion status from Jellyfin UserData or live player
+                    val completionInfo = getTrackCompletionInfo(track, currentTrackId)
 
                     items.add(createJellyfinPlayableItem(
                         "jellyfin_track_${track.Id}",
@@ -1086,8 +1079,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         subtitle,
                         albumId,
                         imageUrl,
-                        completionStatus = completionStatus,
-                        completionPercentage = if (track.Id == lastPlayedTrackId) lastPlayedProgress else null
+                        completionStatus = completionInfo?.first,
+                        completionPercentage = completionInfo?.second
                     ))
                 }
             }
@@ -1219,32 +1212,36 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     }
 
     /**
-     * Returns the completion percentage (0.0–1.0) for a track, using live player
-     * state if the track is currently loaded, or the persisted PlaybackStateStore
-     * as a fallback. Returns null if no position data is available.
+     * Returns the completion status and percentage for a track as a Pair,
+     * or null if the track has no playback history.
+     *
+     * Priority: live player state > persisted PlaybackStateStore > Jellyfin UserData.
      */
-    private fun getTrackCompletionPercentage(trackId: String): Double? {
-        // Check live player state first
-        val jfm = ActivePlayback.provider as? JellyfinPlaybackManager
-        if (jfm != null) {
-            val q = jfm.getQueue()
-            val idx = jfm.getCurrentIndex()
-            if (idx in q.indices && q[idx].Id == trackId) {
+    private fun getTrackCompletionInfo(
+        track: JellyfinItem,
+        currentTrackId: String?
+    ): Pair<Int, Double>? {
+        // 1. Live player state — most accurate for the currently loaded track
+        if (track.Id == currentTrackId) {
+            val jfm = ActivePlayback.provider as? JellyfinPlaybackManager
+            if (jfm != null) {
                 val pos = jfm.getCurrentPosition()
                 val dur = jfm.getDuration()
-                if (dur > 0) return (pos.toDouble() / dur).coerceIn(0.0, 1.0)
+                if (dur > 0) {
+                    val pct = (pos.toDouble() / dur).coerceIn(0.0, 1.0)
+                    return Pair(MediaConstants.DESCRIPTION_EXTRAS_VALUE_COMPLETION_STATUS_PARTIALLY_PLAYED, pct)
+                }
             }
         }
 
-        // Fallback to persisted state
-        val saved = playbackStateStore.load()
-        if (saved?.provider == com.cloudamp.music.models.SavedQueue.PROVIDER_JELLYFIN) {
-            val items = saved.jellyfinItems.orEmpty()
-            val idx = saved.currentIndex
-            if (idx in items.indices && items[idx].Id == trackId) {
-                val dur = items[idx].getDurationMs()
-                if (dur > 0) return (saved.currentPositionMs.toDouble() / dur).coerceIn(0.0, 1.0)
-            }
+        // 2. Jellyfin UserData — server-side position for any previously played track
+        val userData = track.UserData
+        if (userData != null && userData.PlaybackPositionTicks > 0) {
+            val durationTicks = track.RunTimeTicks ?: 0L
+            val pct = if (durationTicks > 0) {
+                (userData.PlaybackPositionTicks.toDouble() / durationTicks).coerceIn(0.0, 1.0)
+            } else 0.0
+            return Pair(MediaConstants.DESCRIPTION_EXTRAS_VALUE_COMPLETION_STATUS_PARTIALLY_PLAYED, pct)
         }
 
         return null
@@ -1280,16 +1277,67 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     /** Force-save on pause — user might not come back for a while. */
     fun notifyPaused() {
         playbackStateStore.save(force = true)
+        reportJellyfinProgress(isPaused = true)
     }
 
     /** Force-save on track transition — index changed. */
     fun notifyTrackTransition() {
         playbackStateStore.save(force = true)
+        reportJellyfinProgress(isPaused = false)
     }
 
     /** Clear persisted state on explicit stop / queue end. */
     fun notifyStopped() {
+        reportJellyfinStopped()
         playbackStateStore.clear()
+    }
+
+    /**
+     * Reports the current Jellyfin playback position to the server so that
+     * UserData.PlaybackPositionTicks is kept up-to-date for all clients.
+     */
+    private fun reportJellyfinProgress(isPaused: Boolean) {
+        val jfm = ActivePlayback.provider as? JellyfinPlaybackManager ?: return
+        val q = jfm.getQueue()
+        val idx = jfm.getCurrentIndex()
+        if (idx !in q.indices) return
+        val track = q[idx]
+        val positionTicks = jfm.getCurrentPosition() * 10_000L // ms → ticks
+        serviceScope.launch(Dispatchers.IO) {
+            try {
+                jellyfinClient.api.reportPlaybackProgress(
+                    com.cloudamp.music.api.PlaybackProgressInfo(
+                        itemId = track.Id,
+                        positionTicks = positionTicks,
+                        isPaused = isPaused
+                    )
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to report playback progress: ${e.message}")
+            }
+        }
+    }
+
+    /** Reports playback stopped to Jellyfin so the server records the final position. */
+    private fun reportJellyfinStopped() {
+        val jfm = ActivePlayback.provider as? JellyfinPlaybackManager ?: return
+        val q = jfm.getQueue()
+        val idx = jfm.getCurrentIndex()
+        if (idx !in q.indices) return
+        val track = q[idx]
+        val positionTicks = jfm.getCurrentPosition() * 10_000L
+        serviceScope.launch(Dispatchers.IO) {
+            try {
+                jellyfinClient.api.reportPlaybackStopped(
+                    com.cloudamp.music.api.PlaybackStopInfo(
+                        itemId = track.Id,
+                        positionTicks = positionTicks
+                    )
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to report playback stopped: ${e.message}")
+            }
+        }
     }
 
     // ── Saved Queues browsing ──────────────────────────────────────────
