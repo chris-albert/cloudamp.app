@@ -846,7 +846,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     val parts = mutableListOf<String>()
                     if (artist.isNotEmpty()) parts.add(artist)
                     if (year != null) parts.add(year)
-                    parts.add(track.Name)
+                    parts.add("\u25b6 ${track.Name}")
                     val subtitle = parts.joinToString(" \u00b7 ")
                     val displayName = if (isPlaying) "\u25b6 $albumName" else albumName
                     val imageUrl = jellyfinContentUri(albumId,
@@ -911,11 +911,12 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     val albumId = track.AlbumId ?: continue
                     val albumName = track.Album ?: continue
                     val artist = track.AlbumArtist ?: ""
+                    val subtitle = if (artist.isNotEmpty()) "$artist \u00b7 \u25b6 ${track.Name}" else "\u25b6 ${track.Name}"
                     val imageUrl = jellyfinContentUri(albumId,
                         "$serverUrl/Items/$albumId/Images/Primary?maxWidth=300${if (apiKey != null) "&api_key=$apiKey" else ""}")
                         ?: placeholderUri
                     items.add(createBrowsableItemWithGroup(
-                        "jellyfin_home_played_album_$albumId", albumName, artist,
+                        "jellyfin_home_played_album_$albumId", albumName, subtitle,
                         "Recently Played", imageUrl))
                 }
             }
