@@ -60,6 +60,9 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     // Cache of Jellyfin tracks by album/playlist for building playback queues
     private val jellyfinTracksByAlbum = mutableMapOf<String, List<JellyfinItem>>()
 
+    // Last played track name per album (from recently played queries)
+    private val lastPlayedTrackByAlbum = mutableMapOf<String, String>()
+
     // In-memory cache of built Jellyfin artist MediaItems for Android Auto browsing
     private var jellyfinArtistMediaItems: List<MediaBrowserCompat.MediaItem>? = null
     private var jellyfinArtistCacheTimestamp: Long = 0
@@ -835,6 +838,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     val artist = track.AlbumArtist ?: ""
                     val year = track.Year?.toString()
                     val isPlaying = albumId == currentAlbumId
+                    lastPlayedTrackByAlbum[albumId] = track.Name
                     val parts = mutableListOf<String>()
                     if (artist.isNotEmpty()) parts.add(artist)
                     if (year != null) parts.add(year)
@@ -901,6 +905,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             if (recentlyPlayed.isNotEmpty()) {
                 for (track in recentlyPlayed) {
                     val albumId = track.AlbumId ?: continue
+                    lastPlayedTrackByAlbum[albumId] = track.Name
                     val albumName = track.Album ?: continue
                     val artist = track.AlbumArtist ?: ""
                     val imageUrl = jellyfinContentUri(albumId,
@@ -1044,6 +1049,11 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     if (idx in q.indices) q[idx].Id else null
                 }
 
+                // If nothing from this album is currently playing, check for last-played track
+                val lastPlayedTrackName = if (currentTrackId == null || tracks.none { it.Id == currentTrackId }) {
+                    lastPlayedTrackByAlbum[albumId]
+                } else null
+
                 for (track in tracks) {
                     val durationMs = track.getDurationMs()
                     val durationStr = if (durationMs > 0) {
@@ -1054,7 +1064,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     } else ""
                     val subtitle = "${track.getArtistDisplay()} \u00b7 $durationStr"
                     val isPlaying = track.Id == currentTrackId
-                    val displayName = if (isPlaying) "\u25b6 ${track.Name}" else track.Name
+                    val isLastPlayed = lastPlayedTrackName != null && track.Name == lastPlayedTrackName
+                    val displayName = if (isPlaying || isLastPlayed) "\u25b6 ${track.Name}" else track.Name
 
                     // Use album art URL if track has no image
                     val rawImageUrl = track.getPrimaryImageUrl(serverUrl, apiKey)
