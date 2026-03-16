@@ -270,6 +270,14 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
             R.id.nav_gdrive_library -> {
                 // Already here
             }
+            R.id.nav_gdrive_music_library -> {
+                startActivity(Intent(this, GDriveStructuredLibraryActivity::class.java))
+                finish()
+            }
+            R.id.nav_gdrive_home -> {
+                startActivity(Intent(this, GDriveHomeActivity::class.java))
+                finish()
+            }
             R.id.nav_jellyfin_home -> {
                 startActivity(Intent(this, JellyfinHomeActivity::class.java))
                 finish()

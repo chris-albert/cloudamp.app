@@ -44,6 +44,18 @@
             android:exported="false"
             android:parentActivityName=".MainActivity" />
 
+        <!-- GDrive Structured Library Activity -->
+        <activity
+            android:name=".GDriveStructuredLibraryActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity" />
+
+        <!-- GDrive Home Activity -->
+        <activity
+            android:name=".GDriveHomeActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity" />
+
         <!-- Jellyfin Home Activity -->
         <activity
             android:name=".JellyfinHomeActivity"
@@ -88,6 +100,13 @@
         <provider
             android:name=".playback.JellyfinImageProvider"
             android:authorities="com.cloudamp.music.jellyfinimages"
+            android:exported="true"
+            android:grantUriPermissions="true" />
+
+        <!-- GDrive Image Provider for Android Auto -->
+        <provider
+            android:name=".playback.GDriveImageProvider"
+            android:authorities="com.cloudamp.music.gdriveimages"
             android:exported="true"
             android:grantUriPermissions="true" />
 

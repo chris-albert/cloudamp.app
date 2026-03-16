@@ -280,5 +280,62 @@
             android:fontFamily="monospace"
             android:layout_marginTop="16dp"/>
 
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="2dp"
+            android:background="@color/winamp_text"
+            android:layout_marginVertical="16dp"/>
+
+        <!-- GDrive Music Library Section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="GDrive Music Library"
+            android:textColor="@color/winamp_text"
+            android:textSize="18sp"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:id="@+id/gdriveMusicRootText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Music root: Not set"
+            android:textColor="@color/winamp_display_text"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="8dp"/>
+
+        <Button
+            android:id="@+id/gdriveBrowseRootButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="BROWSE FOR MUSIC FOLDER"
+            android:textColor="@color/winamp_text"
+            android:background="@color/winamp_button"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:id="@+id/gdriveLastLoadedText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Last loaded: Never"
+            android:textColor="@color/winamp_display_text"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="12dp"/>
+
+        <Button
+            android:id="@+id/reloadGdriveLibraryButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="RELOAD GDRIVE LIBRARY"
+            android:textColor="@color/winamp_text"
+            android:background="@color/winamp_button"
+            android:fontFamily="monospace"/>
+
     </LinearLayout>
 </ScrollView>

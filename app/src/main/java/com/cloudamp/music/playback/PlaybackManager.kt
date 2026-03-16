@@ -96,6 +96,10 @@ class PlaybackManager private constructor(
                     if (mediaId.startsWith("saved_queue_")) {
                         val queueId = mediaId.removePrefix("saved_queue_")
                         service?.playSavedQueue(queueId)
+                    } else if (mediaId.startsWith("gdrive_music_track_")) {
+                        val fileId = mediaId.removePrefix("gdrive_music_track_")
+                        val albumId = extras?.getString("gdrive_music_album_id")
+                        service?.playGDriveMusicFromMediaId(fileId, albumId)
                     } else if (mediaId.startsWith("gdrive_file_")) {
                         val fileId = mediaId.removePrefix("gdrive_file_")
                         val parentId = extras?.getString("gdrive_parent_id")
