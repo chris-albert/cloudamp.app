@@ -349,7 +349,24 @@ class SettingsActivity : AppCompatActivity() {
             return
         }
 
-        // Simple folder picker using AlertDialog with folder navigation
+        // Show choice: Browse My Drive or Search All Drive
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Find music folder")
+            .setItems(arrayOf("Browse My Drive", "Search All Drive")) { _, which ->
+                when (which) {
+                    0 -> showBrowseFolderPicker("root")
+                    1 -> showSearchFolderPicker()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .create()
+            .show()
+    }
+
+    /**
+     * Browse folders starting from a given parent (My Drive root or any subfolder).
+     */
+    private fun showBrowseFolderPicker(startFolderId: String) {
         val driveClient = GoogleDriveApiClient.getInstance(this)
         val folderStack = mutableListOf<Pair<String, String>>() // id, name
 
@@ -397,7 +414,7 @@ class SettingsActivity : AppCompatActivity() {
                                 }
                                 "__back__" -> {
                                     folderStack.removeAt(folderStack.size - 1)
-                                    val parentId = if (folderStack.isNotEmpty()) folderStack.last().first else "root"
+                                    val parentId = if (folderStack.isNotEmpty()) folderStack.last().first else startFolderId
                                     loadAndShowFolders(parentId)
                                 }
                                 else -> {
@@ -416,7 +433,97 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        loadAndShowFolders("root")
+        loadAndShowFolders(startFolderId)
+    }
+
+    /**
+     * Search for folders by name across all of Drive (My Drive, Computers, Shared drives).
+     * Shows results with their parent path for disambiguation.
+     */
+    private fun showSearchFolderPicker() {
+        val input = EditText(this).apply {
+            hint = "e.g. Music"
+            setSingleLine(true)
+            setPadding(48, 32, 48, 16)
+        }
+
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Search for folder")
+            .setView(input)
+            .setPositiveButton("Search") { _, _ ->
+                val query = input.text.toString().trim()
+                if (query.isNotEmpty()) {
+                    searchFolders(query)
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .create()
+            .show()
+    }
+
+    private fun searchFolders(query: String) {
+        val driveClient = GoogleDriveApiClient.getInstance(this)
+
+        scope.launch {
+            try {
+                // Search all folders matching the name across all Drive locations
+                val response = driveClient.api.listFiles(
+                    query = "name contains '$query' and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+                    fields = "files(id,name,parents),nextPageToken",
+                    orderBy = "name",
+                    pageSize = 50
+                )
+                if (!response.isSuccessful) {
+                    Toast.makeText(this@SettingsActivity, "Search failed", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+
+                val folders = response.body()?.files ?: emptyList()
+                if (folders.isEmpty()) {
+                    Toast.makeText(this@SettingsActivity, "No folders found matching '$query'", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+
+                // Build path labels by resolving parent folder names
+                val parentIds = folders.mapNotNull { it.parents?.firstOrNull() }.distinct()
+                val parentNames = mutableMapOf<String, String>()
+                for (parentId in parentIds) {
+                    try {
+                        val parentResponse = driveClient.api.getFile(parentId, "id,name")
+                        if (parentResponse.isSuccessful) {
+                            parentNames[parentId] = parentResponse.body()?.name ?: parentId
+                        }
+                    } catch (_: Exception) {
+                        // Parent may not be accessible (e.g. Computers root)
+                    }
+                }
+
+                val displayNames = folders.map { folder ->
+                    val parentId = folder.parents?.firstOrNull()
+                    val parentName = parentNames[parentId]
+                    if (parentName != null) {
+                        "${folder.name}  (in $parentName)"
+                    } else {
+                        folder.name
+                    }
+                }
+
+                android.app.AlertDialog.Builder(this@SettingsActivity)
+                    .setTitle("Select folder")
+                    .setItems(displayNames.toTypedArray()) { _, which ->
+                        val selected = folders[which]
+                        gdriveLibraryCache.setRootFolder(selected.id, selected.name)
+                        updateGDriveLibraryDisplay()
+                        Toast.makeText(this@SettingsActivity, "Music root set to: ${selected.name}", Toast.LENGTH_SHORT).show()
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .create()
+                    .show()
+
+            } catch (e: Exception) {
+                Toast.makeText(this@SettingsActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     override fun onSupportNavigateUp(): Boolean {
