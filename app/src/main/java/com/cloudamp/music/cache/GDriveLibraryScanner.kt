@@ -3,16 +3,17 @@ package com.cloudamp.music.cache
 import android.util.Log
 import com.cloudamp.music.api.*
 import com.cloudamp.music.util.MusicFilenameParser
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 /**
  * Scans a Google Drive folder tree (Music/Artist/Album/Track.ext) and
  * builds a structured library of GDriveArtist, GDriveAlbum, GDriveTrack.
  *
- * Uses bulk queries to minimize API calls (~15 calls instead of ~1200):
- * 1. Fetch ALL folders under root recursively
- * 2. Fetch ALL audio files under root recursively
- * 3. Fetch cover art files
- * 4. Reconstruct tree client-side by matching parent IDs
+ * Strategy: 3 bulk queries fetch ALL folders, audio files, and cover images
+ * across the entire Drive (~10-15 paginated API calls total). The Artist→Album→Track
+ * tree is then reconstructed client-side by walking parent IDs from the configured
+ * root folder. This is orders of magnitude faster than per-folder queries.
  */
 class GDriveLibraryScanner(
     private val api: GoogleDriveApiService,
@@ -45,78 +46,83 @@ class GDriveLibraryScanner(
         return scanFolder(rootId)
     }
 
-    private suspend fun scanFolder(rootId: String): ScanResult {
-        // 1. Fetch ALL folders under root recursively
-        onProgress?.invoke("Scanning folders...")
-        val allFolders = fetchAllPaginated { pageToken ->
-            api.listFiles(
-                query = "'$rootId' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
-                fields = "files(id,name,parents,modifiedTime),nextPageToken",
-                orderBy = "name",
-                pageSize = 1000,
-                pageToken = pageToken
-            )
-        }
+    private suspend fun scanFolder(rootId: String): ScanResult = coroutineScope {
+        // ── Bulk fetch: 3 parallel queries across ALL of Drive ────────────
 
-        // These are artist folders (direct children of root)
-        val artistFolders = allFolders.filter { it.parents?.contains(rootId) == true }
-            .sortedBy { it.name.lowercase() }
-        Log.d(TAG, "Found ${artistFolders.size} artist folders")
-
-        // Now fetch album folders (children of artist folders)
-        val artistIds = artistFolders.map { it.id }.toSet()
-        onProgress?.invoke("Scanning album folders...")
-        val allSubfolders = mutableListOf<DriveFile>()
-        for (artistFolder in artistFolders) {
-            val albumFolders = fetchAllPaginated { pageToken ->
+        onProgress?.invoke("Fetching folders...")
+        val foldersDeferred = async {
+            fetchAllPaginated { pageToken ->
                 api.listFiles(
-                    query = "'${artistFolder.id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+                    query = "mimeType = 'application/vnd.google-apps.folder' and trashed = false",
                     fields = "files(id,name,parents,modifiedTime),nextPageToken",
                     orderBy = "name",
                     pageSize = 1000,
                     pageToken = pageToken
                 )
             }
-            allSubfolders.addAll(albumFolders)
         }
-        val albumFolders = allSubfolders.filter { folder ->
-            folder.parents?.any { it in artistIds } == true
-        }
-        val albumIds = albumFolders.map { it.id }.toSet()
-        Log.d(TAG, "Found ${albumFolders.size} album folders")
 
-        // 2. Fetch ALL audio files under album folders
-        onProgress?.invoke("Scanning audio files...")
-        val allAudioFiles = mutableListOf<DriveFile>()
-        for (albumFolder in albumFolders) {
-            val audioFiles = fetchAllPaginated { pageToken ->
+        onProgress?.invoke("Fetching audio files...")
+        val audioDeferred = async {
+            fetchAllPaginated { pageToken ->
                 api.listFiles(
-                    query = "'${albumFolder.id}' in parents and mimeType contains 'audio/' and trashed = false",
+                    query = "mimeType contains 'audio/' and trashed = false",
                     fields = "files(id,name,mimeType,size,parents,modifiedTime),nextPageToken",
                     orderBy = "name",
                     pageSize = 1000,
                     pageToken = pageToken
                 )
             }
-            allAudioFiles.addAll(audioFiles)
         }
-        Log.d(TAG, "Found ${allAudioFiles.size} audio files")
 
-        // 3. Fetch cover art files
-        onProgress?.invoke("Scanning cover art...")
-        val allCoverFiles = mutableListOf<DriveFile>()
-        for (albumFolder in albumFolders) {
-            val coverFiles = fetchAllPaginated { pageToken ->
+        onProgress?.invoke("Fetching cover art...")
+        val coversDeferred = async {
+            fetchAllPaginated { pageToken ->
                 api.listFiles(
-                    query = "'${albumFolder.id}' in parents and mimeType contains 'image/' and trashed = false",
+                    query = "(name='cover.jpg' or name='cover.png' or name='cover.jpeg' or name='folder.jpg' or name='folder.png' or name='folder.jpeg' or name='front.jpg' or name='front.png' or name='front.jpeg' or name='album.jpg' or name='album.png' or name='album.jpeg') and mimeType contains 'image/' and trashed = false",
                     fields = "files(id,name,parents),nextPageToken",
                     orderBy = "name",
-                    pageSize = 100,
+                    pageSize = 1000,
                     pageToken = pageToken
                 )
             }
-            allCoverFiles.addAll(coverFiles)
         }
+
+        val allFolders = foldersDeferred.await()
+        val allAudioFiles = audioDeferred.await()
+        val allCoverFiles = coversDeferred.await()
+
+        Log.d(TAG, "Bulk fetch complete: ${allFolders.size} folders, ${allAudioFiles.size} audio files, ${allCoverFiles.size} cover images")
+
+        // ── Reconstruct tree client-side ──────────────────────────────────
+
+        onProgress?.invoke("Building library tree...")
+
+        // Build folder lookup by ID
+        val folderById = allFolders.associateBy { it.id }
+
+        // Find artist folders: direct children of root
+        val artistFolders = allFolders
+            .filter { it.parents?.contains(rootId) == true }
+            .sortedBy { it.name.lowercase() }
+        val artistIds = artistFolders.map { it.id }.toSet()
+
+        Log.d(TAG, "Found ${artistFolders.size} artist folders under root")
+
+        // Find album folders: direct children of any artist folder
+        val albumFolders = allFolders.filter { folder ->
+            folder.parents?.any { it in artistIds } == true
+        }
+        val albumIds = albumFolders.map { it.id }.toSet()
+
+        Log.d(TAG, "Found ${albumFolders.size} album folders")
+
+        // Filter audio files to only those in album folders
+        val musicAudioFiles = allAudioFiles.filter { file ->
+            file.parents?.any { it in albumIds } == true
+        }
+
+        Log.d(TAG, "Found ${musicAudioFiles.size} tracks in library (${allAudioFiles.size} total in Drive)")
 
         // Build cover map: album folder ID → cover file ID
         val coverByAlbum = mutableMapOf<String, String>()
@@ -128,14 +134,9 @@ class GDriveLibraryScanner(
         }
         Log.d(TAG, "Found ${coverByAlbum.size} album covers")
 
-        // 4. Build the library tree
-        onProgress?.invoke("Building library...")
+        // ── Build structured data ─────────────────────────────────────────
 
-        // Build artist folder lookup
-        val artistFolderById = artistFolders.associateBy { it.id }
-
-        // Build album folder lookup
-        val albumFolderById = albumFolders.associateBy { it.id }
+        onProgress?.invoke("Organizing library...")
 
         // Group album folders by artist
         val albumFoldersByArtist = albumFolders.groupBy { folder ->
@@ -143,11 +144,10 @@ class GDriveLibraryScanner(
         }.filterKeys { it.isNotEmpty() }
 
         // Group audio files by album
-        val audioFilesByAlbum = allAudioFiles.groupBy { file ->
+        val audioFilesByAlbum = musicAudioFiles.groupBy { file ->
             file.parents?.firstOrNull { it in albumIds } ?: ""
         }.filterKeys { it.isNotEmpty() }
 
-        // Build structured data
         val artists = mutableListOf<GDriveArtist>()
         val albumsByArtistMap = mutableMapOf<String, List<GDriveAlbum>>()
         val tracksByAlbumMap = mutableMapOf<String, List<GDriveTrack>>()
@@ -172,7 +172,6 @@ class GDriveLibraryScanner(
                 )
                 albums.add(album)
 
-                // Build tracks for this album
                 val tracks = audioFiles.map { file ->
                     val parsedTrack = MusicFilenameParser.parseTrackFilename(file.name)
                     GDriveTrack(
@@ -192,7 +191,6 @@ class GDriveLibraryScanner(
                 tracksByAlbumMap[albumFolder.id] = tracks
             }
 
-            // Sort albums by year then name
             val sortedAlbums = albums.sortedWith(compareBy({ it.year ?: Int.MAX_VALUE }, { it.name.lowercase() }))
 
             artists.add(GDriveArtist(
@@ -206,7 +204,7 @@ class GDriveLibraryScanner(
         val sortedArtists = artists.sortedBy { it.name.lowercase() }
         Log.d(TAG, "Scan complete: ${sortedArtists.size} artists, ${albumsByArtistMap.values.sumOf { it.size }} albums, ${tracksByAlbumMap.values.sumOf { it.size }} tracks")
 
-        return ScanResult(sortedArtists, albumsByArtistMap, tracksByAlbumMap)
+        ScanResult(sortedArtists, albumsByArtistMap, tracksByAlbumMap)
     }
 
     /**
@@ -228,13 +226,17 @@ class GDriveLibraryScanner(
     ): List<DriveFile> {
         val allFiles = mutableListOf<DriveFile>()
         var pageToken: String? = null
+        var page = 0
 
         do {
             val response = fetcher(pageToken)
             if (response.isSuccessful) {
                 val body = response.body()
-                allFiles.addAll(body?.files ?: emptyList())
+                val files = body?.files ?: emptyList()
+                allFiles.addAll(files)
                 pageToken = body?.nextPageToken
+                page++
+                Log.d(TAG, "  page $page: ${files.size} items (${allFiles.size} total)")
             } else {
                 Log.e(TAG, "API error: ${response.code()}")
                 break
