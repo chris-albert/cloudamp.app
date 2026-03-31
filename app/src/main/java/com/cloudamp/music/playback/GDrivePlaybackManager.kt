@@ -8,6 +8,7 @@ import com.cloudamp.music.api.DriveFile
 import com.cloudamp.music.api.GDriveTrack
 import com.cloudamp.music.api.GoogleDriveApiClient
 import com.cloudamp.music.cache.GDriveLibraryCache
+import com.cloudamp.music.cache.GDrivePlaybackHistory
 import com.cloudamp.music.models.Album
 import com.cloudamp.music.models.Artist
 import com.cloudamp.music.models.Image
@@ -393,13 +394,14 @@ class GDrivePlaybackManager private constructor(
     }
 
     /**
-     * Record the current track's album as recently played.
+     * Record the current track's album as recently played (local + Drive history).
      */
     private fun recordRecentlyPlayed() {
         if (currentIndex !in queue.indices) return
         val file = queue[currentIndex]
         val meta = trackMetadataCache[file.id] ?: return
         GDriveLibraryCache.getInstance(context).recordRecentlyPlayed(meta.albumId)
+        GDrivePlaybackHistory.getInstance(context).recordPlay(meta)
     }
 
     private val playerListener = object : Player.Listener {

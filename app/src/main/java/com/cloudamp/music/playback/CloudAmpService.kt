@@ -33,6 +33,7 @@ import com.cloudamp.music.api.JellyfinApiClient
 import com.cloudamp.music.api.JellyfinItem
 import com.cloudamp.music.auth.JellyfinAuthManager
 import com.cloudamp.music.cache.GDriveLibraryCache
+import com.cloudamp.music.cache.GDrivePlaybackHistory
 import com.cloudamp.music.cache.JellyfinLibraryCache
 import com.cloudamp.music.cache.PlaybackStateStore
 import com.cloudamp.music.cache.SavedQueuesManager
@@ -170,6 +171,9 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
         // Start polling for playback state
         startPlaybackPolling()
+
+        // Sync playback history with Drive
+        GDrivePlaybackHistory.getInstance(this).syncWithDrive()
 
         // Auto-restore last playback state if available
         restorePlaybackState()

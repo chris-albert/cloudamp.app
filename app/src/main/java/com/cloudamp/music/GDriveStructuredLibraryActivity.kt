@@ -29,6 +29,7 @@ import com.cloudamp.music.api.GoogleDriveApiClient
 import com.cloudamp.music.auth.GoogleDriveAuthManager
 import com.cloudamp.music.cache.GDriveLibraryCache
 import com.cloudamp.music.cache.GDriveLibraryScanner
+import com.cloudamp.music.cache.GDrivePlaybackHistory
 import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.ui.AlphabetSidebarView
@@ -203,9 +204,18 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
                     return@launch
                 }
 
-                // Save to cache
+                // Save to cache and record albums-added to history
                 withContext(Dispatchers.IO) {
                     scanner.saveToCache(result)
+
+                    // Record new albums to NDJSON history
+                    val albumEntries = result.albumsByArtist.flatMap { (_, albums) ->
+                        albums.map { it.id to "${it.artistName} - ${it.name}" }
+                    }
+                    if (albumEntries.isNotEmpty()) {
+                        GDrivePlaybackHistory.getInstance(this@GDriveStructuredLibraryActivity)
+                            .recordAlbumsAdded(albumEntries)
+                    }
                 }
 
                 adapter.setArtists(result.artists)

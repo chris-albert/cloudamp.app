@@ -15,6 +15,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.cloudamp.music.api.GDriveAlbum
 import com.cloudamp.music.cache.GDriveLibraryCache
+import com.cloudamp.music.cache.GDrivePlaybackHistory
 import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.ui.GDriveHomeAdapter
@@ -102,9 +103,17 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
                     }.filter { it.trackCount > 0 }
                 }
 
-                // Recently Played: from local play history
+                // Recently Played: from NDJSON history (falls back to SharedPreferences)
                 val recentlyPlayed = withContext(Dispatchers.IO) {
-                    libraryCache.getRecentlyPlayedAlbums().take(10)
+                    val history = GDrivePlaybackHistory.getInstance(this@GDriveHomeActivity)
+                    val historyAlbumIds = history.getRecentlyPlayedAlbumIds(10)
+                    // Use history IDs if available, else fall back to cache
+                    val albumIds = historyAlbumIds.ifEmpty {
+                        libraryCache.getRecentlyPlayedIds().take(10)
+                    }
+                    // Resolve IDs to album objects
+                    val albumById = allAlbums.associateBy { it.id }
+                    albumIds.mapNotNull { albumById[it] }
                 }
                 if (recentlyPlayed.isNotEmpty()) {
                     recentPlayedAdapter.setAlbums(recentlyPlayed)
