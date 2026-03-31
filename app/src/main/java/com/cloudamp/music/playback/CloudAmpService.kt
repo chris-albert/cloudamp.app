@@ -744,8 +744,9 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
         // All Artists
         for (artist in artists) {
-            val firstAlbum = gdriveLibraryCache.getArtistAlbums(artist.id)?.firstOrNull()
-            val imageUrl = firstAlbum?.coverFileId?.let { GDriveImageProvider.buildUri(it).toString() }
+            val artistImageId = artist.imageFileId
+                ?: gdriveLibraryCache.getArtistAlbums(artist.id)?.firstOrNull()?.coverFileId
+            val imageUrl = artistImageId?.let { GDriveImageProvider.buildUri(it).toString() }
             items.add(createBrowsableItemWithGroup(
                 "gdrive_music_artist_${artist.id}",
                 artist.name,

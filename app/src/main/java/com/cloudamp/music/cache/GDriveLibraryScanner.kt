@@ -124,15 +124,21 @@ class GDriveLibraryScanner(
 
         Log.d(TAG, "Found ${musicAudioFiles.size} tracks in library (${allAudioFiles.size} total in Drive)")
 
-        // Build cover map: album folder ID → cover file ID
+        // Build cover maps: folder ID → cover file ID (for both artist and album folders)
         val coverByAlbum = mutableMapOf<String, String>()
+        val coverByArtist = mutableMapOf<String, String>()
         for (cover in allCoverFiles) {
             val parentId = cover.parents?.firstOrNull() ?: continue
-            if (parentId in albumIds && cover.name.lowercase() in COVER_NAMES) {
+            val lowerName = cover.name.lowercase()
+            if (lowerName !in COVER_NAMES) continue
+            if (parentId in albumIds) {
                 coverByAlbum[parentId] = cover.id
             }
+            if (parentId in artistIds) {
+                coverByArtist[parentId] = cover.id
+            }
         }
-        Log.d(TAG, "Found ${coverByAlbum.size} album covers")
+        Log.d(TAG, "Found ${coverByAlbum.size} album covers, ${coverByArtist.size} artist images")
 
         // ── Build structured data ─────────────────────────────────────────
 
@@ -196,7 +202,8 @@ class GDriveLibraryScanner(
             artists.add(GDriveArtist(
                 id = artistFolder.id,
                 name = artistFolder.name,
-                albumCount = sortedAlbums.size
+                albumCount = sortedAlbums.size,
+                imageFileId = coverByArtist[artistFolder.id]
             ))
             albumsByArtistMap[artistFolder.id] = sortedAlbums
         }

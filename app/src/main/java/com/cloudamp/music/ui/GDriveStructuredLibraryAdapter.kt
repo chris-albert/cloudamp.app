@@ -285,8 +285,9 @@ class GDriveStructuredLibraryAdapter(
                 subtitleTextView.visibility = View.GONE
             }
 
-            // Use first album's cover art if available
-            val coverFileId = item.albums.firstOrNull()?.coverFileId
+            // Artist's own folder.jpg first, then fall back to first album's cover
+            val coverFileId = item.artist.imageFileId
+                ?: item.albums.firstOrNull()?.coverFileId
             if (coverFileId != null) {
                 letterAvatar.visibility = View.GONE
                 val coverUri = GDriveImageProvider.buildUri(coverFileId)

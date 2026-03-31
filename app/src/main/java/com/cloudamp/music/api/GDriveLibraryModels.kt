@@ -3,7 +3,8 @@ package com.cloudamp.music.api
 data class GDriveArtist(
     val id: String,
     val name: String,
-    val albumCount: Int = 0
+    val albumCount: Int = 0,
+    val imageFileId: String? = null
 )
 
 data class GDriveAlbum(
