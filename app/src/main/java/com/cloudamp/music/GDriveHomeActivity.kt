@@ -97,7 +97,7 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
                     val artists = libraryCache.getArtists() ?: emptyList()
                     artists.flatMap { artist ->
                         libraryCache.getArtistAlbums(artist.id) ?: emptyList()
-                    }
+                    }.filter { it.trackCount > 0 }
                 }
 
                 // Recently Added: sort by modifiedTime desc, take 10

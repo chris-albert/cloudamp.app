@@ -2,6 +2,7 @@ package com.cloudamp.music.cache
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import com.cloudamp.music.api.GDriveAlbum
 import com.cloudamp.music.api.GDriveArtist
 import com.cloudamp.music.api.GDriveTrack
@@ -20,6 +21,7 @@ class GDriveLibraryCache(private val context: Context) {
     private val tracksDir: File get() = File(cacheDir, "tracks")
 
     companion object {
+        private const val TAG = "GDriveLibraryCache"
         private const val PREFS_NAME = "gdrive_library_cache"
         private const val KEY_ARTISTS = "cached_artists"
         private const val KEY_LAST_LOADED = "last_loaded_timestamp"
@@ -93,11 +95,15 @@ class GDriveLibraryCache(private val context: Context) {
 
     fun getAlbumTracks(albumId: String): List<GDriveTrack>? {
         val file = File(tracksDir, "$albumId.json")
-        if (!file.exists()) return null
+        if (!file.exists()) {
+            Log.w(TAG, "Track cache miss: $albumId (file does not exist)")
+            return null
+        }
         return try {
             val type = object : TypeToken<List<GDriveTrack>>() {}.type
             gson.fromJson(file.readText(), type)
         } catch (e: Exception) {
+            Log.e(TAG, "Failed to deserialize tracks for $albumId: ${e.message}", e)
             null
         }
     }
