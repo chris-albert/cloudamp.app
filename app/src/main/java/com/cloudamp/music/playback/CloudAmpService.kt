@@ -651,7 +651,10 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             val allFiles = mutableListOf<DriveFile>()
             var pageToken: String? = null
             val query = "'$folderId' in parents and trashed = false and " +
-                    "(mimeType contains 'audio/' or mimeType = 'application/vnd.google-apps.folder')"
+                    "(mimeType contains 'audio/' or mimeType = 'application/vnd.google-apps.folder'" +
+                    " or name contains '.flac' or name contains '.m4a'" +
+                    " or name contains '.ogg' or name contains '.opus'" +
+                    " or name contains '.wav' or name contains '.aac')"
 
             do {
                 val response = gdriveClient.api.listFiles(

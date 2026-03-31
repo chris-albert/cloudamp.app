@@ -62,11 +62,20 @@ class GDriveLibraryScanner(
             }
         }
 
+        // Query audio files by MIME type AND by extension (Drive may assign
+        // application/octet-stream to FLAC, OGG, etc. instead of audio/)
         onProgress?.invoke("Fetching audio files...")
+        val audioQuery = "(mimeType contains 'audio/'" +
+            " or name contains '.flac' or name contains '.m4a'" +
+            " or name contains '.ogg' or name contains '.opus'" +
+            " or name contains '.wav' or name contains '.aac'" +
+            " or name contains '.wma' or name contains '.alac'" +
+            " or name contains '.aiff' or name contains '.ape'" +
+            ") and trashed = false"
         val audioDeferred = async {
             fetchAllPaginated { pageToken ->
                 api.listFiles(
-                    query = "mimeType contains 'audio/' and trashed = false",
+                    query = audioQuery,
                     fields = "files(id,name,mimeType,size,parents,modifiedTime),nextPageToken",
                     orderBy = "name",
                     pageSize = 1000,
@@ -117,9 +126,10 @@ class GDriveLibraryScanner(
 
         Log.d(TAG, "Found ${albumFolders.size} album folders")
 
-        // Filter audio files to only those in album folders
+        // Filter to actual audio files in album folders (the broad query may
+        // match non-audio files whose names happen to contain e.g. ".flac")
         val musicAudioFiles = allAudioFiles.filter { file ->
-            file.parents?.any { it in albumIds } == true
+            file.isAudioFile() && file.parents?.any { it in albumIds } == true
         }
 
         Log.d(TAG, "Found ${musicAudioFiles.size} tracks in library (${allAudioFiles.size} total in Drive)")

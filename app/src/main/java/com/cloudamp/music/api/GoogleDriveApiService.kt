@@ -54,7 +54,18 @@ data class DriveFile(
 ) {
     fun isFolder(): Boolean = mimeType == "application/vnd.google-apps.folder"
 
-    fun isAudioFile(): Boolean = mimeType.startsWith("audio/")
+    fun isAudioFile(): Boolean {
+        if (mimeType.startsWith("audio/")) return true
+        // Google Drive may not assign audio/ MIME types to all formats
+        val ext = name.substringAfterLast('.', "").lowercase()
+        return ext in AUDIO_EXTENSIONS
+    }
+
+    companion object {
+        val AUDIO_EXTENSIONS = setOf(
+            "mp3", "flac", "m4a", "aac", "ogg", "opus", "wav", "wma", "alac", "aiff", "ape", "wv"
+        )
+    }
 
     fun getFileSizeFormatted(): String {
         val bytes = size?.toLongOrNull() ?: return ""
