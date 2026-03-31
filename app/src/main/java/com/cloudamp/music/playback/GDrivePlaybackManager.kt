@@ -392,6 +392,16 @@ class GDrivePlaybackManager private constructor(
         service?.updateQueue(tracks, currentIndex)
     }
 
+    /**
+     * Record the current track's album as recently played.
+     */
+    private fun recordRecentlyPlayed() {
+        if (currentIndex !in queue.indices) return
+        val file = queue[currentIndex]
+        val meta = trackMetadataCache[file.id] ?: return
+        GDriveLibraryCache.getInstance(context).recordRecentlyPlayed(meta.albumId)
+    }
+
     private val playerListener = object : Player.Listener {
 
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -448,6 +458,7 @@ class GDrivePlaybackManager private constructor(
             updateServiceMetadata()
             updateServiceQueue()
             service?.notifyTrackTransition()
+            recordRecentlyPlayed()
         }
     }
 }

@@ -27,6 +27,8 @@ class GDriveLibraryCache(private val context: Context) {
         private const val KEY_LAST_LOADED = "last_loaded_timestamp"
         private const val KEY_ROOT_FOLDER_ID = "gdrive_music_root_id"
         private const val KEY_ROOT_FOLDER_NAME = "gdrive_music_root_name"
+        private const val KEY_RECENTLY_PLAYED = "recently_played_album_ids"
+        private const val MAX_RECENTLY_PLAYED = 20
 
         @Volatile
         private var instance: GDriveLibraryCache? = null
@@ -106,6 +108,52 @@ class GDriveLibraryCache(private val context: Context) {
             Log.e(TAG, "Failed to deserialize tracks for $albumId: ${e.message}", e)
             null
         }
+    }
+
+    // ── Recently played ─────────────────────────────────────────────
+
+    /**
+     * Record an album as recently played. Keeps the last N unique album IDs,
+     * most recent first.
+     */
+    fun recordRecentlyPlayed(albumId: String) {
+        val ids = getRecentlyPlayedIds().toMutableList()
+        ids.remove(albumId) // Remove if already present (will re-add at front)
+        ids.add(0, albumId)
+        // Trim to max size
+        val trimmed = ids.take(MAX_RECENTLY_PLAYED)
+        prefs.edit().putString(KEY_RECENTLY_PLAYED, trimmed.joinToString(",")).apply()
+    }
+
+    /**
+     * Get recently played album IDs, most recent first.
+     */
+    fun getRecentlyPlayedIds(): List<String> {
+        val raw = prefs.getString(KEY_RECENTLY_PLAYED, null) ?: return emptyList()
+        if (raw.isEmpty()) return emptyList()
+        return raw.split(",")
+    }
+
+    /**
+     * Get recently played albums as GDriveAlbum objects, most recent first.
+     * Looks up each album ID across all cached artist albums.
+     */
+    fun getRecentlyPlayedAlbums(): List<GDriveAlbum> {
+        val ids = getRecentlyPlayedIds()
+        if (ids.isEmpty()) return emptyList()
+
+        // Build album lookup from all cached artists
+        val albumById = mutableMapOf<String, GDriveAlbum>()
+        val artists = getArtists() ?: return emptyList()
+        for (artist in artists) {
+            val albums = getArtistAlbums(artist.id) ?: continue
+            for (album in albums) {
+                albumById[album.id] = album
+            }
+        }
+
+        // Resolve IDs to albums, preserving order
+        return ids.mapNotNull { albumById[it] }
     }
 
     // ── Cache completeness ────────────────────────────────────────────

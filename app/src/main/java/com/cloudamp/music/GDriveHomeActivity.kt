@@ -30,6 +30,7 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
     private lateinit var navigationView: NavigationView
     private lateinit var toggle: ActionBarDrawerToggle
 
+    private lateinit var recentPlayedAdapter: GDriveHomeAdapter
     private lateinit var recentAddedAdapter: GDriveHomeAdapter
     private lateinit var discoverAdapter: GDriveHomeAdapter
     private lateinit var loadingContainer: LinearLayout
@@ -76,6 +77,7 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
 
     private fun setupRecyclerViews() {
         loadingContainer = findViewById(R.id.loadingContainer)
+        recentPlayedAdapter = setupHorizontalRecyclerView(findViewById(R.id.recentPlayedRecyclerView))
         recentAddedAdapter = setupHorizontalRecyclerView(findViewById(R.id.recentAddedRecyclerView))
         discoverAdapter = setupHorizontalRecyclerView(findViewById(R.id.discoverRecyclerView))
     }
@@ -98,6 +100,16 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
                     artists.flatMap { artist ->
                         libraryCache.getArtistAlbums(artist.id) ?: emptyList()
                     }.filter { it.trackCount > 0 }
+                }
+
+                // Recently Played: from local play history
+                val recentlyPlayed = withContext(Dispatchers.IO) {
+                    libraryCache.getRecentlyPlayedAlbums().take(10)
+                }
+                if (recentlyPlayed.isNotEmpty()) {
+                    recentPlayedAdapter.setAlbums(recentlyPlayed)
+                    findViewById<View>(R.id.recentPlayedHeader).visibility = View.VISIBLE
+                    findViewById<View>(R.id.recentPlayedRecyclerView).visibility = View.VISIBLE
                 }
 
                 // Recently Added: sort by modifiedTime desc, take 10

@@ -21,6 +21,33 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
+                <!-- Recently Played Section -->
+                <TextView
+                    android:id="@+id/recentPlayedHeader"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="&#x25b6; RECENTLY PLAYED"
+                    android:textColor="@color/winamp_text"
+                    android:textSize="14sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:background="@color/winamp_section_header"
+                    android:padding="8dp"
+                    android:visibility="gone" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/recentPlayedRecyclerView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:clipToPadding="false"
+                    android:nestedScrollingEnabled="false"
+                    android:background="@color/winamp_background"
+                    android:visibility="gone" />
+
                 <!-- Recently Added Section -->
                 <TextView
                     android:layout_width="match_parent"
@@ -68,33 +95,6 @@
                     android:clipToPadding="false"
                     android:nestedScrollingEnabled="false"
                     android:background="@color/winamp_background" />
-
-                <!-- Recently Played Section (placeholder for Phase 5) -->
-                <TextView
-                    android:id="@+id/recentPlayedHeader"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="&#x25b6; RECENTLY PLAYED"
-                    android:textColor="@color/winamp_text"
-                    android:textSize="14sp"
-                    android:fontFamily="monospace"
-                    android:textStyle="bold"
-                    android:background="@color/winamp_section_header"
-                    android:padding="8dp"
-                    android:visibility="gone" />
-
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/recentPlayedRecyclerView"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:paddingStart="8dp"
-                    android:paddingEnd="8dp"
-                    android:paddingTop="8dp"
-                    android:paddingBottom="8dp"
-                    android:clipToPadding="false"
-                    android:nestedScrollingEnabled="false"
-                    android:background="@color/winamp_background"
-                    android:visibility="gone" />
 
             </LinearLayout>
 
