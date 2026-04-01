@@ -76,27 +76,6 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
     }
 
     /**
-     * Record album-added events from a library scan.
-     */
-    fun recordAlbumsAdded(albums: List<Pair<String, String>>) { // (albumId, "artistName - albumName")
-        val now = dateFormat.format(Date())
-        for ((albumId, displayName) in albums) {
-            val parts = displayName.split(" - ", limit = 2)
-            val artistName = parts.getOrElse(0) { "" }
-            val albumName = parts.getOrElse(1) { displayName }
-            val line = JSONObject().apply {
-                put("type", "album_added")
-                put("albumId", albumId)
-                put("albumName", albumName)
-                put("artistName", artistName)
-                put("addedAt", now)
-            }.toString()
-            appendLocal(line)
-        }
-        scheduleUpload()
-    }
-
-    /**
      * Get all history lines, most recent first.
      */
     fun getHistory(): List<String> {
