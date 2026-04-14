@@ -5,9 +5,15 @@ import android.net.Uri
 import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
 import com.cloudamp.music.api.DriveFile
+import com.cloudamp.music.api.GDriveTrack
 import com.cloudamp.music.api.GoogleDriveApiClient
+import com.cloudamp.music.cache.GDriveLibraryCache
+import com.cloudamp.music.cache.GDrivePlaybackHistory
+import com.cloudamp.music.models.Album
 import com.cloudamp.music.models.Artist
+import com.cloudamp.music.models.Image
 import com.cloudamp.music.models.Track
+import com.cloudamp.music.util.MusicFilenameParser
 import com.google.android.exoplayer2.C
 import com.google.android.exoplayer2.ExoPlayer
 import com.google.android.exoplayer2.MediaItem
@@ -237,19 +243,81 @@ class GDrivePlaybackManager private constructor(
         }
     }
 
+    // Metadata lookup cache: file ID -> GDriveTrack (populated when playing from structured library)
+    private val trackMetadataCache = mutableMapOf<String, GDriveTrack>()
+
+    /**
+     * Play a list of GDriveTrack objects (from structured library).
+     * Caches metadata so driveFileToTrack can produce rich metadata.
+     */
+    fun playGDriveTracks(tracks: List<GDriveTrack>, startIndex: Int = 0) {
+        for (track in tracks) {
+            trackMetadataCache[track.file.id] = track
+        }
+        playFiles(tracks.map { it.file }, startIndex)
+    }
+
     /**
      * Convert a DriveFile to a Track model for display in the media session,
      * notifications, and NowPlayingActivity.
+     *
+     * Looks up GDriveLibraryCache for rich metadata (artist name, album name,
+     * track number, cover art) instead of using generic "Google Drive" artist.
      */
     fun driveFileToTrack(file: DriveFile): Track {
-        val nameWithoutExtension = file.name.substringBeforeLast('.')
+        // Check metadata cache first (populated by playGDriveTracks or from library cache)
+        val cachedMeta = trackMetadataCache[file.id]
+        if (cachedMeta != null) {
+            val coverUri = cachedMeta.coverFileId?.let {
+                GDriveImageProvider.buildUri(it).toString()
+            }
+            return Track(
+                id = file.id,
+                name = cachedMeta.trackName,
+                artists = listOf(Artist(
+                    id = cachedMeta.artistId,
+                    name = cachedMeta.artistName,
+                    uri = "gdrive:artist:${cachedMeta.artistId}"
+                )),
+                album = Album(
+                    id = cachedMeta.albumId,
+                    name = cachedMeta.albumName,
+                    artists = listOf(Artist(
+                        id = cachedMeta.artistId,
+                        name = cachedMeta.artistName,
+                        uri = "gdrive:artist:${cachedMeta.artistId}"
+                    )),
+                    images = if (coverUri != null) listOf(Image(url = coverUri, height = null, width = null)) else null,
+                    uri = "gdrive:album:${cachedMeta.albumId}"
+                ),
+                uri = "gdrive:file:${file.id}",
+                durationMs = 0,
+                trackNumber = cachedMeta.trackNumber
+            )
+        }
+
+        // Fallback: try to look up from library cache
+        val libraryCache = GDriveLibraryCache.getInstance(context)
+        val parentFolderId = file.parents?.firstOrNull()
+        if (parentFolderId != null) {
+            val tracks = libraryCache.getAlbumTracks(parentFolderId)
+            val found = tracks?.find { it.file.id == file.id }
+            if (found != null) {
+                trackMetadataCache[file.id] = found
+                return driveFileToTrack(file) // Recurse now that it's cached
+            }
+        }
+
+        // Last resort: parse filename
+        val parsed = MusicFilenameParser.parseTrackFilename(file.name)
         return Track(
             id = file.id,
-            name = nameWithoutExtension,
+            name = parsed.title,
             artists = listOf(Artist(id = "gdrive", name = "Google Drive", uri = "gdrive:artist:gdrive")),
             album = null,
             uri = "gdrive:file:${file.id}",
-            durationMs = 0 // We don't know duration until ExoPlayer reads it
+            durationMs = 0,
+            trackNumber = parsed.trackNumber
         )
     }
 
@@ -314,13 +382,26 @@ class GDrivePlaybackManager private constructor(
             } else {
                 track
             }
-            service?.updateMetadata(trackWithDuration, null)
+            // Pass album art URL from the track's album images
+            val albumArtUrl = trackWithDuration.album?.images?.firstOrNull()?.url
+            service?.updateMetadata(trackWithDuration, albumArtUrl)
         }
     }
 
     private fun updateServiceQueue() {
         val tracks = getQueueAsTracks()
         service?.updateQueue(tracks, currentIndex)
+    }
+
+    /**
+     * Record the current track's album as recently played (local + Drive history).
+     */
+    private fun recordRecentlyPlayed() {
+        if (currentIndex !in queue.indices) return
+        val file = queue[currentIndex]
+        val meta = trackMetadataCache[file.id] ?: return
+        GDriveLibraryCache.getInstance(context).recordRecentlyPlayed(meta.albumId)
+        GDrivePlaybackHistory.getInstance(context).recordPlay(meta)
     }
 
     private val playerListener = object : Player.Listener {
@@ -379,6 +460,7 @@ class GDrivePlaybackManager private constructor(
             updateServiceMetadata()
             updateServiceQueue()
             service?.notifyTrackTransition()
+            recordRecentlyPlayed()
         }
     }
 }

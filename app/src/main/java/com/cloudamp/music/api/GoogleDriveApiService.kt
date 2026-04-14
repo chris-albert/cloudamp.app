@@ -1,5 +1,7 @@
 package com.cloudamp.music.api
 
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.*
 
@@ -39,6 +41,49 @@ interface GoogleDriveApiService {
     suspend fun getAbout(
         @Query("fields") fields: String = "user(displayName,emailAddress)"
     ): Response<DriveAboutResponse>
+
+    /**
+     * Create a new file with content via multipart upload.
+     * Metadata part contains JSON with name/parents/mimeType.
+     * Media part contains the file content.
+     */
+    @Multipart
+    @POST("upload/drive/v3/files")
+    suspend fun createFile(
+        @Part("metadata") metadata: RequestBody,
+        @Part media: MultipartBody.Part,
+        @Query("uploadType") uploadType: String = "multipart",
+        @Query("fields") fields: String = "id,name"
+    ): Response<DriveFile>
+
+    /**
+     * Update file content (media only, no metadata change).
+     */
+    @PUT("upload/drive/v3/files/{fileId}")
+    suspend fun updateFileContent(
+        @Path("fileId") fileId: String,
+        @Body media: RequestBody,
+        @Query("uploadType") uploadType: String = "media"
+    ): Response<DriveFile>
+
+    /**
+     * Download file content as raw bytes.
+     */
+    @GET("drive/v3/files/{fileId}")
+    @Streaming
+    suspend fun downloadFile(
+        @Path("fileId") fileId: String,
+        @Query("alt") alt: String = "media"
+    ): Response<okhttp3.ResponseBody>
+
+    /**
+     * Create a folder.
+     */
+    @POST("drive/v3/files")
+    suspend fun createFolder(
+        @Body metadata: RequestBody,
+        @Query("fields") fields: String = "id,name"
+    ): Response<DriveFile>
 }
 
 // Google Drive response models
@@ -54,7 +99,18 @@ data class DriveFile(
 ) {
     fun isFolder(): Boolean = mimeType == "application/vnd.google-apps.folder"
 
-    fun isAudioFile(): Boolean = mimeType.startsWith("audio/")
+    fun isAudioFile(): Boolean {
+        if (mimeType.startsWith("audio/")) return true
+        // Google Drive may not assign audio/ MIME types to all formats
+        val ext = name.substringAfterLast('.', "").lowercase()
+        return ext in AUDIO_EXTENSIONS
+    }
+
+    companion object {
+        val AUDIO_EXTENSIONS = setOf(
+            "mp3", "flac", "m4a", "aac", "ogg", "opus", "wav", "wma", "alac", "aiff", "ape", "wv"
+        )
+    }
 
     fun getFileSizeFormatted(): String {
         val bytes = size?.toLongOrNull() ?: return ""
