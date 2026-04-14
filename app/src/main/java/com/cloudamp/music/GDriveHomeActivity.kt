@@ -172,30 +172,6 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
             R.id.nav_gdrive_home -> {
                 // Already here
             }
-            R.id.nav_jellyfin_home -> {
-                startActivity(Intent(this, JellyfinHomeActivity::class.java))
-                finish()
-            }
-            R.id.nav_jellyfin_library -> {
-                startActivity(Intent(this, JellyfinLibraryActivity::class.java))
-                finish()
-            }
-            R.id.nav_jellyfin_playlists -> {
-                startActivity(Intent(this, JellyfinPlaylistsActivity::class.java))
-                finish()
-            }
-            R.id.nav_jellyfin_recent_played -> {
-                val intent = Intent(this, JellyfinRecentAlbumsActivity::class.java)
-                intent.putExtra(JellyfinRecentAlbumsActivity.EXTRA_MODE, JellyfinRecentAlbumsActivity.MODE_RECENTLY_PLAYED)
-                startActivity(intent)
-                finish()
-            }
-            R.id.nav_jellyfin_recent_added -> {
-                val intent = Intent(this, JellyfinRecentAlbumsActivity::class.java)
-                intent.putExtra(JellyfinRecentAlbumsActivity.EXTRA_MODE, JellyfinRecentAlbumsActivity.MODE_RECENTLY_ADDED)
-                startActivity(intent)
-                finish()
-            }
             R.id.nav_saved_queues -> {
                 startActivity(Intent(this, SavedQueuesActivity::class.java))
                 finish()

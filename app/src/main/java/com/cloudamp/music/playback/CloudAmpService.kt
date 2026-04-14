@@ -29,12 +29,8 @@ import com.cloudamp.music.R
 import com.cloudamp.music.api.DriveFile
 import com.cloudamp.music.api.GDriveTrack
 import com.cloudamp.music.api.GoogleDriveApiClient
-import com.cloudamp.music.api.JellyfinApiClient
-import com.cloudamp.music.api.JellyfinItem
-import com.cloudamp.music.auth.JellyfinAuthManager
 import com.cloudamp.music.cache.GDriveLibraryCache
 import com.cloudamp.music.cache.GDrivePlaybackHistory
-import com.cloudamp.music.cache.JellyfinLibraryCache
 import com.cloudamp.music.cache.PlaybackStateStore
 import com.cloudamp.music.cache.SavedQueuesManager
 import com.cloudamp.music.models.Track
@@ -47,10 +43,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     private lateinit var playbackManager: PlaybackManager
     private lateinit var gdrivePlaybackManager: GDrivePlaybackManager
     private lateinit var gdriveClient: GoogleDriveApiClient
-    private lateinit var jellyfinPlaybackManager: JellyfinPlaybackManager
-    private lateinit var jellyfinClient: JellyfinApiClient
-    private lateinit var jellyfinAuthManager: JellyfinAuthManager
-    private lateinit var jellyfinLibraryCache: JellyfinLibraryCache
     private lateinit var savedQueuesManager: SavedQueuesManager
     private lateinit var playbackStateStore: PlaybackStateStore
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -65,32 +57,16 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     // Cache of GDrive tracks by album for structured browsing playback
     private val gdriveTracksByAlbum = mutableMapOf<String, List<GDriveTrack>>()
 
-    // Cache of Jellyfin tracks by album/playlist for building playback queues
-    private val jellyfinTracksByAlbum = mutableMapOf<String, List<JellyfinItem>>()
-
-    // Last played track name per album (from recently played queries)
-    private val lastPlayedTrackByAlbum = mutableMapOf<String, String>()
-
-    // In-memory cache of built Jellyfin artist MediaItems for Android Auto browsing
-    private var jellyfinArtistMediaItems: List<MediaBrowserCompat.MediaItem>? = null
-    private var jellyfinArtistCacheTimestamp: Long = 0
-
 
     companion object {
         private const val TAG = "CloudAmpService"
         const val ROOT_ID = "root"
         const val GDRIVE_ID = "gdrive"
-        const val JELLYFIN_ID = "jellyfin"
-        const val JELLYFIN_HOME_ID = "jellyfin_home"
-        const val JELLYFIN_LIBRARY_ID = "jellyfin_library"
-        const val JELLYFIN_PLAYLISTS_ID = "jellyfin_playlists"
-        const val JELLYFIN_RECENT_ID = "jellyfin_recent"
-        const val JELLYFIN_BROWSE_ID = "jellyfin_browse"
-        const val JELLYFIN_RECENT_PLAYED_ID = "jellyfin_recent_played"
-        const val JELLYFIN_RECENT_ADDED_ID = "jellyfin_recent_added"
 
         const val GDRIVE_MUSIC_ID = "gdrive_music"
         const val GDRIVE_MUSIC_HOME_ID = "gdrive_music_home"
+        const val GDRIVE_LIBRARY_ID = "gdrive_library"
+        const val GDRIVE_PLAYLISTS_ID = "gdrive_playlists"
         const val SAVED_QUEUES_ID = "saved_queues"
         const val SEARCH_ID = "search"
         const val CUSTOM_ACTION_SAVE_QUEUE = "save_queue"
@@ -124,10 +100,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         playbackManager = PlaybackManager.getInstance(this)
         gdrivePlaybackManager = GDrivePlaybackManager.getInstance(this)
         gdriveClient = GoogleDriveApiClient.getInstance(this)
-        jellyfinPlaybackManager = JellyfinPlaybackManager.getInstance(this)
-        jellyfinClient = JellyfinApiClient.getInstance(this)
-        jellyfinAuthManager = JellyfinAuthManager(this)
-        jellyfinLibraryCache = JellyfinLibraryCache.getInstance(this)
         savedQueuesManager = SavedQueuesManager.getInstance(this)
         playbackStateStore = PlaybackStateStore.getInstance(this)
         gdriveLibraryCache = GDriveLibraryCache.getInstance(this)
@@ -164,7 +136,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         playbackManager.setMediaSession(mediaSession)
         playbackManager.setService(this)
         gdrivePlaybackManager.setService(this)
-        jellyfinPlaybackManager.setService(this)
         mediaSession.setCallback(playbackManager.mediaSessionCallback)
 
         sessionToken = mediaSession.sessionToken
@@ -322,16 +293,9 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
         // Set album art URI for Android Auto
         albumArtUrl?.let { url ->
-            // For Jellyfin, use content:// URI so Android Auto can load the image
-            val artUri = if (track.uri.startsWith("jellyfin:")) {
-                val itemId = track.uri.removePrefix("jellyfin:track:")
-                jellyfinContentUri(itemId, url) ?: url
-            } else {
-                url
-            }
-            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, artUri)
-            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ART_URI, artUri)
-            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI, artUri)
+            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, url)
+            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ART_URI, url)
+            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI, url)
 
             // Also load bitmap for notification (Glide can handle HTTP URLs directly)
             loadAlbumArt(url)
@@ -453,14 +417,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 .setSubtitle(track.artists.joinToString(", ") { it.name })
                 .apply {
                     track.album?.images?.firstOrNull()?.url?.let { url ->
-                        // For Jellyfin, use content:// URI so Android Auto can load the image
-                        val iconUrl = if (track.uri.startsWith("jellyfin:")) {
-                            val itemId = track.uri.removePrefix("jellyfin:track:")
-                            jellyfinContentUri(itemId, url) ?: url
-                        } else {
-                            url
-                        }
-                        setIconUri(android.net.Uri.parse(iconUrl))
+                        setIconUri(android.net.Uri.parse(url))
                     }
                 }
                 .build()
@@ -474,7 +431,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         playbackPollingJob?.cancel()
         playbackPollingJob = serviceScope.launch {
             var detectedPlayback = false
-            var lastJellyfinReportTime = 0L
 
             while (isActive) {
                 try {
@@ -492,26 +448,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                             PlaybackStateCompat.STATE_PAUSED
                         }
                         updatePlaybackState(state, position, 1.0f)
-                    } else if (active is JellyfinPlaybackManager) {
-                        if (!detectedPlayback) {
-                            Log.d(TAG, "Detected active Jellyfin playback, pushing metadata")
-                            active.refreshSessionMetadata()
-                        }
-                        detectedPlayback = true
-                        val position = active.getCurrentPosition()
-                        val state = if (active.isPlaying()) {
-                            PlaybackStateCompat.STATE_PLAYING
-                        } else {
-                            PlaybackStateCompat.STATE_PAUSED
-                        }
-                        updatePlaybackState(state, position, 1.0f)
-
-                        // Report progress to Jellyfin server (~every 10s)
-                        val now = System.currentTimeMillis()
-                        if (now - lastJellyfinReportTime >= 10_000L) {
-                            lastJellyfinReportTime = now
-                            reportJellyfinProgress(isPaused = !active.isPlaying())
-                        }
                     }
                     // Auto-save playback state (throttled internally to every ~10s)
                     playbackStateStore.save()
@@ -544,60 +480,31 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             when (parentId) {
                 ROOT_ID -> {
                     // Root menu - main categories
-                    mediaItems.add(createGridBrowsableItem(JELLYFIN_ID, "Jellyfin", "Browse your Jellyfin library"))
-                    mediaItems.add(createListBrowsableItem(JELLYFIN_BROWSE_ID, "Browse", "Library, Playlists, Recently"))
-                    mediaItems.add(createGridBrowsableItem(GDRIVE_MUSIC_ID, "GDrive Music", "Structured music library"))
+                    mediaItems.add(createGridBrowsableItem(GDRIVE_MUSIC_ID, "Home", "Recently played & discover"))
+                    mediaItems.add(createBrowsableItem(GDRIVE_LIBRARY_ID, "Library", "Browse artists & albums"))
+                    mediaItems.add(createBrowsableItem(GDRIVE_PLAYLISTS_ID, "Playlists", "Your playlists"))
                     mediaItems.add(createBrowsableItem(GDRIVE_ID, "Drive", "Browse your Drive folders"))
-                    mediaItems.add(createBrowsableItem(SAVED_QUEUES_ID, "Queues", "Resume where you left off"))
                 }
 
-
-                GDRIVE_MUSIC_ID -> {
+                GDRIVE_MUSIC_ID, GDRIVE_MUSIC_HOME_ID -> {
                     loadGDriveMusicHome(mediaItems)
                 }
 
-                GDRIVE_MUSIC_HOME_ID -> {
-                    loadGDriveMusicHome(mediaItems)
+                GDRIVE_LIBRARY_ID -> {
+                    loadGDriveMusicLibrary(mediaItems)
+                }
+
+                GDRIVE_PLAYLISTS_ID -> {
+                    // Placeholder — playlists not yet implemented for GDrive
+                    mediaItems.add(createBrowsableItem(
+                        "gdrive_playlists_empty",
+                        "Coming Soon",
+                        "Playlists are not yet available"
+                    ))
                 }
 
                 GDRIVE_ID -> {
                     loadGDriveFolder("root", mediaItems)
-                }
-
-                JELLYFIN_ID, JELLYFIN_HOME_ID -> {
-                    loadJellyfinHome(mediaItems)
-                }
-
-                JELLYFIN_BROWSE_ID -> {
-                    val libraryIcon = "android.resource://${packageName}/${R.drawable.ic_library}"
-                    val playlistIcon = "android.resource://${packageName}/${R.drawable.ic_playlist}"
-                    val historyIcon = "android.resource://${packageName}/${R.drawable.ic_history}"
-                    mediaItems.add(createBrowsableItem(JELLYFIN_LIBRARY_ID, "Library", "", libraryIcon))
-                    mediaItems.add(createBrowsableItem(JELLYFIN_PLAYLISTS_ID, "Playlists", "", playlistIcon))
-                    mediaItems.add(createBrowsableItem(JELLYFIN_RECENT_ID, "Recently", "", historyIcon))
-                }
-
-                JELLYFIN_LIBRARY_ID -> {
-                    loadJellyfinArtists(mediaItems)
-                }
-
-                JELLYFIN_PLAYLISTS_ID -> {
-                    loadJellyfinPlaylists(mediaItems)
-                }
-
-                JELLYFIN_RECENT_ID -> {
-                    val historyIcon = "android.resource://${packageName}/${R.drawable.ic_history}"
-                    val newReleasesIcon = "android.resource://${packageName}/${R.drawable.ic_new_releases}"
-                    mediaItems.add(createGridBrowsableItem(JELLYFIN_RECENT_PLAYED_ID, "Played", "Albums you've listened to", historyIcon))
-                    mediaItems.add(createGridBrowsableItem(JELLYFIN_RECENT_ADDED_ID, "Added", "New albums in your library", newReleasesIcon))
-                }
-
-                JELLYFIN_RECENT_PLAYED_ID -> {
-                    loadJellyfinRecentlyPlayed(mediaItems)
-                }
-
-                JELLYFIN_RECENT_ADDED_ID -> {
-                    loadJellyfinRecentlyAdded(mediaItems)
                 }
 
                 SAVED_QUEUES_ID -> {
@@ -607,7 +514,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 else -> {
                     // Handle dynamic IDs
                     when {
-                        parentId == "gdrive_no_auth" || parentId == "jellyfin_no_auth" || parentId == "saved_queues_empty" -> {
+                        parentId == "gdrive_no_auth" || parentId == "saved_queues_empty" || parentId == "gdrive_playlists_empty" -> {
                             // No-op: placeholder items
                         }
                         parentId.startsWith("gdrive_music_artist_") -> {
@@ -621,22 +528,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         parentId.startsWith("gdrive_folder_") -> {
                             val folderId = parentId.removePrefix("gdrive_folder_")
                             loadGDriveFolder(folderId, mediaItems)
-                        }
-                        parentId.startsWith("jellyfin_artist_") -> {
-                            val artistId = parentId.removePrefix("jellyfin_artist_")
-                            loadJellyfinArtistAlbums(artistId, mediaItems)
-                        }
-                        parentId.startsWith("jellyfin_home_") && parentId.contains("_album_") -> {
-                            val albumId = parentId.substringAfter("_album_")
-                            loadJellyfinAlbumTracks(albumId, mediaItems)
-                        }
-                        parentId.startsWith("jellyfin_album_") -> {
-                            val albumId = parentId.removePrefix("jellyfin_album_")
-                            loadJellyfinAlbumTracks(albumId, mediaItems)
-                        }
-                        parentId.startsWith("jellyfin_playlist_") -> {
-                            val playlistId = parentId.removePrefix("jellyfin_playlist_")
-                            loadJellyfinPlaylistTracks(playlistId, mediaItems)
                         }
                     }
                 }
@@ -815,6 +706,34 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         }
     }
 
+    // ── Google Drive Library browsing (Artists list) ──────────────────────
+
+    private fun loadGDriveMusicLibrary(items: MutableList<MediaBrowserCompat.MediaItem>) {
+        if (!gdriveLibraryCache.hasFullCache()) {
+            items.add(createBrowsableItem(
+                "gdrive_no_auth",
+                "Scan Library First",
+                "Open CloudAmp app to scan your music"
+            ))
+            return
+        }
+
+        val artists = gdriveLibraryCache.getArtists() ?: emptyList()
+        val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_gdrive}"
+
+        for (artist in artists) {
+            val artistImageId = artist.imageFileId
+                ?: gdriveLibraryCache.getArtistAlbums(artist.id)?.firstOrNull()?.coverFileId
+            val imageUrl = artistImageId?.let { GDriveImageProvider.buildUri(it).toString() }
+            items.add(createBrowsableItem(
+                "gdrive_music_artist_${artist.id}",
+                artist.name,
+                "${artist.albumCount} album${if (artist.albumCount != 1) "s" else ""}",
+                imageUrl ?: placeholderUri
+            ))
+        }
+    }
+
     /**
      * Called by PlaybackManager when a GDrive Music track is selected from Android Auto.
      * Looks up the cached album tracks to build the playback queue with rich metadata.
@@ -854,509 +773,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         gdrivePlaybackManager.playFiles(files, index)
     }
 
-    // ── Jellyfin browsing ──────────────────────────────────────────────
-
-    /** Convert a Jellyfin HTTP image URL to a content:// URI that Android Auto can load. */
-    private fun jellyfinContentUri(itemId: String, httpUrl: String?): String? {
-        if (httpUrl == null) return null
-        return JellyfinImageProvider.buildUri(itemId, httpUrl).toString()
-    }
-
-    private suspend fun loadJellyfinArtists(items: MutableList<MediaBrowserCompat.MediaItem>) {
-        try {
-            if (!jellyfinAuthManager.isConfigured()) {
-                items.add(createBrowsableItem(
-                    "jellyfin_no_auth",
-                    "Connect Jellyfin",
-                    "Open CloudAmp app to configure"
-                ))
-                return
-            }
-
-            // Return in-memory cached list if available and not stale
-            val currentTimestamp = jellyfinLibraryCache.getLastLoadedTimestamp()
-            if (jellyfinArtistMediaItems != null && jellyfinArtistCacheTimestamp == currentTimestamp) {
-                items.addAll(jellyfinArtistMediaItems!!)
-                return
-            }
-
-            // Use cache first, fall back to API
-            var artists = jellyfinLibraryCache.getArtists()
-            if (artists.isNullOrEmpty()) {
-                val userId = jellyfinAuthManager.getUserId() ?: return
-                val response = jellyfinClient.api.getArtists(userId)
-                if (response.isSuccessful) {
-                    val allArtists = response.body()?.Items ?: emptyList()
-                    // Filter out /config/metadata/ ghost artists only when a real
-                    // /media/ artist with the same normalized name already exists.
-                    val mediaNames = allArtists
-                        .filter { it.Path?.startsWith("/media/") == true }
-                        .map { it.Name.lowercase().trim() }
-                        .toSet()
-                    artists = allArtists.filter {
-                        it.Path == null ||
-                        !it.Path.startsWith("/config/metadata/") ||
-                        it.Name.lowercase().trim() !in mediaNames
-                    }
-                    jellyfinLibraryCache.saveArtists(artists)
-                }
-            }
-
-            val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
-            val apiKey = jellyfinAuthManager.getApiKey()
-            val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_artist_placeholder}"
-            val fallbackImages = jellyfinLibraryCache.getArtistFallbackImages() ?: emptyMap()
-
-            val built = mutableListOf<MediaBrowserCompat.MediaItem>()
-            for (artist in artists ?: emptyList()) {
-                var imageUrl = jellyfinContentUri(artist.Id, artist.getPrimaryImageUrl(serverUrl, apiKey))
-
-                // Use cached fallback album image for artists without primary image
-                if (imageUrl == null) {
-                    val repId = jellyfinLibraryCache.getRepresentativeArtistId(artist.Id) ?: artist.Id
-                    val fallbackAlbumId = fallbackImages[repId]
-                    if (fallbackAlbumId != null) {
-                        val fallbackUrl = "$serverUrl/Items/$fallbackAlbumId/Images/Primary?maxWidth=300" +
-                            (if (apiKey != null) "&api_key=$apiKey" else "")
-                        imageUrl = jellyfinContentUri(fallbackAlbumId, fallbackUrl)
-                    }
-                }
-
-                built.add(createBrowsableItem(
-                    "jellyfin_artist_${artist.Id}",
-                    artist.Name,
-                    "",
-                    imageUrl ?: placeholderUri
-                ))
-            }
-
-            jellyfinArtistMediaItems = built
-            jellyfinArtistCacheTimestamp = currentTimestamp
-            items.addAll(built)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private suspend fun loadJellyfinPlaylists(items: MutableList<MediaBrowserCompat.MediaItem>) {
-        try {
-            if (!jellyfinAuthManager.isConfigured()) {
-                items.add(createBrowsableItem(
-                    "jellyfin_no_auth",
-                    "Connect Jellyfin",
-                    "Open CloudAmp app to configure"
-                ))
-                return
-            }
-
-            val userId = jellyfinAuthManager.getUserId() ?: return
-            val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
-            val apiKey = jellyfinAuthManager.getApiKey()
-            val playlistsResponse = jellyfinClient.api.getPlaylists(userId)
-            if (playlistsResponse.isSuccessful) {
-                val playlists = playlistsResponse.body()?.Items ?: emptyList()
-                for (playlist in playlists) {
-                    val countStr = if (playlist.ChildCount != null) "${playlist.ChildCount} tracks" else "Playlist"
-                    items.add(createBrowsableItem(
-                        "jellyfin_playlist_${playlist.Id}",
-                        playlist.Name,
-                        countStr,
-                        jellyfinContentUri(playlist.Id, playlist.getPrimaryImageUrl(serverUrl, apiKey))
-                    ))
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private suspend fun loadJellyfinRecentlyPlayed(items: MutableList<MediaBrowserCompat.MediaItem>) {
-        try {
-            if (!jellyfinAuthManager.isConfigured()) {
-                items.add(createBrowsableItem("jellyfin_no_auth", "Connect Jellyfin", "Open CloudAmp app to configure"))
-                return
-            }
-            val userId = jellyfinAuthManager.getUserId() ?: return
-            val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
-            val apiKey = jellyfinAuthManager.getApiKey()
-            val apiKeySuffix = if (apiKey != null) "&api_key=$apiKey" else ""
-            val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
-
-            // Determine currently playing album ID (if Jellyfin)
-            val currentAlbumId = (ActivePlayback.provider as? JellyfinPlaybackManager)?.let { jfm ->
-                val q = jfm.getQueue()
-                val idx = jfm.getCurrentIndex()
-                if (idx in q.indices) q[idx].AlbumId else null
-            }
-
-            // Query recently played tracks, then deduplicate by album
-            val response = jellyfinClient.api.getRecentlyPlayedTracks(userId)
-            if (response.isSuccessful) {
-                val tracks = response.body()?.Items ?: emptyList()
-                val seenAlbumIds = mutableSetOf<String>()
-                for (track in tracks) {
-                    val albumId = track.AlbumId ?: continue
-                    if (!seenAlbumIds.add(albumId)) continue
-                    val albumName = track.Album ?: continue
-                    val artist = track.AlbumArtist ?: ""
-                    val year = track.Year?.toString()
-                    val isPlaying = albumId == currentAlbumId
-                    lastPlayedTrackByAlbum[albumId] = track.Name
-                    val parts = mutableListOf<String>()
-                    if (artist.isNotEmpty()) parts.add(artist)
-                    if (year != null) parts.add(year)
-                    parts.add("\u25b6 ${track.Name}")
-                    val subtitle = parts.joinToString(" \u00b7 ")
-                    val displayName = if (isPlaying) "\u25b6 $albumName" else albumName
-                    val imageUrl = jellyfinContentUri(albumId,
-                        "$serverUrl/Items/$albumId/Images/Primary?maxWidth=300$apiKeySuffix")
-                        ?: placeholderUri
-                    items.add(createBrowsableItem("jellyfin_album_$albumId", displayName, subtitle, imageUrl))
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private suspend fun loadJellyfinHome(items: MutableList<MediaBrowserCompat.MediaItem>) {
-        try {
-            if (!jellyfinAuthManager.isConfigured()) {
-                items.add(createBrowsableItem("jellyfin_no_auth", "Connect Jellyfin", "Open CloudAmp app to configure"))
-                return
-            }
-            val userId = jellyfinAuthManager.getUserId() ?: return
-            val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
-            val apiKey = jellyfinAuthManager.getApiKey()
-            val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
-
-            // Load all four sections in parallel
-            val recentlyPlayedDeferred = serviceScope.async(Dispatchers.IO) {
-                try {
-                    val response = jellyfinClient.api.getRecentlyPlayedTracks(userId)
-                    if (!response.isSuccessful) return@async emptyList<JellyfinItem>()
-                    val tracks = response.body()?.Items ?: emptyList()
-                    val seenAlbumIds = mutableSetOf<String>()
-                    tracks.mapNotNull { track ->
-                        val albumId = track.AlbumId ?: return@mapNotNull null
-                        if (!seenAlbumIds.add(albumId)) return@mapNotNull null
-                        track
-                    }.take(9)
-                } catch (e: Exception) { emptyList() }
-            }
-
-            val recentlyAddedDeferred = serviceScope.async(Dispatchers.IO) {
-                try {
-                    val response = jellyfinClient.api.getRecentlyAddedAlbums(userId)
-                    if (!response.isSuccessful) return@async emptyList<JellyfinItem>()
-                    (response.body()?.Items ?: emptyList()).take(9)
-                } catch (e: Exception) { emptyList() }
-            }
-            val discoverDeferred = serviceScope.async(Dispatchers.IO) {
-                try {
-                    val response = jellyfinClient.api.getRandomAlbums(userId)
-                    if (!response.isSuccessful) return@async emptyList<JellyfinItem>()
-                    (response.body()?.Items ?: emptyList()).take(9)
-                } catch (e: Exception) { emptyList() }
-            }
-
-            val recentlyPlayed = recentlyPlayedDeferred.await()
-            val recentlyAdded = recentlyAddedDeferred.await()
-            val discover = discoverDeferred.await()
-
-            // Recently Played — derived from tracks, use track fields for album info
-            if (recentlyPlayed.isNotEmpty()) {
-                for (track in recentlyPlayed) {
-                    val albumId = track.AlbumId ?: continue
-                    lastPlayedTrackByAlbum[albumId] = track.Name
-                    val albumName = track.Album ?: continue
-                    val artist = track.AlbumArtist ?: ""
-                    val subtitle = if (artist.isNotEmpty()) "$artist \u00b7 \u25b6 ${track.Name}" else "\u25b6 ${track.Name}"
-                    val imageUrl = jellyfinContentUri(albumId,
-                        "$serverUrl/Items/$albumId/Images/Primary?maxWidth=300${if (apiKey != null) "&api_key=$apiKey" else ""}")
-                        ?: placeholderUri
-                    items.add(createBrowsableItemWithGroup(
-                        "jellyfin_home_played_album_$albumId", albumName, subtitle,
-                        "Recently Played", imageUrl))
-                }
-            }
-
-            // Discover
-            if (discover.isNotEmpty()) {
-                for (album in discover) {
-                    val artist = album.AlbumArtist ?: ""
-                    val imageUrl = jellyfinContentUri(album.Id, album.getPrimaryImageUrl(serverUrl, apiKey))
-                        ?: placeholderUri
-                    items.add(createBrowsableItemWithGroup(
-                        "jellyfin_home_discover_album_${album.Id}", album.Name, artist,
-                        "Discover", imageUrl))
-                }
-            }
-
-            // Recently Added
-            if (recentlyAdded.isNotEmpty()) {
-                for (album in recentlyAdded) {
-                    val artist = album.AlbumArtist ?: ""
-                    val imageUrl = jellyfinContentUri(album.Id, album.getPrimaryImageUrl(serverUrl, apiKey))
-                        ?: placeholderUri
-                    items.add(createBrowsableItemWithGroup(
-                        "jellyfin_home_added_album_${album.Id}", album.Name, artist,
-                        "Recently Added", imageUrl))
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private suspend fun loadJellyfinRecentlyAdded(items: MutableList<MediaBrowserCompat.MediaItem>) {
-        try {
-            if (!jellyfinAuthManager.isConfigured()) {
-                items.add(createBrowsableItem("jellyfin_no_auth", "Connect Jellyfin", "Open CloudAmp app to configure"))
-                return
-            }
-            val userId = jellyfinAuthManager.getUserId() ?: return
-            val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
-            val apiKey = jellyfinAuthManager.getApiKey()
-            val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
-
-            val response = jellyfinClient.api.getRecentlyAddedAlbums(userId)
-            if (response.isSuccessful) {
-                val albums = response.body()?.Items ?: emptyList()
-                for (album in albums) {
-                    val artist = album.AlbumArtist ?: ""
-                    val year = album.Year?.toString()
-                    val subtitle = if (year != null) "$artist \u00b7 $year" else artist
-                    val imageUrl = jellyfinContentUri(album.Id, album.getPrimaryImageUrl(serverUrl, apiKey))
-                        ?: placeholderUri
-                    items.add(createBrowsableItem("jellyfin_album_${album.Id}", album.Name, subtitle, imageUrl))
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private suspend fun loadJellyfinArtistAlbums(artistId: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
-        try {
-            val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
-            val apiKey = jellyfinAuthManager.getApiKey()
-
-            // Find representative ID and try cache first
-            val repId = jellyfinLibraryCache.getRepresentativeArtistId(artistId) ?: artistId
-            var albums = jellyfinLibraryCache.getArtistAlbums(repId)
-
-            // Cache miss - fetch from API
-            if (albums == null) {
-                val userId = jellyfinAuthManager.getUserId() ?: return
-                val response = jellyfinClient.api.getArtistAlbums(userId, repId)
-                albums = if (response.isSuccessful) response.body()?.Items ?: emptyList() else null
-                // Fallback for metadata-only artists (no folder children)
-                if (albums != null && albums.isEmpty()) {
-                    val fallbackResponse = jellyfinClient.api.getArtistAlbumsByArtistId(userId, repId)
-                    if (fallbackResponse.isSuccessful) albums = fallbackResponse.body()?.Items ?: emptyList()
-                }
-                if (albums != null) jellyfinLibraryCache.saveArtistAlbums(repId, albums)
-            }
-
-            if (albums != null) {
-                val fallbackImageUrl = albums
-                    .sortedBy { it.Year ?: Int.MAX_VALUE }
-                    .firstOrNull { it.hasPrimaryImage() }
-                    ?.let { jellyfinContentUri(it.Id, it.getPrimaryImageUrl(serverUrl, apiKey)) }
-                val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_album_placeholder}"
-
-                for (album in albums) {
-                    val yearStr = album.Year?.toString() ?: ""
-                    val imageUrl = jellyfinContentUri(album.Id, album.getPrimaryImageUrl(serverUrl, apiKey))
-                        ?: fallbackImageUrl ?: placeholderUri
-                    items.add(createBrowsableItem(
-                        "jellyfin_album_${album.Id}",
-                        album.Name,
-                        yearStr,
-                        imageUrl
-                    ))
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private suspend fun loadJellyfinAlbumTracks(albumId: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
-        try {
-            val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
-            val apiKey = jellyfinAuthManager.getApiKey()
-            val apiKeySuffix = if (apiKey != null) "&api_key=$apiKey" else ""
-            val userId = jellyfinAuthManager.getUserId() ?: return
-
-            // Always fetch fresh from API to get current UserData (playback positions)
-            var tracks: List<JellyfinItem>? = null
-            val response = jellyfinClient.api.getAlbumTracks(userId, albumId)
-            if (response.isSuccessful) {
-                tracks = response.body()?.Items ?: emptyList()
-                jellyfinLibraryCache.saveAlbumTracks(albumId, tracks)
-            }
-
-            // Fallback to cache if API fails
-            if (tracks == null) {
-                tracks = jellyfinLibraryCache.getAlbumTracks(albumId)
-            }
-
-            if (tracks != null) {
-                // Populate runtime map for playback queue building
-                jellyfinTracksByAlbum[albumId] = tracks
-
-                // Determine currently playing track ID (if Jellyfin)
-                val currentTrackId = (ActivePlayback.provider as? JellyfinPlaybackManager)?.let { jfm ->
-                    val q = jfm.getQueue()
-                    val idx = jfm.getCurrentIndex()
-                    if (idx in q.indices) q[idx].Id else null
-                }
-
-                // If nothing from this album is currently playing, check for last-played track
-                val lastPlayedTrackName = if (currentTrackId == null || tracks.none { it.Id == currentTrackId }) {
-                    lastPlayedTrackByAlbum[albumId]
-                } else null
-
-                for (track in tracks) {
-                    val durationMs = track.getDurationMs()
-                    val durationStr = if (durationMs > 0) {
-                        val totalSeconds = durationMs / 1000
-                        val minutes = totalSeconds / 60
-                        val seconds = totalSeconds % 60
-                        String.format("%d:%02d", minutes, seconds)
-                    } else ""
-                    val subtitle = "${track.getArtistDisplay()} \u00b7 $durationStr"
-                    val isPlaying = track.Id == currentTrackId
-                    val isLastPlayed = lastPlayedTrackName != null && track.Name == lastPlayedTrackName
-                    val displayName = if (isPlaying || isLastPlayed) "\u25b6 ${track.Name}" else track.Name
-
-                    // Use album art URL if track has no image
-                    val rawImageUrl = track.getPrimaryImageUrl(serverUrl, apiKey)
-                        ?: "$serverUrl/Items/$albumId/Images/Primary?maxWidth=300$apiKeySuffix"
-                    val imageUrl = jellyfinContentUri(track.Id, rawImageUrl)
-
-                    // Completion status from Jellyfin UserData or live player
-                    val completionInfo = getTrackCompletionInfo(track, currentTrackId)
-
-                    items.add(createJellyfinPlayableItem(
-                        "jellyfin_track_${track.Id}",
-                        displayName,
-                        subtitle,
-                        albumId,
-                        imageUrl,
-                        completionStatus = completionInfo?.first,
-                        completionPercentage = completionInfo?.second
-                    ))
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private suspend fun loadJellyfinPlaylistTracks(playlistId: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
-        try {
-            val userId = jellyfinAuthManager.getUserId() ?: return
-            val serverUrl = jellyfinAuthManager.getServerUrl()?.trimEnd('/') ?: ""
-            val apiKey = jellyfinAuthManager.getApiKey()
-            val apiKeySuffix = if (apiKey != null) "&api_key=$apiKey" else ""
-            val response = jellyfinClient.api.getPlaylistItems(playlistId, userId)
-            if (response.isSuccessful) {
-                val tracks = response.body()?.Items ?: emptyList()
-
-                // Cache tracks for playback queue building
-                jellyfinTracksByAlbum[playlistId] = tracks
-
-                // Determine currently playing track ID (if Jellyfin)
-                val currentTrackId = (ActivePlayback.provider as? JellyfinPlaybackManager)?.let { jfm ->
-                    val q = jfm.getQueue()
-                    val idx = jfm.getCurrentIndex()
-                    if (idx in q.indices) q[idx].Id else null
-                }
-
-                for (track in tracks) {
-                    val durationMs = track.getDurationMs()
-                    val durationStr = if (durationMs > 0) {
-                        val totalSeconds = durationMs / 1000
-                        val minutes = totalSeconds / 60
-                        val seconds = totalSeconds % 60
-                        String.format("%d:%02d", minutes, seconds)
-                    } else ""
-                    val subtitle = "${track.getArtistDisplay()} \u00b7 $durationStr"
-                    val isPlaying = track.Id == currentTrackId
-                    val displayName = if (isPlaying) "\u25b6 ${track.Name}" else track.Name
-
-                    val rawImageUrl = track.getPrimaryImageUrl(serverUrl, apiKey)
-                        ?: if (track.AlbumId != null) "$serverUrl/Items/${track.AlbumId}/Images/Primary?maxWidth=300$apiKeySuffix" else null
-                    val imageUrl = jellyfinContentUri(track.Id, rawImageUrl)
-
-                    items.add(createJellyfinPlayableItem(
-                        "jellyfin_track_${track.Id}",
-                        displayName,
-                        subtitle,
-                        playlistId,
-                        imageUrl
-                    ))
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    /**
-     * Called by PlaybackManager when a Jellyfin track is selected from Android Auto.
-     * Looks up the cached album/playlist contents to build the playback queue.
-     */
-    fun playJellyfinFromMediaId(trackId: String, parentId: String?) {
-        val tracks = if (parentId != null) {
-            jellyfinTracksByAlbum[parentId]
-        } else {
-            // Fallback: find any cached container with this track
-            jellyfinTracksByAlbum.values.firstOrNull { container ->
-                container.any { it.Id == trackId }
-            }
-        }
-
-        if (tracks.isNullOrEmpty()) return
-
-        val index = tracks.indexOfFirst { it.Id == trackId }.takeIf { it >= 0 } ?: 0
-        jellyfinPlaybackManager.playItems(tracks, index)
-    }
-
-    private fun createJellyfinPlayableItem(
-        id: String,
-        title: String,
-        subtitle: String,
-        jellyfinParentId: String,
-        iconUri: String? = null,
-        completionStatus: Int? = null,
-        completionPercentage: Double? = null
-    ): MediaBrowserCompat.MediaItem {
-        val extras = Bundle().apply {
-            putString("jellyfin_parent_id", jellyfinParentId)
-            if (completionStatus != null) {
-                putInt(MediaConstants.DESCRIPTION_EXTRAS_KEY_COMPLETION_STATUS, completionStatus)
-                if (completionPercentage != null) {
-                    putDouble(MediaConstants.DESCRIPTION_EXTRAS_KEY_COMPLETION_PERCENTAGE, completionPercentage)
-                }
-            }
-        }
-
-        val description = MediaDescriptionCompat.Builder()
-            .setMediaId(id)
-            .setTitle(title)
-            .setSubtitle(subtitle)
-            .setExtras(extras)
-            .apply {
-                iconUri?.let { setIconUri(android.net.Uri.parse(it)) }
-            }
-            .build()
-
-        return MediaBrowserCompat.MediaItem(description, MediaBrowserCompat.MediaItem.FLAG_PLAYABLE)
-    }
 
     private fun createGDrivePlayableItem(
         id: String,
@@ -1378,42 +794,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         return MediaBrowserCompat.MediaItem(description, MediaBrowserCompat.MediaItem.FLAG_PLAYABLE)
     }
 
-    /**
-     * Returns the completion status and percentage for a track as a Pair,
-     * or null if the track has no playback history.
-     *
-     * Priority: live player state > persisted PlaybackStateStore > Jellyfin UserData.
-     */
-    private fun getTrackCompletionInfo(
-        track: JellyfinItem,
-        currentTrackId: String?
-    ): Pair<Int, Double>? {
-        // 1. Live player state — most accurate for the currently loaded track
-        if (track.Id == currentTrackId) {
-            val jfm = ActivePlayback.provider as? JellyfinPlaybackManager
-            if (jfm != null) {
-                val pos = jfm.getCurrentPosition()
-                val dur = jfm.getDuration()
-                if (dur > 0) {
-                    val pct = (pos.toDouble() / dur).coerceIn(0.0, 1.0)
-                    return Pair(MediaConstants.DESCRIPTION_EXTRAS_VALUE_COMPLETION_STATUS_PARTIALLY_PLAYED, pct)
-                }
-            }
-        }
-
-        // 2. Jellyfin UserData — server-side position for any previously played track
-        val userData = track.UserData
-        if (userData != null && userData.PlaybackPositionTicks > 0) {
-            val durationTicks = track.RunTimeTicks ?: 0L
-            val pct = if (durationTicks > 0) {
-                (userData.PlaybackPositionTicks.toDouble() / durationTicks).coerceIn(0.0, 1.0)
-            } else 0.0
-            return Pair(MediaConstants.DESCRIPTION_EXTRAS_VALUE_COMPLETION_STATUS_PARTIALLY_PLAYED, pct)
-        }
-
-        return null
-    }
-
     // ── Playback state persistence ────────────────────────────────────
 
     /**
@@ -1430,11 +810,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 if (state.driveFiles.isEmpty()) return
                 gdrivePlaybackManager.restoreFiles(state.driveFiles, state.currentIndex, state.currentPositionMs)
             }
-            com.cloudamp.music.models.SavedQueue.PROVIDER_JELLYFIN -> {
-                val items = state.jellyfinItems.orEmpty()
-                if (items.isEmpty()) return
-                jellyfinPlaybackManager.restoreItems(items, state.currentIndex, state.currentPositionMs)
-            }
         }
 
         // Clear persisted state after restore to avoid double-restores
@@ -1444,67 +819,16 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     /** Force-save on pause — user might not come back for a while. */
     fun notifyPaused() {
         playbackStateStore.save(force = true)
-        reportJellyfinProgress(isPaused = true)
     }
 
     /** Force-save on track transition — index changed. */
     fun notifyTrackTransition() {
         playbackStateStore.save(force = true)
-        reportJellyfinProgress(isPaused = false)
     }
 
     /** Clear persisted state on explicit stop / queue end. */
     fun notifyStopped() {
-        reportJellyfinStopped()
         playbackStateStore.clear()
-    }
-
-    /**
-     * Reports the current Jellyfin playback position to the server so that
-     * UserData.PlaybackPositionTicks is kept up-to-date for all clients.
-     */
-    private fun reportJellyfinProgress(isPaused: Boolean) {
-        val jfm = ActivePlayback.provider as? JellyfinPlaybackManager ?: return
-        val q = jfm.getQueue()
-        val idx = jfm.getCurrentIndex()
-        if (idx !in q.indices) return
-        val track = q[idx]
-        val positionTicks = jfm.getCurrentPosition() * 10_000L // ms → ticks
-        serviceScope.launch(Dispatchers.IO) {
-            try {
-                jellyfinClient.api.reportPlaybackProgress(
-                    com.cloudamp.music.api.PlaybackProgressInfo(
-                        itemId = track.Id,
-                        positionTicks = positionTicks,
-                        isPaused = isPaused
-                    )
-                )
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to report playback progress: ${e.message}")
-            }
-        }
-    }
-
-    /** Reports playback stopped to Jellyfin so the server records the final position. */
-    private fun reportJellyfinStopped() {
-        val jfm = ActivePlayback.provider as? JellyfinPlaybackManager ?: return
-        val q = jfm.getQueue()
-        val idx = jfm.getCurrentIndex()
-        if (idx !in q.indices) return
-        val track = q[idx]
-        val positionTicks = jfm.getCurrentPosition() * 10_000L
-        serviceScope.launch(Dispatchers.IO) {
-            try {
-                jellyfinClient.api.reportPlaybackStopped(
-                    com.cloudamp.music.api.PlaybackStopInfo(
-                        itemId = track.Id,
-                        positionTicks = positionTicks
-                    )
-                )
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to report playback stopped: ${e.message}")
-            }
-        }
     }
 
     // ── Saved Queues browsing ──────────────────────────────────────────
@@ -1555,18 +879,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     serviceScope.launch {
                         delay(1500)
                         gdrivePlaybackManager.seekTo(queue.currentPositionMs)
-                    }
-                }
-            }
-            com.cloudamp.music.models.SavedQueue.PROVIDER_JELLYFIN -> {
-                val items = queue.jellyfinItems.orEmpty()
-                if (items.isEmpty()) return
-                jellyfinPlaybackManager.playItems(items, queue.currentIndex)
-                // Seek to saved position within the track after a brief delay for buffering
-                if (queue.currentPositionMs > 0) {
-                    serviceScope.launch {
-                        delay(1500)
-                        jellyfinPlaybackManager.seekTo(queue.currentPositionMs)
                     }
                 }
             }

@@ -2,11 +2,9 @@ package com.cloudamp.music.cache
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.cloudamp.music.api.DriveFile
 import com.cloudamp.music.models.SavedQueue
 import com.cloudamp.music.playback.ActivePlayback
 import com.cloudamp.music.playback.GDrivePlaybackManager
-import com.cloudamp.music.playback.JellyfinPlaybackManager
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.util.UUID
@@ -93,24 +91,7 @@ class SavedQueuesManager private constructor(context: Context) {
                     id = UUID.randomUUID().toString(),
                     name = name,
                     provider = SavedQueue.PROVIDER_GDRIVE,
-                    tracks = emptyList(),
                     driveFiles = files,
-                    currentIndex = active.getCurrentIndex(),
-                    currentPositionMs = positionMs ?: active.getCurrentPosition(),
-                    createdAt = System.currentTimeMillis(),
-                    lastPlayedAt = System.currentTimeMillis()
-                )
-            }
-            is JellyfinPlaybackManager -> {
-                val items = active.getQueue()
-                if (items.isEmpty()) return null
-
-                SavedQueue(
-                    id = UUID.randomUUID().toString(),
-                    name = name,
-                    provider = SavedQueue.PROVIDER_JELLYFIN,
-                    driveFiles = emptyList(),
-                    jellyfinItems = items,
                     currentIndex = active.getCurrentIndex(),
                     currentPositionMs = positionMs ?: active.getCurrentPosition(),
                     createdAt = System.currentTimeMillis(),

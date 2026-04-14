@@ -56,30 +56,6 @@
             android:exported="false"
             android:parentActivityName=".MainActivity" />
 
-        <!-- Jellyfin Home Activity -->
-        <activity
-            android:name=".JellyfinHomeActivity"
-            android:exported="false"
-            android:parentActivityName=".MainActivity" />
-
-        <!-- Jellyfin Library Activity -->
-        <activity
-            android:name=".JellyfinLibraryActivity"
-            android:exported="false"
-            android:parentActivityName=".MainActivity" />
-
-        <!-- Jellyfin Playlists Activity -->
-        <activity
-            android:name=".JellyfinPlaylistsActivity"
-            android:exported="false"
-            android:parentActivityName=".MainActivity" />
-
-        <!-- Jellyfin Recent Albums Activity -->
-        <activity
-            android:name=".JellyfinRecentAlbumsActivity"
-            android:exported="false"
-            android:parentActivityName=".MainActivity" />
-
         <!-- Saved Queues Activity -->
         <activity
             android:name=".SavedQueuesActivity"
@@ -95,13 +71,6 @@
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
-
-        <!-- Jellyfin Image Provider for Android Auto -->
-        <provider
-            android:name=".playback.JellyfinImageProvider"
-            android:authorities="com.cloudamp.music.jellyfinimages"
-            android:exported="true"
-            android:grantUriPermissions="true" />
 
         <!-- GDrive Image Provider for Android Auto -->
         <provider
