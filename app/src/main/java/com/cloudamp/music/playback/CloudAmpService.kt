@@ -311,10 +311,15 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             .into(object : CustomTarget<Bitmap>(300, 300) {
                 override fun onResourceReady(resource: Bitmap, transition: Transition<in Bitmap>?) {
                     currentAlbumArt = resource
-                    // Refresh notification with album art
-                    val state = mediaSession.controller.playbackState?.state
-                    val isPlaying = state == PlaybackStateCompat.STATE_PLAYING
-                    updateNotification(isPlaying)
+                    // Refresh notification with album art — may fail when service
+                    // is only bound (not started via startForegroundService)
+                    try {
+                        val state = mediaSession.controller.playbackState?.state
+                        val isPlaying = state == PlaybackStateCompat.STATE_PLAYING
+                        updateNotification(isPlaying)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Could not update notification with album art: ${e.message}")
+                    }
                 }
 
                 override fun onLoadCleared(placeholder: Drawable?) {
