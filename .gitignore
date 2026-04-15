@@ -32,3 +32,10 @@ local.properties
 
 # Log Files
 *.log
+
+# Node / pnpm / Turborepo
+node_modules/
+.turbo/
+dist/
+.env
+.env.local
