@@ -18,6 +18,7 @@ object MusicFilenameParser {
      * - "01 - Song Title.flac"
      * - "01. Song Title.mp3"
      * - "1-05 Song Title.ogg" (disc 1 track 5)
+     * - "Artist - Album - 03 - Song Title.mp3"
      * - "Song Title.mp3" (no number)
      */
     fun parseTrackFilename(filename: String): ParsedTrack {
@@ -37,6 +38,16 @@ object MusicFilenameParser {
         // Pattern: "01 - Title" or "01. Title" or "01 Title"
         val trackRegex = Regex("""^(\d{1,3})\s*[.\-]?\s+(.+)$""")
         trackRegex.find(nameWithoutExt)?.let { match ->
+            val track = match.groupValues[1].toIntOrNull()
+            val title = match.groupValues[2].trim()
+            if (title.isNotEmpty()) {
+                return ParsedTrack(trackNumber = track, title = title)
+            }
+        }
+
+        // Pattern: track number after prefix — "Artist - Album - 03 - Title"
+        val midTrackRegex = Regex("""^.+\s-\s(\d{1,3})\s*[.\-]\s*(.+)$""")
+        midTrackRegex.find(nameWithoutExt)?.let { match ->
             val track = match.groupValues[1].toIntOrNull()
             val title = match.groupValues[2].trim()
             if (title.isNotEmpty()) {
