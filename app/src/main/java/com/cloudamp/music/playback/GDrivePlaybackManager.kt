@@ -395,13 +395,43 @@ class GDrivePlaybackManager private constructor(
 
     /**
      * Record the current track's album as recently played (local + Drive history).
+     * Resolves metadata from cache, library cache, or filename parsing so that
+     * a history event is always recorded regardless of how playback was started.
      */
     private fun recordRecentlyPlayed() {
         if (currentIndex !in queue.indices) return
         val file = queue[currentIndex]
-        val meta = trackMetadataCache[file.id] ?: return
-        GDriveLibraryCache.getInstance(context).recordRecentlyPlayed(meta.albumId)
-        GDrivePlaybackHistory.getInstance(context).recordPlay(meta)
+
+        // Fast path: metadata cache hit
+        val cachedMeta = trackMetadataCache[file.id]
+        if (cachedMeta != null) {
+            GDriveLibraryCache.getInstance(context).recordRecentlyPlayed(cachedMeta.albumId)
+            GDrivePlaybackHistory.getInstance(context).recordPlay(cachedMeta)
+            return
+        }
+
+        // Try to resolve from library cache (also populates trackMetadataCache for next time)
+        val libraryCache = GDriveLibraryCache.getInstance(context)
+        val parentFolderId = file.parents?.firstOrNull()
+        if (parentFolderId != null) {
+            val found = libraryCache.getAlbumTracks(parentFolderId)?.find { it.file.id == file.id }
+            if (found != null) {
+                trackMetadataCache[file.id] = found
+                libraryCache.recordRecentlyPlayed(found.albumId)
+                GDrivePlaybackHistory.getInstance(context).recordPlay(found)
+                return
+            }
+        }
+
+        // Last resort: record with parsed filename so we never silently drop a play event
+        val parsed = MusicFilenameParser.parseTrackFilename(file.name)
+        GDrivePlaybackHistory.getInstance(context).recordPlay(
+            trackId = file.id,
+            trackName = parsed.title,
+            albumId = parentFolderId,
+            albumName = null,
+            artistName = null
+        )
     }
 
     private val playerListener = object : Player.Listener {
