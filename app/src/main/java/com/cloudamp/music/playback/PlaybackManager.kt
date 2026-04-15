@@ -8,7 +8,7 @@ import kotlinx.coroutines.*
 
 /**
  * Coordinates media session callbacks and dispatches transport controls
- * to the currently active playback provider (GDrive or Jellyfin).
+ * to the currently active playback provider (GDrive).
  */
 class PlaybackManager private constructor(
     private val context: Context
@@ -104,10 +104,6 @@ class PlaybackManager private constructor(
                         val fileId = mediaId.removePrefix("gdrive_file_")
                         val parentId = extras?.getString("gdrive_parent_id")
                         service?.playGDriveFromMediaId(fileId, parentId)
-                    } else if (mediaId.startsWith("jellyfin_track_")) {
-                        val trackId = mediaId.removePrefix("jellyfin_track_")
-                        val parentId = extras?.getString("jellyfin_parent_id")
-                        service?.playJellyfinFromMediaId(trackId, parentId)
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()

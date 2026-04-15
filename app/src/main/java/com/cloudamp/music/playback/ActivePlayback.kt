@@ -13,7 +13,6 @@ object ActivePlayback {
         val old = provider
         if (old !== newProvider) {
             if (old is GDrivePlaybackManager) old.deactivate()
-            if (old is JellyfinPlaybackManager) old.deactivate()
         }
         provider = newProvider
     }

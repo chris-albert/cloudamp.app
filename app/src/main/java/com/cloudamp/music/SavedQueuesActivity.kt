@@ -19,7 +19,6 @@ import com.cloudamp.music.cache.SavedQueuesManager
 import com.cloudamp.music.models.SavedQueue
 import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.GDrivePlaybackManager
-import com.cloudamp.music.playback.JellyfinPlaybackManager
 import com.cloudamp.music.ui.SavedQueuesAdapter
 import com.google.android.material.navigation.NavigationView
 import kotlinx.coroutines.*
@@ -101,10 +100,7 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
     }
 
     private fun loadQueue(queue: SavedQueue) {
-        when (queue.provider) {
-            SavedQueue.PROVIDER_GDRIVE -> loadGDriveQueue(queue)
-            SavedQueue.PROVIDER_JELLYFIN -> loadJellyfinQueue(queue)
-        }
+        loadGDriveQueue(queue)
     }
 
     private fun loadGDriveQueue(queue: SavedQueue) {
@@ -125,44 +121,6 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
             scope.launch {
                 delay(1500)
                 gdrive.seekTo(queue.currentPositionMs)
-            }
-        }
-
-        // Mark this queue as active and update last played time
-        savedQueuesManager.setActiveQueue(queue.id)
-        savedQueuesManager.updateQueuePosition(
-            queue.id, queue.currentIndex, queue.currentPositionMs
-        )
-
-        Toast.makeText(
-            this,
-            "Loading: ${queue.name} (${queue.getTrackCount()} tracks)",
-            Toast.LENGTH_SHORT
-        ).show()
-
-        // Open now playing
-        startActivity(Intent(this, NowPlayingActivity::class.java))
-    }
-
-    private fun loadJellyfinQueue(queue: SavedQueue) {
-        val items = queue.jellyfinItems.orEmpty()
-        if (items.isEmpty()) {
-            Toast.makeText(this, "Queue is empty", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        // Save position of the currently active queue before switching
-        savedQueuesManager.saveActiveQueuePosition()
-
-        val jellyfin = JellyfinPlaybackManager.getInstance(this)
-        CloudAmpService.ensureForeground(this)
-        jellyfin.playItems(items, queue.currentIndex)
-
-        // Seek to saved position within the track after buffering
-        if (queue.currentPositionMs > 0) {
-            scope.launch {
-                delay(1500)
-                jellyfin.seekTo(queue.currentPositionMs)
             }
         }
 
@@ -231,30 +189,6 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
             }
             R.id.nav_gdrive_home -> {
                 startActivity(Intent(this, GDriveHomeActivity::class.java))
-                finish()
-            }
-            R.id.nav_jellyfin_home -> {
-                startActivity(Intent(this, JellyfinHomeActivity::class.java))
-                finish()
-            }
-            R.id.nav_jellyfin_library -> {
-                startActivity(Intent(this, JellyfinLibraryActivity::class.java))
-                finish()
-            }
-            R.id.nav_jellyfin_playlists -> {
-                startActivity(Intent(this, JellyfinPlaylistsActivity::class.java))
-                finish()
-            }
-            R.id.nav_jellyfin_recent_played -> {
-                val intent = Intent(this, JellyfinRecentAlbumsActivity::class.java)
-                intent.putExtra(JellyfinRecentAlbumsActivity.EXTRA_MODE, JellyfinRecentAlbumsActivity.MODE_RECENTLY_PLAYED)
-                startActivity(intent)
-                finish()
-            }
-            R.id.nav_jellyfin_recent_added -> {
-                val intent = Intent(this, JellyfinRecentAlbumsActivity::class.java)
-                intent.putExtra(JellyfinRecentAlbumsActivity.EXTRA_MODE, JellyfinRecentAlbumsActivity.MODE_RECENTLY_ADDED)
-                startActivity(intent)
                 finish()
             }
             R.id.nav_saved_queues -> {

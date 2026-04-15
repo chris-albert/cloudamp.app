@@ -9,10 +9,10 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Redirect to Jellyfin Library as the default screen
-        val jellyfinIntent = Intent(this, JellyfinLibraryActivity::class.java)
-        jellyfinIntent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-        startActivity(jellyfinIntent)
+        // Redirect to GDrive Home as the default screen
+        val homeIntent = Intent(this, GDriveHomeActivity::class.java)
+        homeIntent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        startActivity(homeIntent)
         finish()
     }
 }

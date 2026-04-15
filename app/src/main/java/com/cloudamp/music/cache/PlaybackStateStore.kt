@@ -4,13 +4,10 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import com.cloudamp.music.api.DriveFile
-import com.cloudamp.music.api.JellyfinItem
 import com.cloudamp.music.models.SavedQueue
 import com.cloudamp.music.playback.ActivePlayback
 import com.cloudamp.music.playback.GDrivePlaybackManager
-import com.cloudamp.music.playback.JellyfinPlaybackManager
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 
 /**
  * Auto-persists the current playback state to disk so it can be restored
@@ -63,20 +60,6 @@ class PlaybackStateStore private constructor(context: Context) {
                 LastPlaybackState(
                     provider = SavedQueue.PROVIDER_GDRIVE,
                     driveFiles = files,
-                    jellyfinItems = null,
-                    currentIndex = active.getCurrentIndex(),
-                    currentPositionMs = active.getCurrentPosition(),
-                    wasPlaying = active.isPlaying(),
-                    savedAt = now
-                )
-            }
-            is JellyfinPlaybackManager -> {
-                val items = active.getQueue()
-                if (items.isEmpty()) return
-                LastPlaybackState(
-                    provider = SavedQueue.PROVIDER_JELLYFIN,
-                    driveFiles = emptyList(),
-                    jellyfinItems = items,
                     currentIndex = active.getCurrentIndex(),
                     currentPositionMs = active.getCurrentPosition(),
                     wasPlaying = active.isPlaying(),
@@ -134,7 +117,6 @@ class PlaybackStateStore private constructor(context: Context) {
 data class LastPlaybackState(
     val provider: String,
     val driveFiles: List<DriveFile>,
-    val jellyfinItems: List<JellyfinItem>?,
     val currentIndex: Int,
     val currentPositionMs: Long,
     val wasPlaying: Boolean,
