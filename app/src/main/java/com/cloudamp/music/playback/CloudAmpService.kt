@@ -34,6 +34,7 @@ import com.cloudamp.music.cache.GDrivePlaybackHistory
 import com.cloudamp.music.cache.PlaybackStateStore
 import com.cloudamp.music.cache.SavedQueuesManager
 import com.cloudamp.music.models.Track
+import com.cloudamp.music.util.MusicFilenameParser
 import android.util.Log
 import kotlinx.coroutines.*
 
@@ -590,10 +591,10 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
             // Add audio files as playable items
             for (file in audioFiles) {
-                val nameWithoutExtension = file.name.substringBeforeLast('.')
+                val parsed = MusicFilenameParser.parseTrackFilename(file.name)
                 items.add(createGDrivePlayableItem(
                     "gdrive_file_${file.id}",
-                    nameWithoutExtension,
+                    parsed.title,
                     "${file.getFileExtension()} · ${file.getFileSizeFormatted()}",
                     folderId
                 ))

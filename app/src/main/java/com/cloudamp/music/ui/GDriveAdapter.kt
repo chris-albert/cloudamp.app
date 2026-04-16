@@ -7,6 +7,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.cloudamp.music.R
 import com.cloudamp.music.api.DriveFile
+import com.cloudamp.music.util.MusicFilenameParser
 
 sealed class GDriveItem {
     data class FolderItem(val file: DriveFile) : GDriveItem()
@@ -149,7 +150,7 @@ class GDriveAdapter(
         private val typeTextView: TextView = itemView.findViewById(R.id.audioTypeTextView)
 
         fun bind(item: GDriveItem.AudioItem) {
-            nameTextView.text = item.file.name
+            nameTextView.text = MusicFilenameParser.parseTrackFilename(item.file.name).title
             sizeTextView.text = item.file.getFileSizeFormatted()
             typeTextView.text = item.file.getFileExtension()
 

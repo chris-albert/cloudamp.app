@@ -27,6 +27,7 @@ import com.cloudamp.music.auth.GoogleDriveAuthManager
 import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.ui.GDriveAdapter
+import com.cloudamp.music.util.MusicFilenameParser
 import com.google.android.material.navigation.NavigationView
 import kotlinx.coroutines.*
 
@@ -250,7 +251,7 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
 
         Toast.makeText(
             this,
-            "Playing: ${file.name.substringBeforeLast('.')}",
+            "Playing: ${MusicFilenameParser.parseTrackFilename(file.name).title}",
             Toast.LENGTH_SHORT
         ).show()
 
