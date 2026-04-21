@@ -37,7 +37,7 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
         private const val KEY_DRIVE_FOLDER_ID = "history_drive_folder_id"
         private const val KEY_LAST_UPLOAD = "last_upload_timestamp"
         private const val HISTORY_FILENAME = "playback_history.ndjson"
-        private const val DRIVE_FOLDER_NAME = "CloudAmp"
+        private const val DRIVE_FOLDER_NAME = ".cloudamp"
         private const val UPLOAD_THROTTLE_MS = 5 * 60 * 1000L // 5 minutes
 
         @Volatile
@@ -61,13 +61,33 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
      * Record a track play event. Appends locally and triggers async Drive upload.
      */
     fun recordPlay(track: GDriveTrack) {
+        recordPlay(
+            trackId = track.file.id,
+            trackName = track.trackName,
+            albumId = track.albumId,
+            albumName = track.albumName,
+            artistName = track.artistName
+        )
+    }
+
+    /**
+     * Record a track play event with explicit fields (for when full GDriveTrack metadata
+     * is not available, e.g. playing from saved queue or raw file list).
+     */
+    fun recordPlay(
+        trackId: String,
+        trackName: String,
+        albumId: String?,
+        albumName: String?,
+        artistName: String?
+    ) {
         val line = JSONObject().apply {
             put("type", "play")
-            put("trackId", track.file.id)
-            put("trackName", track.trackName)
-            put("albumId", track.albumId)
-            put("albumName", track.albumName)
-            put("artistName", track.artistName)
+            put("trackId", trackId)
+            put("trackName", trackName)
+            put("albumId", albumId ?: "")
+            put("albumName", albumName ?: "")
+            put("artistName", artistName ?: "")
             put("playedAt", dateFormat.format(Date()))
         }.toString()
 
@@ -157,7 +177,7 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
         if (!client.hasAccessToken()) return null
 
         try {
-            // Search for existing CloudAmp folder in root
+            // Search for existing .cloudamp folder in root
             val searchResponse = client.api.listFiles(
                 query = "name = '$DRIVE_FOLDER_NAME' and mimeType = 'application/vnd.google-apps.folder' and 'root' in parents and trashed = false",
                 fields = "files(id,name)",
