@@ -7,7 +7,7 @@ export default defineConfig({
   base: "/cloudamp.app/",
   plugins: [react(), tailwindcss()],
   server: {
-    port: 5173,
+    port: 5050,
     strictPort: true,
   },
   resolve: {
