@@ -11,6 +11,7 @@ import { SettingsPage } from "@/routes/settings";
 import { CallbackPage } from "@/routes/callback";
 import { DashboardPage } from "@/routes/dashboard";
 import { LibraryPage } from "@/routes/library";
+import { HistoryPage } from "@/routes/history";
 
 // ── Root layout ───────────────────────────────────────────────────────
 
@@ -29,6 +30,7 @@ function RootLayout() {
             <nav className="flex items-center gap-1">
               <NavLink to="/">Dashboard</NavLink>
               <NavLink to="/library">Library</NavLink>
+              <NavLink to="/history">History</NavLink>
               <NavLink to="/settings">Settings</NavLink>
             </nav>
           )}
@@ -86,6 +88,12 @@ const callbackRoute = createRoute({
   component: CallbackPage,
 });
 
+const historyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/history",
+  component: HistoryPage,
+});
+
 const libraryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/library",
@@ -101,6 +109,7 @@ export const routeTree = rootRoute.addChildren([
   settingsRoute,
   callbackRoute,
   libraryRoute,
+  historyRoute,
 ]);
 
 export { rootRoute };

@@ -201,6 +201,16 @@ export async function fetchFileBlobUrl(fileId: string): Promise<string> {
   return URL.createObjectURL(blob);
 }
 
+/**
+ * Fetch a file's content as text.
+ */
+export async function fetchFileText(fileId: string): Promise<string> {
+  const url = `${BASE_URL}/files/${encodeURIComponent(fileId)}?alt=media`;
+  const res = await fetchWithAuth(url);
+  if (!res.ok) throw new Error(`Failed to fetch file: ${res.status}`);
+  return res.text();
+}
+
 export async function getAbout(): Promise<DriveAbout> {
   const url = `${BASE_URL}/about?fields=user(displayName,emailAddress)`;
   const res = await fetchWithAuth(url);
