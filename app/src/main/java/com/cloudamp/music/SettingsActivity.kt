@@ -6,13 +6,17 @@ import android.os.Bundle
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.cloudamp.music.api.GoogleDriveApiClient
 import com.cloudamp.music.auth.GoogleDriveAuthManager
 import com.cloudamp.music.cache.GDriveLibraryCache
+import com.cloudamp.music.cache.GDriveLibraryScanner
+import com.cloudamp.music.cache.LibraryScanManager
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collect
 
 class SettingsActivity : AppCompatActivity() {
 
@@ -31,6 +35,9 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var gdriveBrowseRootButton: Button
     private lateinit var gdriveLastLoadedText: TextView
     private lateinit var reloadGdriveLibraryButton: Button
+    private lateinit var gdriveScanStatusText: TextView
+    private lateinit var gdriveScanProgressBar: ProgressBar
+    private lateinit var gdriveLibraryStatsText: TextView
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
@@ -172,6 +179,9 @@ class SettingsActivity : AppCompatActivity() {
         gdriveBrowseRootButton = findViewById(R.id.gdriveBrowseRootButton)
         gdriveLastLoadedText = findViewById(R.id.gdriveLastLoadedText)
         reloadGdriveLibraryButton = findViewById(R.id.reloadGdriveLibraryButton)
+        gdriveScanStatusText = findViewById(R.id.gdriveScanStatusText)
+        gdriveScanProgressBar = findViewById(R.id.gdriveScanProgressBar)
+        gdriveLibraryStatsText = findViewById(R.id.gdriveLibraryStatsText)
 
         updateGDriveLibraryDisplay()
 
@@ -180,11 +190,89 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         reloadGdriveLibraryButton.setOnClickListener {
+            if (LibraryScanManager.isScanning) {
+                Toast.makeText(this, "Scan already in progress", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            // Notify the library activity so it drops its current view; the
+            // scan itself runs in LibraryScanManager (app-scoped) and is
+            // not bound to this Settings activity's lifecycle.
             onGDriveLibraryReloadRequested?.invoke()
-            Toast.makeText(this, "GDrive library will reload", Toast.LENGTH_SHORT).show()
-            finish()
+            LibraryScanManager.startScan(this, clearFirst = true)
+        }
+
+        observeScanState()
+    }
+
+    private fun observeScanState() {
+        scope.launch {
+            LibraryScanManager.state.collect { state ->
+                when (state) {
+                    is LibraryScanManager.State.Idle -> {
+                        gdriveScanStatusText.visibility = View.GONE
+                        gdriveScanProgressBar.visibility = View.GONE
+                        reloadGdriveLibraryButton.isEnabled = true
+                        reloadGdriveLibraryButton.text = "RELOAD GDRIVE LIBRARY"
+                        updateGDriveLibraryDisplay()
+                    }
+                    is LibraryScanManager.State.Active -> {
+                        gdriveScanStatusText.visibility = View.VISIBLE
+                        gdriveScanStatusText.text = formatScanStatus(state.progress)
+
+                        val total = state.progress.totalAlbumArt
+                        if (total > 0) {
+                            gdriveScanProgressBar.visibility = View.VISIBLE
+                            gdriveScanProgressBar.max = total
+                            gdriveScanProgressBar.progress = state.progress.albumArtFetched
+                        } else {
+                            gdriveScanProgressBar.visibility = View.GONE
+                        }
+
+                        reloadGdriveLibraryButton.isEnabled = false
+                        reloadGdriveLibraryButton.text = "SCAN IN PROGRESS..."
+
+                        // Once metadata is persisted, stats are known and we
+                        // can show artist/album/track totals plus a live
+                        // cached-cover count from the prefetch progress.
+                        if (state.metadataReady) {
+                            renderLibraryStats(liveCachedCovers = state.progress.albumArtFetched)
+                        }
+                    }
+                    is LibraryScanManager.State.Error -> {
+                        gdriveScanStatusText.visibility = View.VISIBLE
+                        gdriveScanStatusText.text = "Error: ${state.message}"
+                        gdriveScanProgressBar.visibility = View.GONE
+                        reloadGdriveLibraryButton.isEnabled = true
+                        reloadGdriveLibraryButton.text = "RELOAD GDRIVE LIBRARY"
+                    }
+                }
+            }
         }
     }
+
+    private fun renderLibraryStats(liveCachedCovers: Int? = null) {
+        val stats = gdriveLibraryCache.getStats()
+        if (stats == null) {
+            gdriveLibraryStatsText.visibility = View.GONE
+            return
+        }
+        val cached = liveCachedCovers ?: stats.cachedCovers
+        gdriveLibraryStatsText.visibility = View.VISIBLE
+        gdriveLibraryStatsText.text =
+            "Library: ${stats.artists} artists · ${stats.albums} albums · " +
+                "${stats.tracks} tracks · $cached/${stats.totalCovers} covers cached"
+    }
+
+    private fun formatScanStatus(p: GDriveLibraryScanner.ScanProgress): String =
+        buildString {
+            append(p.message)
+            if (p.artists > 0) {
+                append("\n${p.artists} artist${if (p.artists != 1) "s" else ""} parsed")
+            }
+            if (p.totalAlbumArt > 0) {
+                append(" · ${p.albumArtFetched}/${p.totalAlbumArt} covers cached")
+            }
+        }
 
     private fun updateGDriveLibraryDisplay() {
         val rootName = gdriveLibraryCache.getRootFolderName()
@@ -200,6 +288,8 @@ class SettingsActivity : AppCompatActivity() {
         } else {
             "Last loaded: Never"
         }
+
+        renderLibraryStats()
     }
 
     private fun showFolderPicker() {

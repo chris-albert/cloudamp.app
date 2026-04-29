@@ -29,12 +29,14 @@ import com.cloudamp.music.api.GoogleDriveApiClient
 import com.cloudamp.music.auth.GoogleDriveAuthManager
 import com.cloudamp.music.cache.GDriveLibraryCache
 import com.cloudamp.music.cache.GDriveLibraryScanner
+import com.cloudamp.music.cache.LibraryScanManager
 import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.ui.AlphabetSidebarView
 import com.cloudamp.music.ui.GDriveStructuredLibraryAdapter
 import com.google.android.material.navigation.NavigationView
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collect
 
 class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelectedListener {
 
@@ -76,6 +78,7 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
         setupRecyclerView()
         setupEmptyState()
         setupSearchBar()
+        observeScanState()
     }
 
     private fun setupDrawer() {
@@ -165,6 +168,13 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
     }
 
     private fun loadMyLibrary() {
+        // If a scan is already running, the state collector below will drive
+        // the UI; just make sure we render whatever is in cache so far.
+        if (LibraryScanManager.isScanning) {
+            showCachedArtistsIfAny()
+            return
+        }
+
         if (libraryCache.hasFullCache()) {
             val cachedArtists = libraryCache.getArtists()
             if (cachedArtists != null && cachedArtists.isNotEmpty()) {
@@ -177,66 +187,88 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
             }
         }
 
-        buildFullCache()
+        // No cache yet — kick off the app-scoped scan job.
+        LibraryScanManager.startScan(this, clearFirst = false)
     }
 
-    private fun buildFullCache() {
-        showLoading(true, "Scanning library...")
-        pathTextView.text = "GDRIVE MUSIC"
+    private fun showCachedArtistsIfAny() {
+        val cached = libraryCache.getArtists().orEmpty()
+        if (cached.isNotEmpty()) {
+            adapter.setArtists(cached)
+            showAlphabetSidebar(true)
+            hasLoadedContent = true
+            preloadCachedAlbums()
+        }
+    }
 
+    private fun observeScanState() {
         scope.launch {
-            try {
-                val scanner = GDriveLibraryScanner(driveClient.api, libraryCache)
-                scanner.onProgress = { message ->
-                    scope.launch(Dispatchers.Main) {
-                        loadingTextView.text = message
-                        pathTextView.text = "GDRIVE MUSIC / $message"
+            LibraryScanManager.state.collect { state ->
+                when (state) {
+                    is LibraryScanManager.State.Idle -> {
+                        showLoading(false)
+                        pathTextView.text = "GDRIVE MUSIC"
+                        // Scan just finished — refresh adapter from cache
+                        // in case metadata changed while we weren't visible.
+                        if (!hasLoadedContent) {
+                            showCachedArtistsIfAny()
+                            if (hasLoadedContent) scrollToRandomArtist()
+                        }
+                    }
+                    is LibraryScanManager.State.Active -> {
+                        val text = formatScanProgress(state.progress)
+                        if (!state.metadataReady) {
+                            // Fresh scan in progress — drop any stale view
+                            // so the loading overlay is what the user sees.
+                            if (hasLoadedContent) {
+                                hasLoadedContent = false
+                                adapter.setArtists(emptyList())
+                                showAlphabetSidebar(false)
+                            }
+                            showLoading(true, text)
+                            pathTextView.text = "GDRIVE MUSIC / $text"
+                        } else {
+                            // Metadata is in cache — show library, keep
+                            // progress in the breadcrumb while art prefetches.
+                            if (!hasLoadedContent) {
+                                showCachedArtistsIfAny()
+                                if (hasLoadedContent) scrollToRandomArtist()
+                            }
+                            showLoading(false)
+                            pathTextView.text = "GDRIVE MUSIC / $text"
+                        }
+                    }
+                    is LibraryScanManager.State.Error -> {
+                        showLoading(false)
+                        pathTextView.text = "GDRIVE MUSIC"
+                        if (!hasLoadedContent) {
+                            if (libraryCache.getRootFolderId() == null) {
+                                showEmptyState("Configure GDrive Music Root\nFolder in Settings")
+                            } else {
+                                Toast.makeText(
+                                    this@GDriveStructuredLibraryActivity,
+                                    "Error scanning library: ${state.message}",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                        LibraryScanManager.acknowledgeError()
                     }
                 }
-
-                val result = withContext(Dispatchers.IO) {
-                    scanner.scan()
-                }
-
-                if (result == null) {
-                    showEmptyState("Configure GDrive Music Root\nFolder in Settings")
-                    return@launch
-                }
-
-                // Save to cache
-                withContext(Dispatchers.IO) {
-                    scanner.saveToCache(result)
-                }
-
-                adapter.setArtists(result.artists)
-                hasLoadedContent = true
-                showAlphabetSidebar(result.artists.isNotEmpty())
-                showLoading(false)
-                scrollToRandomArtist()
-
-                // Preload albums into adapter
-                for ((artistId, albums) in result.albumsByArtist) {
-                    adapter.preloadArtistAlbums(artistId, albums)
-                }
-
-                if (result.artists.isEmpty()) {
-                    showEmptyState("No music found in the configured folder")
-                    return@launch
-                }
-
-                pathTextView.text = "GDRIVE MUSIC"
-
-            } catch (e: Exception) {
-                e.printStackTrace()
-                if (!hasLoadedContent) {
-                    Toast.makeText(this@GDriveStructuredLibraryActivity, "Error scanning library: ${e.message}", Toast.LENGTH_LONG).show()
-                }
-            } finally {
-                showLoading(false)
-                pathTextView.text = "GDRIVE MUSIC"
             }
         }
     }
+
+    private fun formatScanProgress(p: GDriveLibraryScanner.ScanProgress): String =
+        buildString {
+            append(p.message)
+            if (p.artists > 0) {
+                append(" · ${p.artists} artist${if (p.artists != 1) "s" else ""}")
+            }
+            if (p.totalAlbumArt > 0) {
+                append(" · art ${p.albumArtFetched}/${p.totalAlbumArt}")
+            }
+        }
 
     private fun preloadCachedAlbums() {
         val artists = libraryCache.getArtists() ?: return
@@ -249,11 +281,10 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
     }
 
     fun reloadLibrary() {
-        libraryCache.clearCache()
         hasLoadedContent = false
         adapter.setArtists(emptyList())
         showAlphabetSidebar(false)
-        buildFullCache()
+        LibraryScanManager.startScan(this, clearFirst = true)
     }
 
     private fun showEmptyState(message: String) {
