@@ -9,6 +9,7 @@ import com.cloudamp.music.api.GDriveTrack
 import com.cloudamp.music.api.GoogleDriveApiClient
 import com.cloudamp.music.cache.GDriveLibraryCache
 import com.cloudamp.music.cache.GDrivePlaybackHistory
+import com.cloudamp.music.cache.MediaCache
 import com.cloudamp.music.models.Album
 import com.cloudamp.music.models.Artist
 import com.cloudamp.music.models.Image
@@ -101,7 +102,10 @@ class GDrivePlaybackManager private constructor(
             val hasToken = driveClient.hasAccessToken()
             Log.d(TAG, "Creating DataSource.Factory, hasAccessToken=$hasToken")
             val streamingClient = driveClient.getStreamingHttpClient()
-            dataSourceFactory = OkHttpDataSource.Factory(streamingClient)
+            val upstream = OkHttpDataSource.Factory(streamingClient)
+            // Wrap in a CacheDataSource so streamed bytes persist to disk and
+            // future plays of the same Drive file ID are served locally.
+            dataSourceFactory = MediaCache.getInstance(context).cacheDataSourceFactory(upstream)
         }
         return dataSourceFactory!!
     }
@@ -112,6 +116,17 @@ class GDrivePlaybackManager private constructor(
     private fun buildStreamUri(fileId: String): Uri {
         return Uri.parse("https://www.googleapis.com/drive/v3/files/$fileId?alt=media")
     }
+
+    /**
+     * Build a MediaItem whose cache key is the Drive file ID. Pinning the
+     * key makes cache hits independent of the URL (and any query string
+     * tweaks we might make later).
+     */
+    private fun buildMediaItem(file: DriveFile, uri: Uri): MediaItem =
+        MediaItem.Builder()
+            .setUri(uri)
+            .setCustomCacheKey(file.id)
+            .build()
 
     /**
      * Play a list of Drive audio files starting from the given index.
@@ -141,10 +156,12 @@ class GDrivePlaybackManager private constructor(
         player.stop()
         player.clearMediaItems()
 
+        val mediaCache = MediaCache.getInstance(context)
         files.forEach { file ->
             val uri = buildStreamUri(file.id)
             Log.d(TAG, "Adding media item: ${file.name} -> $uri")
-            player.addMediaItem(MediaItem.fromUri(uri))
+            player.addMediaItem(buildMediaItem(file, uri))
+            mediaCache.registerTrack(file.id, file.name, file.size?.toLongOrNull())
         }
 
         player.seekTo(startIndex, 0)
@@ -180,8 +197,10 @@ class GDrivePlaybackManager private constructor(
         player.stop()
         player.clearMediaItems()
 
+        val mediaCache = MediaCache.getInstance(context)
         files.forEach { file ->
-            player.addMediaItem(MediaItem.fromUri(buildStreamUri(file.id)))
+            player.addMediaItem(buildMediaItem(file, buildStreamUri(file.id)))
+            mediaCache.registerTrack(file.id, file.name, file.size?.toLongOrNull())
         }
 
         player.playWhenReady = false

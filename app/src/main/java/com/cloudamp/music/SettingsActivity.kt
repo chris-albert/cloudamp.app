@@ -3,9 +3,11 @@ package com.cloudamp.music
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.view.Gravity
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -15,6 +17,7 @@ import com.cloudamp.music.auth.GoogleDriveAuthManager
 import com.cloudamp.music.cache.GDriveLibraryCache
 import com.cloudamp.music.cache.GDriveLibraryScanner
 import com.cloudamp.music.cache.LibraryScanManager
+import com.cloudamp.music.cache.MediaCache
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collect
 
@@ -39,6 +42,15 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var gdriveScanProgressBar: ProgressBar
     private lateinit var gdriveLibraryStatsText: TextView
 
+    // Streaming cache fields
+    private lateinit var mediaCacheUsageText: TextView
+    private lateinit var mediaCacheCountText: TextView
+    private lateinit var mediaCacheLimitText: TextView
+    private lateinit var mediaCacheProgressBar: ProgressBar
+    private lateinit var mediaCacheTracksContainer: LinearLayout
+    private lateinit var clearMediaCacheButton: Button
+    private lateinit var changeMediaCacheLimitButton: Button
+
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     companion object {
@@ -59,6 +71,9 @@ class SettingsActivity : AppCompatActivity() {
 
         // GDrive Library views
         setupGDriveLibrary()
+
+        // Streaming cache views
+        setupMediaCache()
     }
 
     private fun setupGoogleDrive() {
@@ -483,6 +498,136 @@ class SettingsActivity : AppCompatActivity() {
                 Toast.makeText(this@SettingsActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    private fun setupMediaCache() {
+        mediaCacheUsageText = findViewById(R.id.mediaCacheUsageText)
+        mediaCacheCountText = findViewById(R.id.mediaCacheCountText)
+        mediaCacheLimitText = findViewById(R.id.mediaCacheLimitText)
+        mediaCacheProgressBar = findViewById(R.id.mediaCacheProgressBar)
+        mediaCacheTracksContainer = findViewById(R.id.mediaCacheTracksContainer)
+        clearMediaCacheButton = findViewById(R.id.clearMediaCacheButton)
+        changeMediaCacheLimitButton = findViewById(R.id.changeMediaCacheLimitButton)
+
+        changeMediaCacheLimitButton.setOnClickListener { showMediaCacheLimitPicker() }
+
+        clearMediaCacheButton.setOnClickListener {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Clear streaming cache?")
+                .setMessage("Cached audio for all queued tracks will be deleted. They'll re-download on next play.")
+                .setPositiveButton("CLEAR") { _, _ ->
+                    scope.launch {
+                        withContext(Dispatchers.IO) { MediaCache.getInstance(this@SettingsActivity).clear() }
+                        refreshMediaCacheDisplay()
+                        Toast.makeText(this@SettingsActivity, "Streaming cache cleared", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+
+        refreshMediaCacheDisplay()
+    }
+
+    private fun refreshMediaCacheDisplay() {
+        scope.launch {
+            val stats = withContext(Dispatchers.IO) {
+                MediaCache.getInstance(this@SettingsActivity).stats()
+            }
+
+            mediaCacheUsageText.text =
+                "${MediaCache.formatBytes(stats.totalBytes)} / ${MediaCache.formatBytes(stats.maxBytes)}"
+
+            val pct = if (stats.maxBytes > 0) {
+                ((stats.totalBytes.toDouble() / stats.maxBytes) * 1000).toInt().coerceIn(0, 1000)
+            } else 0
+            mediaCacheProgressBar.progress = pct
+
+            mediaCacheCountText.text = when (stats.tracks.size) {
+                0 -> "No tracks cached"
+                1 -> "1 track cached"
+                else -> "${stats.tracks.size} tracks cached"
+            }
+
+            val cache = MediaCache.getInstance(this@SettingsActivity)
+            val limitLabel = MediaCache.SIZE_PRESETS.firstOrNull { it.first == cache.maxBytes }?.second
+                ?: MediaCache.formatBytes(cache.maxBytes)
+            mediaCacheLimitText.text = if (cache.isRestartRequired()) {
+                "Max size: $limitLabel  (restart to apply)"
+            } else {
+                "Max size: $limitLabel"
+            }
+
+            mediaCacheTracksContainer.removeAllViews()
+            for (track in stats.tracks) {
+                mediaCacheTracksContainer.addView(buildCachedTrackRow(track))
+            }
+        }
+    }
+
+    private fun buildCachedTrackRow(track: MediaCache.CachedTrack): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = 4 }
+        }
+        val name = TextView(this).apply {
+            text = track.name
+            setTextColor(getColor(R.color.winamp_text))
+            textSize = 12f
+            typeface = android.graphics.Typeface.MONOSPACE
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            isSingleLine = true
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val sizeLabel = if (track.totalBytes != null && track.totalBytes > track.cachedBytes) {
+            "${MediaCache.formatBytes(track.cachedBytes)} / ${MediaCache.formatBytes(track.totalBytes)}"
+        } else {
+            MediaCache.formatBytes(track.cachedBytes)
+        }
+        val size = TextView(this).apply {
+            text = sizeLabel
+            setTextColor(getColor(R.color.winamp_display_text))
+            textSize = 12f
+            typeface = android.graphics.Typeface.MONOSPACE
+            setPadding(16, 0, 0, 0)
+        }
+        row.addView(name)
+        row.addView(size)
+        return row
+    }
+
+    private fun showMediaCacheLimitPicker() {
+        val cache = MediaCache.getInstance(this)
+        val current = cache.maxBytes
+        val labels = MediaCache.SIZE_PRESETS.map { (bytes, label) ->
+            if (bytes == current) "$label  ✓" else label
+        }.toTypedArray()
+
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Max streaming cache size")
+            .setItems(labels) { _, which ->
+                val (bytes, label) = MediaCache.SIZE_PRESETS[which]
+                if (bytes == current) return@setItems
+                cache.setMaxBytes(bytes)
+                refreshMediaCacheDisplay()
+                val msg = if (cache.isRestartRequired()) {
+                    "Max size set to $label. Restart the app to apply."
+                } else {
+                    "Max size set to $label."
+                }
+                Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::mediaCacheUsageText.isInitialized) refreshMediaCacheDisplay()
     }
 
     override fun onSupportNavigateUp(): Boolean {
