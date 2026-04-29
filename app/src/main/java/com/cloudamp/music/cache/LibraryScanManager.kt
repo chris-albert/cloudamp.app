@@ -111,10 +111,15 @@ object LibraryScanManager {
                 // this, the UI sits on "Scan complete" with no totalArt for
                 // the seconds it takes to flush thousands of cached entries.
                 val totalArt = countReferencedCovers(result)
+                val totalAlbums = result.albumsByArtist.values.sumOf { it.size }
+                val totalTracks = result.tracksByAlbum.values.sumOf { it.size }
                 _state.value = State.Active(
                     GDriveLibraryScanner.ScanProgress(
                         message = "Saving library...",
                         artists = result.artists.size,
+                        totalArtists = result.artists.size,
+                        albums = totalAlbums,
+                        tracks = totalTracks,
                         albumArtFetched = 0,
                         totalAlbumArt = totalArt
                     ),

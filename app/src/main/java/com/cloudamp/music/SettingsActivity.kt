@@ -267,11 +267,20 @@ class SettingsActivity : AppCompatActivity() {
     private fun formatScanStatus(p: GDriveLibraryScanner.ScanProgress): String =
         buildString {
             append(p.message)
-            if (p.artists > 0) {
-                append("\n${p.artists} artist${if (p.artists != 1) "s" else ""} parsed")
+            val artistsLine = when {
+                p.totalArtists > 0 && p.artists < p.totalArtists ->
+                    "${p.artists}/${p.totalArtists} artists"
+                p.artists > 0 ->
+                    "${p.artists} artist${if (p.artists != 1) "s" else ""}"
+                else -> null
+            }
+            if (artistsLine != null) {
+                append("\n$artistsLine")
+                if (p.albums > 0) append(" · ${p.albums} albums")
+                if (p.tracks > 0) append(" · ${p.tracks} tracks")
             }
             if (p.totalAlbumArt > 0) {
-                append(" · ${p.albumArtFetched}/${p.totalAlbumArt} covers cached")
+                append("\n${p.albumArtFetched}/${p.totalAlbumArt} covers cached")
             }
         }
 

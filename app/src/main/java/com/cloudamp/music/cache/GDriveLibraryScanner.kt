@@ -48,13 +48,19 @@ class GDriveLibraryScanner(
     /**
      * Snapshot of scan/prefetch progress reported via [onProgress].
      * @param message human-readable phase description
-     * @param artists number of artists discovered (0 until tree is built)
+     * @param artists number of artists discovered / processed so far
+     * @param totalArtists total artists to process (0 until known)
+     * @param albums albums encountered so far
+     * @param tracks tracks encountered so far
      * @param albumArtFetched covers downloaded so far
      * @param totalAlbumArt total covers to download (0 until prefetch starts)
      */
     data class ScanProgress(
         val message: String,
         val artists: Int = 0,
+        val totalArtists: Int = 0,
+        val albums: Int = 0,
+        val tracks: Int = 0,
         val albumArtFetched: Int = 0,
         val totalAlbumArt: Int = 0
     )
@@ -62,9 +68,22 @@ class GDriveLibraryScanner(
     var onProgress: ((ScanProgress) -> Unit)? = null
 
     private var artistsCount: Int = 0
+    private var totalArtistsCount: Int = 0
+    private var albumsCount: Int = 0
+    private var tracksCount: Int = 0
 
     private fun report(message: String, artFetched: Int = 0, totalArt: Int = 0) {
-        onProgress?.invoke(ScanProgress(message, artistsCount, artFetched, totalArt))
+        onProgress?.invoke(
+            ScanProgress(
+                message = message,
+                artists = artistsCount,
+                totalArtists = totalArtistsCount,
+                albums = albumsCount,
+                tracks = tracksCount,
+                albumArtFetched = artFetched,
+                totalAlbumArt = totalArt
+            )
+        )
     }
 
     /**
@@ -185,8 +204,6 @@ class GDriveLibraryScanner(
 
         // ── Build structured data ─────────────────────────────────────────
 
-        report("Organizing library...")
-
         // Group album folders by artist
         val albumFoldersByArtist = albumFolders.groupBy { folder ->
             folder.parents?.firstOrNull { it in artistIds } ?: ""
@@ -196,6 +213,14 @@ class GDriveLibraryScanner(
         val audioFilesByAlbum = musicAudioFiles.groupBy { file ->
             file.parents?.firstOrNull { it in albumIds } ?: ""
         }.filterKeys { it.isNotEmpty() }
+
+        // Set totals so the UI can render "X/Y artists" from the first tick.
+        // artistsCount and the running album/track counts climb as we iterate.
+        totalArtistsCount = artistFolders.size
+        artistsCount = 0
+        albumsCount = 0
+        tracksCount = 0
+        report("Organizing library...")
 
         val artists = mutableListOf<GDriveArtist>()
         val albumsByArtistMap = mutableMapOf<String, List<GDriveAlbum>>()
@@ -238,6 +263,7 @@ class GDriveLibraryScanner(
                 }.sortedWith(compareBy({ it.discNumber ?: 0 }, { it.trackNumber ?: 0 }))
 
                 tracksByAlbumMap[albumFolder.id] = tracks
+                tracksCount += tracks.size
             }
 
             val sortedAlbums = albums.sortedWith(compareBy({ it.year ?: Int.MAX_VALUE }, { it.name.lowercase() }))
@@ -249,6 +275,10 @@ class GDriveLibraryScanner(
                 imageFileId = coverByArtist[artistFolder.id]
             ))
             albumsByArtistMap[artistFolder.id] = sortedAlbums
+
+            artistsCount++
+            albumsCount += sortedAlbums.size
+            report("Organizing library...")
         }
 
         val sortedArtists = artists.sortedBy { it.name.lowercase() }
@@ -277,6 +307,9 @@ class GDriveLibraryScanner(
      */
     suspend fun prefetchAlbumArt(context: Context, result: ScanResult) {
         artistsCount = result.artists.size
+        totalArtistsCount = result.artists.size
+        albumsCount = result.albumsByArtist.values.sumOf { it.size }
+        tracksCount = result.tracksByAlbum.values.sumOf { it.size }
 
         val referencedIds = buildSet {
             for (artist in result.artists) artist.imageFileId?.let { add(it) }
