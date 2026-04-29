@@ -1,44 +1,12 @@
 import { useSyncExternalStore, useState, useEffect, useCallback, useRef } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { getScanState, subscribeScanState, removeArtistFromState, removeAlbumFromState, flattenSubfolderInState, removeSubfolderFromState, renameFileInState, removeTrackFromState, renameAlbumFolderInState, renameArtistFolderInState, setCoverInState } from "@/lib/scan-store";
-import { formatFileSize, trashFile, moveFile, renameFile, uploadFile, fetchFileBlobUrl } from "@/lib/drive-api";
+import { formatFileSize, trashFile, moveFile, renameFile, uploadFile } from "@/lib/drive-api";
 import type { Artist, Album, Track, AlbumSubfolder } from "@/lib/library-scanner";
 import { parseTrackFilename, buildCanonicalFilename, isCanonicalAlbumFolder } from "@/lib/filename-parser";
 import type { LibraryIssue } from "@/lib/library-validator";
 import { searchAlbumYear, extractYear, searchCoverArt, fetchImageBlob, type MusicBrainzRelease, type CoverArtResult } from "@/lib/musicbrainz";
-
-/** Cache of fileId → blob URL so we don't re-fetch the same image. */
-const blobUrlCache = new Map<string, string>();
-
-function useDriveImage(fileId: string | null): string | null {
-  const [url, setUrl] = useState<string | null>(() =>
-    fileId ? blobUrlCache.get(fileId) ?? null : null,
-  );
-
-  useEffect(() => {
-    if (!fileId) { setUrl(null); return; }
-    if (blobUrlCache.has(fileId)) { setUrl(blobUrlCache.get(fileId)!); return; }
-
-    let cancelled = false;
-    fetchFileBlobUrl(fileId).then((blobUrl) => {
-      if (cancelled) { URL.revokeObjectURL(blobUrl); return; }
-      blobUrlCache.set(fileId, blobUrl);
-      setUrl(blobUrl);
-    }).catch(() => {
-      if (!cancelled) setUrl(null);
-    });
-
-    return () => { cancelled = true; };
-  }, [fileId]);
-
-  return url;
-}
-
-function DriveImage({ fileId, alt, className }: { fileId: string; alt: string; className?: string }) {
-  const url = useDriveImage(fileId);
-  if (!url) return <div className={`${className ?? ""} bg-zinc-800 animate-pulse`} />;
-  return <img src={url} alt={alt} className={className} />;
-}
+import { DriveImage } from "@/lib/drive-image";
 
 export function LibraryPage() {
   const scanState = useSyncExternalStore(subscribeScanState, getScanState);

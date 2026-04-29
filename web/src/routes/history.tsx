@@ -1,6 +1,8 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { isAuthenticated } from "@/lib/google-auth";
 import { fetchPlaybackHistory, type HistoryEvent, type PlayEvent } from "@/lib/playback-history";
+import { getScanState, subscribeScanState } from "@/lib/scan-store";
+import { DriveImage } from "@/lib/drive-image";
 
 type HistoryStatus = "idle" | "loading" | "done" | "error";
 type ViewMode = "recent" | "all";
@@ -12,6 +14,20 @@ export function HistoryPage() {
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("recent");
   const [search, setSearch] = useState("");
+  const [selectedAlbum, setSelectedAlbum] = useState<RecentAlbum | null>(null);
+  const scanState = useSyncExternalStore(subscribeScanState, getScanState);
+
+  const coverByAlbumId = useMemo(() => {
+    const map = new Map<string, string>();
+    const albumsByArtist = scanState.result?.albumsByArtist;
+    if (!albumsByArtist) return map;
+    for (const albums of Object.values(albumsByArtist)) {
+      for (const album of albums) {
+        if (album.coverFileId) map.set(album.id, album.coverFileId);
+      }
+    }
+    return map;
+  }, [scanState.result]);
 
   const loadHistory = useCallback(async () => {
     setStatus("loading");
@@ -162,11 +178,27 @@ export function HistoryPage() {
           </div>
 
           {viewMode === "recent" ? (
-            <RecentAlbumsView albums={recentAlbums} />
+            <RecentAlbumsView
+              albums={recentAlbums}
+              coverByAlbumId={coverByAlbumId}
+              onSelect={setSelectedAlbum}
+            />
           ) : (
-            <AllPlaysView grouped={grouped} />
+            <AllPlaysView grouped={grouped} coverByAlbumId={coverByAlbumId} />
           )}
         </>
+      )}
+
+      {selectedAlbum && (
+        <AlbumPlaysModal
+          album={selectedAlbum}
+          plays={playEvents.filter(
+            (e) => (e.albumId || `${e.artistName}/${e.albumName}`) ===
+              (selectedAlbum.albumId || `${selectedAlbum.artistName}/${selectedAlbum.albumName}`),
+          )}
+          coverFileId={coverByAlbumId.get(selectedAlbum.albumId) ?? null}
+          onClose={() => setSelectedAlbum(null)}
+        />
       )}
     </div>
   );
@@ -257,37 +289,164 @@ function formatRelativeDate(iso: string): string {
   }
 }
 
-function RecentAlbumsView({ albums }: { albums: RecentAlbum[] }) {
+function RecentAlbumsView({
+  albums,
+  coverByAlbumId,
+  onSelect,
+}: {
+  albums: RecentAlbum[];
+  coverByAlbumId: Map<string, string>;
+  onSelect: (album: RecentAlbum) => void;
+}) {
   if (albums.length === 0) {
     return <p className="text-sm text-zinc-500">No matching albums found.</p>;
   }
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-      {albums.map((album) => (
-        <div
-          key={album.albumId || `${album.artistName}/${album.albumName}`}
-          className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3"
-        >
-          <div className="w-10 h-10 rounded border border-zinc-700 bg-zinc-800 shrink-0 flex items-center justify-center">
-            <span className="text-zinc-600 text-lg">&#9835;</span>
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium text-zinc-200 truncate">{album.albumName || "Unknown Album"}</div>
-            <div className="text-xs text-zinc-500 truncate">{album.artistName || "Unknown Artist"}</div>
-            <div className="text-xs text-zinc-600 mt-0.5">
-              {album.playCount} play{album.playCount !== 1 ? "s" : ""}
-              {" \u00b7 "}
-              {formatRelativeDate(album.lastPlayed)}
+      {albums.map((album) => {
+        const coverFileId = coverByAlbumId.get(album.albumId);
+        return (
+          <button
+            key={album.albumId || `${album.artistName}/${album.albumName}`}
+            type="button"
+            onClick={() => onSelect(album)}
+            className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3 text-left hover:bg-zinc-800/60 hover:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+          >
+            {coverFileId ? (
+              <DriveImage
+                fileId={coverFileId}
+                alt={`${album.albumName} cover`}
+                className="w-10 h-10 object-cover rounded border border-zinc-700 shrink-0"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded border border-zinc-700 bg-zinc-800 shrink-0 flex items-center justify-center">
+                <span className="text-zinc-600 text-lg">&#9835;</span>
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium text-zinc-200 truncate">{album.albumName || "Unknown Album"}</div>
+              <div className="text-xs text-zinc-500 truncate">{album.artistName || "Unknown Artist"}</div>
+              <div className="text-xs text-zinc-600 mt-0.5">
+                {album.playCount} play{album.playCount !== 1 ? "s" : ""}
+                {" \u00b7 "}
+                {formatRelativeDate(album.lastPlayed)}
+              </div>
             </div>
-          </div>
-        </div>
-      ))}
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-function AllPlaysView({ grouped }: { grouped: [string, PlayEvent[]][] }) {
+function AlbumPlaysModal({
+  album,
+  plays,
+  coverFileId,
+  onClose,
+}: {
+  album: RecentAlbum;
+  plays: PlayEvent[];
+  coverFileId: string | null;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
+
+  // Sort plays most-recent first
+  const sortedPlays = [...plays].sort((a, b) =>
+    a.playedAt < b.playedAt ? 1 : a.playedAt > b.playedAt ? -1 : 0,
+  );
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg max-h-[85vh] flex flex-col rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-4 p-5 border-b border-zinc-800">
+          {coverFileId ? (
+            <DriveImage
+              fileId={coverFileId}
+              alt={`${album.albumName} cover`}
+              className="w-16 h-16 object-cover rounded border border-zinc-700 shrink-0"
+            />
+          ) : (
+            <div className="w-16 h-16 rounded border border-zinc-700 bg-zinc-800 shrink-0 flex items-center justify-center">
+              <span className="text-zinc-600 text-2xl">&#9835;</span>
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="text-base font-semibold text-zinc-100 truncate">
+              {album.albumName || "Unknown Album"}
+            </div>
+            <div className="text-sm text-zinc-400 truncate">
+              {album.artistName || "Unknown Artist"}
+            </div>
+            <div className="text-xs text-zinc-500 mt-1">
+              {album.playCount} play{album.playCount !== 1 ? "s" : ""}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-zinc-500 hover:text-zinc-200 text-xl leading-none px-2"
+            aria-label="Close"
+          >
+            &times;
+          </button>
+        </div>
+
+        <div className="overflow-y-auto p-5">
+          {sortedPlays.length === 0 ? (
+            <p className="text-sm text-zinc-500">No plays found.</p>
+          ) : (
+            <div className="space-y-1">
+              {sortedPlays.map((play, i) => (
+                <div
+                  key={`${play.trackId}-${play.playedAt}-${i}`}
+                  className="flex items-center gap-3 rounded-md border border-zinc-800/70 bg-zinc-900/50 px-3 py-2"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm text-zinc-200 truncate">{play.trackName}</div>
+                    <div className="text-xs text-zinc-500">
+                      {formatDate(play.playedAt)}{" \u00b7 "}{formatTime(play.playedAt)}
+                    </div>
+                  </div>
+                  <div className="text-xs text-zinc-600 shrink-0">
+                    {formatRelativeDate(play.playedAt)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AllPlaysView({
+  grouped,
+  coverByAlbumId,
+}: {
+  grouped: [string, PlayEvent[]][];
+  coverByAlbumId: Map<string, string>;
+}) {
   if (grouped.length === 0) {
     return <p className="text-sm text-zinc-500">No matching plays found.</p>;
   }
@@ -298,22 +457,36 @@ function AllPlaysView({ grouped }: { grouped: [string, PlayEvent[]][] }) {
         <div key={date}>
           <div className="text-sm font-medium text-zinc-400 mb-2">{date}</div>
           <div className="space-y-1">
-            {plays.map((play, i) => (
-              <div
-                key={`${play.trackId}-${play.playedAt}-${i}`}
-                className="flex items-center gap-3 rounded-lg border border-zinc-800/50 bg-zinc-900/30 px-4 py-2.5"
-              >
-                <div className="text-xs text-zinc-600 w-16 shrink-0">
-                  {formatTime(play.playedAt)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm text-zinc-200 truncate">{play.trackName}</div>
-                  <div className="text-xs text-zinc-500 truncate">
-                    {play.artistName}{play.albumName ? ` \u2014 ${play.albumName}` : ""}
+            {plays.map((play, i) => {
+              const coverFileId = coverByAlbumId.get(play.albumId);
+              return (
+                <div
+                  key={`${play.trackId}-${play.playedAt}-${i}`}
+                  className="flex items-center gap-3 rounded-lg border border-zinc-800/50 bg-zinc-900/30 px-4 py-2.5"
+                >
+                  <div className="text-xs text-zinc-600 w-16 shrink-0">
+                    {formatTime(play.playedAt)}
+                  </div>
+                  {coverFileId ? (
+                    <DriveImage
+                      fileId={coverFileId}
+                      alt={`${play.albumName} cover`}
+                      className="w-8 h-8 object-cover rounded border border-zinc-700 shrink-0"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded border border-zinc-700 bg-zinc-800 shrink-0 flex items-center justify-center">
+                      <span className="text-zinc-600 text-sm">&#9835;</span>
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm text-zinc-200 truncate">{play.trackName}</div>
+                    <div className="text-xs text-zinc-500 truncate">
+                      {play.artistName}{play.albumName ? ` \u2014 ${play.albumName}` : ""}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ))}
