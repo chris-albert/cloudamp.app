@@ -84,6 +84,16 @@ interface GoogleDriveApiService {
         @Body metadata: RequestBody,
         @Query("fields") fields: String = "id,name"
     ): Response<DriveFile>
+
+    /**
+     * Move a file or folder to the trash. Trashing a folder also trashes
+     * its descendants.
+     */
+    @PATCH("drive/v3/files/{fileId}")
+    suspend fun trashFile(
+        @Path("fileId") fileId: String,
+        @Body body: RequestBody
+    ): Response<DriveFile>
 }
 
 // Google Drive response models

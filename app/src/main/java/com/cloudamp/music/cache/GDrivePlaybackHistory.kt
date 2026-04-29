@@ -3,9 +3,12 @@ package com.cloudamp.music.cache
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import com.cloudamp.music.api.DriveFile
 import com.cloudamp.music.api.GDriveTrack
 import com.cloudamp.music.api.GoogleDriveApiClient
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -26,7 +29,11 @@ import java.util.*
  * Write strategy:
  * - Append locally (instant)
  * - Upload full local file to Drive periodically (throttled, max once per 5 min)
- * - On init: download from Drive and merge (take longer file)
+ * - On init: consolidate (merge any duplicate folders/files left over from
+ *   races, trash extras, push merged content)
+ *
+ * All Drive operations are serialized through `driveMutex` so concurrent
+ * uploads cannot each create their own folder/file.
  */
 class GDrivePlaybackHistory private constructor(private val context: Context) {
 
@@ -58,6 +65,9 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val localFile: File = File(context.filesDir, HISTORY_FILENAME)
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    // Serializes all Drive operations so concurrent uploads cannot each create
+    // a new folder/file and leave duplicates behind.
+    private val driveMutex = Mutex()
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
         timeZone = TimeZone.getTimeZone("UTC")
     }
@@ -151,14 +161,14 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
     }
 
     /**
-     * Sync with Drive: download remote, merge, upload.
-     * Call on app start.
+     * Sync with Drive: consolidate any duplicate folders/files left over from
+     * older racy code paths, merge their contents into one canonical file, and
+     * push that merged content. Call on app start.
      */
     fun syncWithDrive() {
         scope.launch {
             try {
-                downloadFromDrive()
-                uploadToDrive()
+                consolidateOnDrive()
             } catch (e: Exception) {
                 Log.e(TAG, "Drive sync error: ${e.message}")
             }
@@ -248,14 +258,14 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
             .apply()
     }
 
-    private suspend fun uploadToDrive() {
-        if (!localFile.exists() || localFile.length() == 0L) return
+    private suspend fun uploadToDrive() = driveMutex.withLock {
+        if (!localFile.exists() || localFile.length() == 0L) return@withLock
 
         val client = GoogleDriveApiClient.getInstance(context)
-        if (!client.hasAccessToken()) return
+        if (!client.hasAccessToken()) return@withLock
 
         try {
-            val folderId = resolveParentFolderId() ?: return
+            val folderId = resolveParentFolderId() ?: return@withLock
             val content = localFile.readText()
             val mediaBody = content.toRequestBody("application/x-ndjson".toMediaType())
 
@@ -267,6 +277,7 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
                 if (response.isSuccessful) {
                     prefs.edit().putLong(KEY_LAST_UPLOAD, System.currentTimeMillis()).apply()
                     Log.d(TAG, "History uploaded to Drive (updated)")
+                    return@withLock
                 } else if (response.code() == 404) {
                     // File was deleted, clear ID and retry
                     prefs.edit().remove(KEY_DRIVE_FILE_ID).apply()
@@ -301,58 +312,182 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
         }
     }
 
-    private suspend fun downloadFromDrive() {
+    /**
+     * Reconcile the state on Drive: find every ".cloudamp" folder under the
+     * library root and every "playback_history.ndjson" inside any of them,
+     * merge all their contents (line-deduped) with the local file, write the
+     * merged content to a single canonical folder + file, and trash the rest.
+     *
+     * Idempotent: with no duplicates this performs the same work as a normal
+     * download-then-upload sync.
+     */
+    private suspend fun consolidateOnDrive() = driveMutex.withLock {
+        val libraryRootId = GDriveLibraryCache.getInstance(context).getRootFolderId() ?: return@withLock
         val client = GoogleDriveApiClient.getInstance(context)
-        if (!client.hasAccessToken()) return
+        if (!client.hasAccessToken()) return@withLock
+
+        migrateStorageVersionIfNeeded()
 
         try {
-            val folderId = resolveParentFolderId() ?: return
-
-            // Find existing history file
-            var fileId = prefs.getString(KEY_DRIVE_FILE_ID, null)
-            if (fileId == null) {
-                val searchResponse = client.api.listFiles(
-                    query = "name = '$HISTORY_FILENAME' and '$folderId' in parents and trashed = false",
-                    fields = "files(id,name)",
-                    pageSize = 1
+            // 1. Find all .cloudamp subfolders inside the library root.
+            val folders = listAll { pageToken ->
+                client.api.listFiles(
+                    query = "name = '$SUBFOLDER_NAME' and mimeType = 'application/vnd.google-apps.folder' and '$libraryRootId' in parents and trashed = false",
+                    fields = "files(id,name),nextPageToken",
+                    pageSize = 100,
+                    pageToken = pageToken
                 )
-                if (searchResponse.isSuccessful) {
-                    fileId = searchResponse.body()?.files?.firstOrNull()?.id
-                    if (fileId != null) {
-                        prefs.edit().putString(KEY_DRIVE_FILE_ID, fileId).apply()
+            } ?: return@withLock
+
+            // 2. Find all playback_history.ndjson files in any of those folders.
+            val allFiles = mutableListOf<DriveFile>()
+            for (folder in folders) {
+                val files = listAll { pageToken ->
+                    client.api.listFiles(
+                        query = "name = '$HISTORY_FILENAME' and '${folder.id}' in parents and trashed = false",
+                        fields = "files(id,name,parents),nextPageToken",
+                        pageSize = 100,
+                        pageToken = pageToken
+                    )
+                } ?: continue
+                allFiles.addAll(files)
+            }
+
+            // 3. Merge local + every remote file's lines, dedupe by exact match.
+            val merged = LinkedHashSet<String>()
+            if (localFile.exists()) {
+                for (line in localFile.readLines()) {
+                    if (line.isNotBlank()) merged.add(line)
+                }
+            }
+            for (file in allFiles) {
+                try {
+                    val resp = client.api.downloadFile(file.id)
+                    if (!resp.isSuccessful) continue
+                    val text = resp.body()?.string() ?: continue
+                    for (line in text.split("\n")) {
+                        if (line.isNotBlank()) merged.add(line)
                     }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error downloading ${file.id} during consolidation: ${e.message}")
                 }
             }
 
-            if (fileId == null) return // No remote file yet
+            val mergedContent = if (merged.isEmpty()) "" else merged.joinToString("\n") + "\n"
 
-            val response = client.api.downloadFile(fileId)
-            if (!response.isSuccessful) return
-
-            val remoteContent = response.body()?.string() ?: return
-            val remoteLines = remoteContent.lines().filter { it.isNotBlank() }
-
-            // Merge: take the longer set, then append any unique lines from the shorter
-            val localLines = if (localFile.exists()) {
-                localFile.readLines().filter { it.isNotBlank() }
+            // 4. Pick / create the canonical folder.
+            val canonicalFolderId = if (folders.isNotEmpty()) {
+                folders.minByOrNull { it.id }!!.id
             } else {
-                emptyList()
+                createSubfolder(client, libraryRootId) ?: return@withLock
             }
 
-            if (remoteLines.size > localLines.size) {
-                // Remote has more — use remote as base, append local-only lines
-                val remoteSet = remoteLines.toSet()
-                val localOnly = localLines.filter { it !in remoteSet }
-                val merged = remoteLines + localOnly
-                localFile.writeText(merged.joinToString("\n") + "\n")
-                Log.d(TAG, "Merged history: ${remoteLines.size} remote + ${localOnly.size} local-only = ${merged.size} total")
-            } else if (localLines.size < remoteLines.size) {
-                // Shouldn't happen after the above, but handle edge case
-                localFile.writeText(remoteLines.joinToString("\n") + "\n")
+            // 5. Pick / create the canonical file inside the canonical folder.
+            val filesInCanonical = allFiles.filter { it.parents?.contains(canonicalFolderId) == true }
+            var canonicalFileId: String? = filesInCanonical.minByOrNull { it.id }?.id
+
+            val mediaBody = mergedContent.toRequestBody("application/x-ndjson".toMediaType())
+            if (canonicalFileId != null) {
+                if (mergedContent.isNotEmpty()) {
+                    val resp = client.api.updateFileContent(canonicalFileId, mediaBody)
+                    if (!resp.isSuccessful) {
+                        Log.e(TAG, "Consolidation: update canonical failed ${resp.code()}")
+                    }
+                }
+            } else if (mergedContent.isNotEmpty()) {
+                val metadata = JSONObject().apply {
+                    put("name", HISTORY_FILENAME)
+                    put("parents", org.json.JSONArray().put(canonicalFolderId))
+                }.toString()
+                val metadataPart = metadata.toRequestBody("application/json".toMediaType())
+                val mediaPart = MultipartBody.Part.createFormData("media", HISTORY_FILENAME, mediaBody)
+                val resp = client.api.createFile(metadataPart, mediaPart)
+                if (resp.isSuccessful) {
+                    canonicalFileId = resp.body()?.id
+                } else {
+                    Log.e(TAG, "Consolidation: create canonical failed ${resp.code()}")
+                }
             }
-            // If local >= remote, local is already up to date
+
+            // 6. Update local file with merged content.
+            if (mergedContent.isNotEmpty()) {
+                localFile.writeText(mergedContent)
+            }
+
+            // 7. Cache canonical IDs.
+            prefs.edit()
+                .putString(KEY_DRIVE_FOLDER_ID, canonicalFolderId)
+                .also { ed ->
+                    if (canonicalFileId != null) ed.putString(KEY_DRIVE_FILE_ID, canonicalFileId)
+                    else ed.remove(KEY_DRIVE_FILE_ID)
+                }
+                .putLong(KEY_LAST_UPLOAD, System.currentTimeMillis())
+                .apply()
+
+            // 8. Trash duplicate files (everything except the canonical).
+            val trashBody = JSONObject().apply { put("trashed", true) }.toString()
+                .toRequestBody("application/json".toMediaType())
+            var trashedFiles = 0
+            for (file in allFiles) {
+                if (file.id == canonicalFileId) continue
+                try {
+                    val resp = client.api.trashFile(file.id, trashBody)
+                    if (resp.isSuccessful) trashedFiles++
+                    else Log.e(TAG, "Failed to trash file ${file.id}: ${resp.code()}")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error trashing file ${file.id}: ${e.message}")
+                }
+            }
+
+            // 9. Trash duplicate folders.
+            var trashedFolders = 0
+            for (folder in folders) {
+                if (folder.id == canonicalFolderId) continue
+                try {
+                    val resp = client.api.trashFile(folder.id, trashBody)
+                    if (resp.isSuccessful) trashedFolders++
+                    else Log.e(TAG, "Failed to trash folder ${folder.id}: ${resp.code()}")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error trashing folder ${folder.id}: ${e.message}")
+                }
+            }
+
+            Log.d(TAG, "Consolidation done: kept folder=$canonicalFolderId file=$canonicalFileId, trashed $trashedFolders folders + $trashedFiles files, ${merged.size} unique lines")
         } catch (e: Exception) {
-            Log.e(TAG, "Download error: ${e.message}")
+            Log.e(TAG, "Consolidation error: ${e.message}")
         }
     }
+
+    private suspend fun listAll(
+        page: suspend (pageToken: String?) -> retrofit2.Response<com.cloudamp.music.api.DriveFileListResponse>
+    ): List<DriveFile>? {
+        val out = mutableListOf<DriveFile>()
+        var pageToken: String? = null
+        do {
+            val resp = page(pageToken)
+            if (!resp.isSuccessful) {
+                Log.e(TAG, "listFiles failed: ${resp.code()}")
+                return null
+            }
+            val body = resp.body() ?: break
+            out.addAll(body.files)
+            pageToken = body.nextPageToken
+        } while (pageToken != null)
+        return out
+    }
+
+    private suspend fun createSubfolder(client: GoogleDriveApiClient, libraryRootId: String): String? {
+        val metadata = JSONObject().apply {
+            put("name", SUBFOLDER_NAME)
+            put("mimeType", "application/vnd.google-apps.folder")
+            put("parents", org.json.JSONArray().put(libraryRootId))
+        }.toString()
+        val resp = client.api.createFolder(
+            metadata = metadata.toRequestBody("application/json".toMediaType())
+        )
+        if (resp.isSuccessful) return resp.body()?.id
+        Log.e(TAG, "Failed to create .cloudamp subfolder: ${resp.code()}")
+        return null
+    }
+
 }
