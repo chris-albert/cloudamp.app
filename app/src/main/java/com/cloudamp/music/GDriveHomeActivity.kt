@@ -16,6 +16,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.cloudamp.music.api.GDriveAlbum
 import com.cloudamp.music.cache.GDriveLibraryCache
 import com.cloudamp.music.cache.GDrivePlaybackHistory
+import com.cloudamp.music.cache.LibraryScanManager
 import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.ui.GDriveHomeAdapter
@@ -45,6 +46,11 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
         setupDrawer()
         setupRecyclerViews()
         loadContent()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        LibraryScanManager.resumePrefetchIfNeeded(this)
     }
 
     private fun setupDrawer() {

@@ -152,6 +152,10 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
             reloadLibrary()
         }
         checkAuthAndLoad()
+        // Phone sleep / app suspension can interrupt the album-art prefetch.
+        // Kick a prefetch-only job here so any covers still missing get
+        // filled in when the user returns to the library.
+        LibraryScanManager.resumePrefetchIfNeeded(this)
     }
 
     private fun checkAuthAndLoad() {
@@ -262,9 +266,14 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
     private fun formatScanProgress(p: GDriveLibraryScanner.ScanProgress): String =
         buildString {
             append(p.message)
-            if (p.artists > 0) {
-                append(" · ${p.artists} artist${if (p.artists != 1) "s" else ""}")
+            when {
+                p.totalArtists > 0 && p.artists < p.totalArtists ->
+                    append(" · ${p.artists}/${p.totalArtists} artists")
+                p.artists > 0 ->
+                    append(" · ${p.artists} artist${if (p.artists != 1) "s" else ""}")
             }
+            if (p.albums > 0) append(" · ${p.albums} albums")
+            if (p.tracks > 0) append(" · ${p.tracks} tracks")
             if (p.totalAlbumArt > 0) {
                 append(" · art ${p.albumArtFetched}/${p.totalAlbumArt}")
             }

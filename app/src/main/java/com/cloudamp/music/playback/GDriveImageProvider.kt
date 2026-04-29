@@ -56,12 +56,51 @@ class GDriveImageProvider : ContentProvider() {
             return f.exists() && f.length() > 0
         }
 
+        /**
+         * One-shot scan of the cache directory returning every fileId
+         * currently on disk. Use this instead of calling [isCached] in a
+         * loop — listing the directory once is a single syscall, while
+         * stat-checking thousands of fileIds individually is dramatically
+         * slower on Android and can stall a prefetch start by 10–30s on
+         * large libraries.
+         */
+        fun cachedFileIds(context: Context): Set<String> {
+            val dir = File(context.filesDir, CACHE_DIR_NAME)
+            if (!dir.exists()) return emptySet()
+            val files = dir.listFiles() ?: return emptySet()
+            val ids = HashSet<String>(files.size)
+            for (f in files) {
+                if (!f.isFile || !f.name.endsWith(".img")) continue
+                if (f.length() <= 0) continue
+                ids.add(f.name.removeSuffix(".img"))
+            }
+            return ids
+        }
+
         /** Wipe every cached image. Called after a full library scan. */
         fun clearCache(context: Context) {
             val dir = File(context.filesDir, CACHE_DIR_NAME)
             if (!dir.exists()) return
             val count = dir.listFiles()?.count { it.delete() } ?: 0
             Log.d(TAG, "Cleared $count cached album art files")
+        }
+
+        /**
+         * Delete cached files whose fileId is not in [keep]. Used after a
+         * full scan so previously-cached covers stay on disk (no needless
+         * re-download), while orphans from removed/replaced covers go away.
+         */
+        fun pruneCache(context: Context, keep: Set<String>) {
+            val dir = File(context.filesDir, CACHE_DIR_NAME)
+            if (!dir.exists()) return
+            val files = dir.listFiles() ?: return
+            var removed = 0
+            for (f in files) {
+                if (!f.isFile || !f.name.endsWith(".img")) continue
+                val fileId = f.name.removeSuffix(".img")
+                if (fileId !in keep && f.delete()) removed++
+            }
+            Log.d(TAG, "Pruned $removed unreferenced album art files (kept ${keep.size} referenced)")
         }
 
         /**

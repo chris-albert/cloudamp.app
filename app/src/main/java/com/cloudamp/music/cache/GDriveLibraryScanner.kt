@@ -48,13 +48,19 @@ class GDriveLibraryScanner(
     /**
      * Snapshot of scan/prefetch progress reported via [onProgress].
      * @param message human-readable phase description
-     * @param artists number of artists discovered (0 until tree is built)
+     * @param artists number of artists discovered / processed so far
+     * @param totalArtists total artists to process (0 until known)
+     * @param albums albums encountered so far
+     * @param tracks tracks encountered so far
      * @param albumArtFetched covers downloaded so far
      * @param totalAlbumArt total covers to download (0 until prefetch starts)
      */
     data class ScanProgress(
         val message: String,
         val artists: Int = 0,
+        val totalArtists: Int = 0,
+        val albums: Int = 0,
+        val tracks: Int = 0,
         val albumArtFetched: Int = 0,
         val totalAlbumArt: Int = 0
     )
@@ -62,9 +68,22 @@ class GDriveLibraryScanner(
     var onProgress: ((ScanProgress) -> Unit)? = null
 
     private var artistsCount: Int = 0
+    private var totalArtistsCount: Int = 0
+    private var albumsCount: Int = 0
+    private var tracksCount: Int = 0
 
     private fun report(message: String, artFetched: Int = 0, totalArt: Int = 0) {
-        onProgress?.invoke(ScanProgress(message, artistsCount, artFetched, totalArt))
+        onProgress?.invoke(
+            ScanProgress(
+                message = message,
+                artists = artistsCount,
+                totalArtists = totalArtistsCount,
+                albums = albumsCount,
+                tracks = tracksCount,
+                albumArtFetched = artFetched,
+                totalAlbumArt = totalArt
+            )
+        )
     }
 
     /**
@@ -78,10 +97,31 @@ class GDriveLibraryScanner(
 
     private suspend fun scanFolder(rootId: String): ScanResult = coroutineScope {
         // ── Bulk fetch: 3 parallel queries across ALL of Drive ────────────
+        //
+        // Drive's API has no "give me everything recursively under folder X"
+        // call (the parents field only references the direct parent), so we
+        // run three Drive-wide queries and filter client-side. This means
+        // the running counts here are *pre-filter* — they include files
+        // outside the music root and substring false-positives from
+        // queries like name contains '.flac'. The "matches" wording in the
+        // status text reflects that; the final track/album/artist counts
+        // emerge during the indexing phase below.
+        val foldersSoFar = AtomicInteger(0)
+        val audioSoFar = AtomicInteger(0)
+        val coversSoFar = AtomicInteger(0)
+        fun reportFetch() {
+            val parts = mutableListOf<String>()
+            foldersSoFar.get().takeIf { it > 0 }?.let { parts.add("$it folders") }
+            audioSoFar.get().takeIf { it > 0 }?.let { parts.add("$it audio matches") }
+            coversSoFar.get().takeIf { it > 0 }?.let { parts.add("$it cover matches") }
+            val msg = if (parts.isEmpty()) "Searching your Drive..."
+                      else "Searching your Drive... · ${parts.joinToString(" · ")}"
+            report(msg)
+        }
+        reportFetch()
 
-        report("Fetching folders...")
         val foldersDeferred = async {
-            fetchAllPaginated { pageToken ->
+            fetchAllPaginated(onPage = { foldersSoFar.set(it); reportFetch() }) { pageToken ->
                 api.listFiles(
                     query = "mimeType = 'application/vnd.google-apps.folder' and trashed = false",
                     fields = "files(id,name,parents,modifiedTime),nextPageToken",
@@ -94,7 +134,6 @@ class GDriveLibraryScanner(
 
         // Query audio files by MIME type AND by extension (Drive may assign
         // application/octet-stream to FLAC, OGG, etc. instead of audio/)
-        report("Fetching audio files...")
         val audioQuery = "(mimeType contains 'audio/'" +
             " or name contains '.flac' or name contains '.m4a'" +
             " or name contains '.ogg' or name contains '.opus'" +
@@ -103,7 +142,7 @@ class GDriveLibraryScanner(
             " or name contains '.aiff' or name contains '.ape'" +
             ") and trashed = false"
         val audioDeferred = async {
-            fetchAllPaginated { pageToken ->
+            fetchAllPaginated(onPage = { audioSoFar.set(it); reportFetch() }) { pageToken ->
                 api.listFiles(
                     query = audioQuery,
                     fields = "files(id,name,mimeType,size,parents,modifiedTime),nextPageToken",
@@ -114,9 +153,8 @@ class GDriveLibraryScanner(
             }
         }
 
-        report("Fetching cover art...")
         val coversDeferred = async {
-            fetchAllPaginated { pageToken ->
+            fetchAllPaginated(onPage = { coversSoFar.set(it); reportFetch() }) { pageToken ->
                 api.listFiles(
                     query = "(name='cover.jpg' or name='cover.png' or name='cover.jpeg' or name='folder.jpg' or name='folder.png' or name='folder.jpeg' or name='front.jpg' or name='front.png' or name='front.jpeg' or name='album.jpg' or name='album.png' or name='album.jpeg') and mimeType contains 'image/' and trashed = false",
                     fields = "files(id,name,parents),nextPageToken",
@@ -135,7 +173,7 @@ class GDriveLibraryScanner(
 
         // ── Reconstruct tree client-side ──────────────────────────────────
 
-        report("Building library tree...")
+        report("Matching folders to artists and albums...")
 
         // Build folder lookup by ID
         val folderById = allFolders.associateBy { it.id }
@@ -185,8 +223,6 @@ class GDriveLibraryScanner(
 
         // ── Build structured data ─────────────────────────────────────────
 
-        report("Organizing library...")
-
         // Group album folders by artist
         val albumFoldersByArtist = albumFolders.groupBy { folder ->
             folder.parents?.firstOrNull { it in artistIds } ?: ""
@@ -196,6 +232,14 @@ class GDriveLibraryScanner(
         val audioFilesByAlbum = musicAudioFiles.groupBy { file ->
             file.parents?.firstOrNull { it in albumIds } ?: ""
         }.filterKeys { it.isNotEmpty() }
+
+        // Set totals so the UI can render "X/Y artists" from the first tick.
+        // artistsCount and the running album/track counts climb as we iterate.
+        totalArtistsCount = artistFolders.size
+        artistsCount = 0
+        albumsCount = 0
+        tracksCount = 0
+        report("Indexing artists, albums, and tracks...")
 
         val artists = mutableListOf<GDriveArtist>()
         val albumsByArtistMap = mutableMapOf<String, List<GDriveAlbum>>()
@@ -238,6 +282,7 @@ class GDriveLibraryScanner(
                 }.sortedWith(compareBy({ it.discNumber ?: 0 }, { it.trackNumber ?: 0 }))
 
                 tracksByAlbumMap[albumFolder.id] = tracks
+                tracksCount += tracks.size
             }
 
             val sortedAlbums = albums.sortedWith(compareBy({ it.year ?: Int.MAX_VALUE }, { it.name.lowercase() }))
@@ -249,13 +294,17 @@ class GDriveLibraryScanner(
                 imageFileId = coverByArtist[artistFolder.id]
             ))
             albumsByArtistMap[artistFolder.id] = sortedAlbums
+
+            artistsCount++
+            albumsCount += sortedAlbums.size
+            report("Indexing artists, albums, and tracks...")
         }
 
         val sortedArtists = artists.sortedBy { it.name.lowercase() }
         Log.d(TAG, "Scan complete: ${sortedArtists.size} artists, ${albumsByArtistMap.values.sumOf { it.size }} albums, ${tracksByAlbumMap.values.sumOf { it.size }} tracks")
 
         artistsCount = sortedArtists.size
-        report("Scan complete")
+        report("Library indexed")
 
         ScanResult(sortedArtists, albumsByArtistMap, tracksByAlbumMap)
     }
@@ -266,30 +315,55 @@ class GDriveLibraryScanner(
      * progress as covers complete. Failures are logged and counted as
      * unsuccessful but never thrown — a missing cover should not abort
      * the rest of the prefetch.
+     *
+     * Resumable: covers already on disk are skipped, and the progress
+     * counter starts at the already-cached count so an interrupted prefetch
+     * picks up where it left off when this is called again.
+     *
+     * After all downloads attempt, prunes cache files whose fileIds are no
+     * longer referenced by the library (e.g. covers replaced since the
+     * previous scan).
      */
     suspend fun prefetchAlbumArt(context: Context, result: ScanResult) {
         artistsCount = result.artists.size
+        totalArtistsCount = result.artists.size
+        albumsCount = result.albumsByArtist.values.sumOf { it.size }
+        tracksCount = result.tracksByAlbum.values.sumOf { it.size }
 
-        val fileIds = buildSet {
+        val referencedIds = buildSet {
             for (artist in result.artists) artist.imageFileId?.let { add(it) }
             for (albums in result.albumsByArtist.values) {
                 for (album in albums) album.coverFileId?.let { add(it) }
             }
-        }.toList()
+        }
 
-        val total = fileIds.size
+        val total = referencedIds.size
         if (total == 0) {
             report("No album art to cache")
+            GDriveImageProvider.pruneCache(context, referencedIds)
             return
         }
 
-        report("Caching album art...", artFetched = 0, totalArt = total)
+        // Single directory listing instead of N stat calls — for large
+        // libraries this is the difference between an instant start and
+        // a 10–30s stall before the first download.
+        val cachedIds = GDriveImageProvider.cachedFileIds(context)
+        val missing = referencedIds.filter { it !in cachedIds }
+        val alreadyCached = total - missing.size
 
-        val done = AtomicInteger(0)
+        if (missing.isEmpty()) {
+            report("Album art cached", artFetched = total, totalArt = total)
+            GDriveImageProvider.pruneCache(context, referencedIds)
+            return
+        }
+
+        report("Caching album art...", artFetched = alreadyCached, totalArt = total)
+
+        val done = AtomicInteger(alreadyCached)
         val semaphore = Semaphore(permits = 6)
 
         coroutineScope {
-            fileIds.map { fileId ->
+            missing.map { fileId ->
                 async(Dispatchers.IO) {
                     semaphore.withPermit {
                         GDriveImageProvider.fetchToCache(context, fileId)
@@ -302,18 +376,38 @@ class GDriveLibraryScanner(
 
         Log.d(TAG, "Album art prefetch complete: ${done.get()}/$total cached")
         report("Album art cached", artFetched = done.get(), totalArt = total)
+        GDriveImageProvider.pruneCache(context, referencedIds)
     }
 
     /**
-     * Save scan results to cache.
+     * Save scan results to cache. Reports per-step progress so the user
+     * doesn't see a long silent gap on libraries with thousands of items
+     * (each artist + album writes its own JSON file).
      */
     fun saveToCache(result: ScanResult) {
         cache.saveArtists(result.artists)
+
+        val artistFiles = result.albumsByArtist.size
+        val albumFiles = result.tracksByAlbum.size
+        val totalFiles = artistFiles + albumFiles
+        var saved = 0
+
         for ((artistId, albums) in result.albumsByArtist) {
             cache.saveArtistAlbums(artistId, albums)
+            saved++
+            // Throttle UI emits — file writes are fast individually but
+            // updating state thousands of times in a tight loop bogs the
+            // Main thread.
+            if (saved % 5 == 0 || saved == totalFiles) {
+                report("Saving library to device... ($saved/$totalFiles)")
+            }
         }
         for ((albumId, tracks) in result.tracksByAlbum) {
             cache.saveAlbumTracks(albumId, tracks)
+            saved++
+            if (saved % 25 == 0 || saved == totalFiles) {
+                report("Saving library to device... ($saved/$totalFiles)")
+            }
         }
 
         val totalCovers = buildSet {
@@ -330,11 +424,11 @@ class GDriveLibraryScanner(
         )
 
         cache.markCacheComplete()
-        // A full scan is the only thing that invalidates the album art cache.
-        cache.clearAlbumArtCache()
+        report("Library saved")
     }
 
     private suspend fun fetchAllPaginated(
+        onPage: ((totalSoFar: Int) -> Unit)? = null,
         fetcher: suspend (pageToken: String?) -> retrofit2.Response<DriveFileListResponse>
     ): List<DriveFile> {
         val allFiles = mutableListOf<DriveFile>()
@@ -350,6 +444,7 @@ class GDriveLibraryScanner(
                 pageToken = body?.nextPageToken
                 page++
                 Log.d(TAG, "  page $page: ${files.size} items (${allFiles.size} total)")
+                onPage?.invoke(allFiles.size)
             } else {
                 Log.e(TAG, "API error: ${response.code()}")
                 break

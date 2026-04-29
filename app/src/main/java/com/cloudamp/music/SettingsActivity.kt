@@ -190,13 +190,14 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         reloadGdriveLibraryButton.setOnClickListener {
-            if (LibraryScanManager.isScanning) {
+            if (LibraryScanManager.isFullScanRunning) {
                 Toast.makeText(this, "Scan already in progress", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             // Notify the library activity so it drops its current view; the
             // scan itself runs in LibraryScanManager (app-scoped) and is
-            // not bound to this Settings activity's lifecycle.
+            // not bound to this Settings activity's lifecycle. A background
+            // resume-prefetch (if any) is preempted inside startScan.
             onGDriveLibraryReloadRequested?.invoke()
             LibraryScanManager.startScan(this, clearFirst = true)
         }
@@ -266,11 +267,20 @@ class SettingsActivity : AppCompatActivity() {
     private fun formatScanStatus(p: GDriveLibraryScanner.ScanProgress): String =
         buildString {
             append(p.message)
-            if (p.artists > 0) {
-                append("\n${p.artists} artist${if (p.artists != 1) "s" else ""} parsed")
+            val artistsLine = when {
+                p.totalArtists > 0 && p.artists < p.totalArtists ->
+                    "${p.artists}/${p.totalArtists} artists"
+                p.artists > 0 ->
+                    "${p.artists} artist${if (p.artists != 1) "s" else ""}"
+                else -> null
+            }
+            if (artistsLine != null) {
+                append("\n$artistsLine")
+                if (p.albums > 0) append(" · ${p.albums} albums")
+                if (p.tracks > 0) append(" · ${p.tracks} tracks")
             }
             if (p.totalAlbumArt > 0) {
-                append(" · ${p.albumArtFetched}/${p.totalAlbumArt} covers cached")
+                append("\n${p.albumArtFetched}/${p.totalAlbumArt} covers cached")
             }
         }
 
