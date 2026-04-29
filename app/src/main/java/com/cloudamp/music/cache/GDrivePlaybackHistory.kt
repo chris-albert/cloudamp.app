@@ -36,8 +36,13 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
         private const val KEY_DRIVE_FILE_ID = "history_drive_file_id"
         private const val KEY_DRIVE_FOLDER_ID = "history_drive_folder_id"
         private const val KEY_LAST_UPLOAD = "last_upload_timestamp"
+        // Bumped when the storage location for the history file changes.
+        // v1 = file lives in <library root>/.cloudamp/ (was previously a
+        // ".cloudamp" / "CloudAmp" folder at Drive root).
+        private const val KEY_STORAGE_VERSION = "storage_version"
+        private const val CURRENT_STORAGE_VERSION = 1
         private const val HISTORY_FILENAME = "playback_history.ndjson"
-        private const val DRIVE_FOLDER_NAME = ".cloudamp"
+        private const val SUBFOLDER_NAME = ".cloudamp"
         private const val UPLOAD_THROTTLE_MS = 5 * 60 * 1000L // 5 minutes
 
         @Volatile
@@ -169,47 +174,78 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
         }
     }
 
-    private suspend fun ensureDriveFolder(): String? {
-        var folderId = prefs.getString(KEY_DRIVE_FOLDER_ID, null)
-        if (folderId != null) return folderId
+    /**
+     * Returns the parent folder ID for the history file: a ".cloudamp"
+     * subfolder inside the user's configured music library root. Creates the
+     * subfolder on Drive if missing. Returns null if the library root has not
+     * been set or Drive is unavailable.
+     *
+     * Also performs a one-time migration on first call: clears the cached
+     * file/folder IDs from the previous storage layout (where history lived in
+     * a ".cloudamp" folder at Drive root) so the next upload re-resolves a
+     * fresh subfolder inside the library root. The local NDJSON file persists,
+     * so historical play events are preserved and re-uploaded.
+     */
+    private suspend fun resolveParentFolderId(): String? {
+        migrateStorageVersionIfNeeded()
+
+        val libraryRootId = GDriveLibraryCache.getInstance(context).getRootFolderId() ?: return null
+
+        val cached = prefs.getString(KEY_DRIVE_FOLDER_ID, null)
+        if (cached != null) return cached
 
         val client = GoogleDriveApiClient.getInstance(context)
         if (!client.hasAccessToken()) return null
 
         try {
-            // Search for existing .cloudamp folder in root
+            // Look for an existing .cloudamp subfolder inside the library root.
             val searchResponse = client.api.listFiles(
-                query = "name = '$DRIVE_FOLDER_NAME' and mimeType = 'application/vnd.google-apps.folder' and 'root' in parents and trashed = false",
+                query = "name = '$SUBFOLDER_NAME' and mimeType = 'application/vnd.google-apps.folder' and '$libraryRootId' in parents and trashed = false",
                 fields = "files(id,name)",
                 pageSize = 1
             )
             if (searchResponse.isSuccessful) {
                 val existing = searchResponse.body()?.files?.firstOrNull()
                 if (existing != null) {
-                    folderId = existing.id
-                    prefs.edit().putString(KEY_DRIVE_FOLDER_ID, folderId).apply()
-                    return folderId
+                    prefs.edit().putString(KEY_DRIVE_FOLDER_ID, existing.id).apply()
+                    return existing.id
                 }
             }
 
-            // Create the folder
+            // Otherwise create it.
             val metadata = JSONObject().apply {
-                put("name", DRIVE_FOLDER_NAME)
+                put("name", SUBFOLDER_NAME)
                 put("mimeType", "application/vnd.google-apps.folder")
+                put("parents", org.json.JSONArray().put(libraryRootId))
             }.toString()
 
             val response = client.api.createFolder(
                 metadata = metadata.toRequestBody("application/json".toMediaType())
             )
             if (response.isSuccessful) {
-                folderId = response.body()?.id
-                prefs.edit().putString(KEY_DRIVE_FOLDER_ID, folderId).apply()
-                return folderId
+                val newId = response.body()?.id
+                if (newId != null) {
+                    prefs.edit().putString(KEY_DRIVE_FOLDER_ID, newId).apply()
+                    return newId
+                }
+            } else {
+                Log.e(TAG, "Failed to create .cloudamp subfolder: ${response.code()}")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error ensuring Drive folder: ${e.message}")
+            Log.e(TAG, "Error resolving .cloudamp subfolder: ${e.message}")
         }
         return null
+    }
+
+    private fun migrateStorageVersionIfNeeded() {
+        val current = prefs.getInt(KEY_STORAGE_VERSION, 0)
+        if (current >= CURRENT_STORAGE_VERSION) return
+        Log.d(TAG, "Migrating playback history storage v$current → v$CURRENT_STORAGE_VERSION")
+        prefs.edit()
+            .remove(KEY_DRIVE_FILE_ID)
+            .remove(KEY_DRIVE_FOLDER_ID)
+            .putInt(KEY_STORAGE_VERSION, CURRENT_STORAGE_VERSION)
+            .apply()
     }
 
     private suspend fun uploadToDrive() {
@@ -219,7 +255,7 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
         if (!client.hasAccessToken()) return
 
         try {
-            val folderId = ensureDriveFolder() ?: return
+            val folderId = resolveParentFolderId() ?: return
             val content = localFile.readText()
             val mediaBody = content.toRequestBody("application/x-ndjson".toMediaType())
 
@@ -270,7 +306,7 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
         if (!client.hasAccessToken()) return
 
         try {
-            val folderId = ensureDriveFolder() ?: return
+            val folderId = resolveParentFolderId() ?: return
 
             // Find existing history file
             var fileId = prefs.getString(KEY_DRIVE_FILE_ID, null)

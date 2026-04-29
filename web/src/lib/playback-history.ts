@@ -1,9 +1,11 @@
 /**
- * Fetches and parses playback history from the .cloudamp/playback_history.ndjson
- * file on Google Drive (written by the Android app).
+ * Fetches and parses playback history from
+ * <music library>/.cloudamp/playback_history.ndjson on Google Drive
+ * (written by the Android app).
  */
 
 import { fetchAllPaginated, fetchFileText } from "./drive-api";
+import { getRootFolderId } from "./google-auth";
 
 export interface PlayEvent {
   type: "play";
@@ -26,25 +28,29 @@ export interface AlbumAddedEvent {
 export type HistoryEvent = PlayEvent | AlbumAddedEvent;
 
 /**
- * Find the .cloudamp folder in the user's Drive root,
- * then find playback_history.ndjson inside it,
- * download its contents, and parse the NDJSON lines.
+ * Find <music library>/.cloudamp/playback_history.ndjson, download its
+ * contents, and parse the NDJSON lines.
  * Returns events in reverse chronological order (most recent first).
  */
 export async function fetchPlaybackHistory(): Promise<HistoryEvent[]> {
-  // 1. Find the .cloudamp folder in root
-  const folders = await fetchAllPaginated(
-    "name = '.cloudamp' and mimeType = 'application/vnd.google-apps.folder' and 'root' in parents and trashed = false",
+  const rootFolderId = getRootFolderId();
+  if (!rootFolderId) {
+    throw new Error("Music library folder is not configured. Set it in Settings.");
+  }
+
+  // 1. Find the .cloudamp subfolder inside the library root.
+  const subfolders = await fetchAllPaginated(
+    `name = '.cloudamp' and mimeType = 'application/vnd.google-apps.folder' and '${rootFolderId}' in parents and trashed = false`,
     "id,name",
   );
-  if (folders.length === 0) {
+  if (subfolders.length === 0) {
     return [];
   }
-  const folderId = folders[0]!.id;
+  const subfolderId = subfolders[0]!.id;
 
-  // 2. Find the playback_history.ndjson file
+  // 2. Find the history file inside it.
   const files = await fetchAllPaginated(
-    `name = 'playback_history.ndjson' and '${folderId}' in parents and trashed = false`,
+    `name = 'playback_history.ndjson' and '${subfolderId}' in parents and trashed = false`,
     "id,name",
   );
   if (files.length === 0) {
