@@ -90,15 +90,7 @@ object LibraryScanManager {
                 val cache = GDriveLibraryCache.getInstance(appContext)
 
                 if (clearFirst) {
-                    withContext(Dispatchers.IO) {
-                        cache.clearCache()
-                        // Explicit Reload should re-fetch every cover so the
-                        // user sees a real refresh and any covers replaced
-                        // since the last scan get pulled fresh. Routine
-                        // (non-Reload) scans keep the on-disk cache and
-                        // fill in only what's missing.
-                        GDriveImageProvider.clearCache(appContext)
-                    }
+                    withContext(Dispatchers.IO) { cache.clearCache() }
                 }
 
                 val scanner = GDriveLibraryScanner(driveClient.api, cache)
