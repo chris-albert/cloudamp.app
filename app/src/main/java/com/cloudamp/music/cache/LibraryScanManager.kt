@@ -189,9 +189,8 @@ object LibraryScanManager {
                         for (album in albums) album.coverFileId?.let { add(it) }
                     }
                 }
-                val anyMissing = referencedIds.any {
-                    !GDriveImageProvider.isCached(appContext, it)
-                }
+                val cachedIds = GDriveImageProvider.cachedFileIds(appContext)
+                val anyMissing = referencedIds.any { it !in cachedIds }
                 if (!anyMissing) return@launch
 
                 val driveClient = GoogleDriveApiClient.getInstance(appContext)

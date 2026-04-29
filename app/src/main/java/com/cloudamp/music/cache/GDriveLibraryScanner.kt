@@ -325,7 +325,11 @@ class GDriveLibraryScanner(
             return
         }
 
-        val missing = referencedIds.filter { !GDriveImageProvider.isCached(context, it) }
+        // Single directory listing instead of N stat calls — for large
+        // libraries this is the difference between an instant start and
+        // a 10–30s stall before the first download.
+        val cachedIds = GDriveImageProvider.cachedFileIds(context)
+        val missing = referencedIds.filter { it !in cachedIds }
         val alreadyCached = total - missing.size
 
         if (missing.isEmpty()) {
