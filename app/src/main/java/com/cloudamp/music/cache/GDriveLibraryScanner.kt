@@ -34,6 +34,9 @@ class GDriveLibraryScanner(
             "front.jpg", "front.png", "front.jpeg",
             "album.jpg", "album.png", "album.jpeg"
         )
+        // Folders directly under the library root that should never be treated as artists.
+        // Compared in lowercase.
+        private val IGNORED_FOLDER_NAMES = setOf("music", ".cloudamp")
     }
 
     data class ScanResult(
@@ -137,9 +140,12 @@ class GDriveLibraryScanner(
         // Build folder lookup by ID
         val folderById = allFolders.associateBy { it.id }
 
-        // Find artist folders: direct children of root
+        // Find artist folders: direct children of root (excluding metadata folders)
         val artistFolders = allFolders
-            .filter { it.parents?.contains(rootId) == true }
+            .filter {
+                it.parents?.contains(rootId) == true &&
+                    it.name.lowercase() !in IGNORED_FOLDER_NAMES
+            }
             .sortedBy { it.name.lowercase() }
         val artistIds = artistFolders.map { it.id }.toSet()
 

@@ -121,11 +121,13 @@ export async function scanLibrary(
   onProgress?.({ stage: "Building library tree..." });
 
   // Folders to ignore: default metadata folders that aren't artist folders
-  const IGNORED_FOLDER_NAMES = new Set(["Music"]);
+  const IGNORED_FOLDER_NAMES = new Set(["music", ".cloudamp"]);
 
   // Artist folders: direct children of root (excluding known metadata folders)
   const artistFolders = allFolders
-    .filter((f) => f.parents?.includes(rootId) && !IGNORED_FOLDER_NAMES.has(f.name))
+    .filter(
+      (f) => f.parents?.includes(rootId) && !IGNORED_FOLDER_NAMES.has(f.name.toLowerCase()),
+    )
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
   const artistIds = new Set(artistFolders.map((f) => f.id));
 
