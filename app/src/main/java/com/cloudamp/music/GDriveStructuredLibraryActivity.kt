@@ -152,6 +152,10 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
             reloadLibrary()
         }
         checkAuthAndLoad()
+        // Phone sleep / app suspension can interrupt the album-art prefetch.
+        // Kick a prefetch-only job here so any covers still missing get
+        // filled in when the user returns to the library.
+        LibraryScanManager.resumePrefetchIfNeeded(this)
     }
 
     private fun checkAuthAndLoad() {

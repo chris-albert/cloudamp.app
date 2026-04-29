@@ -266,30 +266,48 @@ class GDriveLibraryScanner(
      * progress as covers complete. Failures are logged and counted as
      * unsuccessful but never thrown — a missing cover should not abort
      * the rest of the prefetch.
+     *
+     * Resumable: covers already on disk are skipped, and the progress
+     * counter starts at the already-cached count so an interrupted prefetch
+     * picks up where it left off when this is called again.
+     *
+     * After all downloads attempt, prunes cache files whose fileIds are no
+     * longer referenced by the library (e.g. covers replaced since the
+     * previous scan).
      */
     suspend fun prefetchAlbumArt(context: Context, result: ScanResult) {
         artistsCount = result.artists.size
 
-        val fileIds = buildSet {
+        val referencedIds = buildSet {
             for (artist in result.artists) artist.imageFileId?.let { add(it) }
             for (albums in result.albumsByArtist.values) {
                 for (album in albums) album.coverFileId?.let { add(it) }
             }
-        }.toList()
+        }
 
-        val total = fileIds.size
+        val total = referencedIds.size
         if (total == 0) {
             report("No album art to cache")
+            GDriveImageProvider.pruneCache(context, referencedIds)
             return
         }
 
-        report("Caching album art...", artFetched = 0, totalArt = total)
+        val missing = referencedIds.filter { !GDriveImageProvider.isCached(context, it) }
+        val alreadyCached = total - missing.size
 
-        val done = AtomicInteger(0)
+        if (missing.isEmpty()) {
+            report("Album art cached", artFetched = total, totalArt = total)
+            GDriveImageProvider.pruneCache(context, referencedIds)
+            return
+        }
+
+        report("Caching album art...", artFetched = alreadyCached, totalArt = total)
+
+        val done = AtomicInteger(alreadyCached)
         val semaphore = Semaphore(permits = 6)
 
         coroutineScope {
-            fileIds.map { fileId ->
+            missing.map { fileId ->
                 async(Dispatchers.IO) {
                     semaphore.withPermit {
                         GDriveImageProvider.fetchToCache(context, fileId)
@@ -302,6 +320,7 @@ class GDriveLibraryScanner(
 
         Log.d(TAG, "Album art prefetch complete: ${done.get()}/$total cached")
         report("Album art cached", artFetched = done.get(), totalArt = total)
+        GDriveImageProvider.pruneCache(context, referencedIds)
     }
 
     /**
@@ -330,8 +349,6 @@ class GDriveLibraryScanner(
         )
 
         cache.markCacheComplete()
-        // A full scan is the only thing that invalidates the album art cache.
-        cache.clearAlbumArtCache()
     }
 
     private suspend fun fetchAllPaginated(

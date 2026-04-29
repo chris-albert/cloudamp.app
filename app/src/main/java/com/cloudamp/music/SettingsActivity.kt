@@ -190,13 +190,14 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         reloadGdriveLibraryButton.setOnClickListener {
-            if (LibraryScanManager.isScanning) {
+            if (LibraryScanManager.isFullScanRunning) {
                 Toast.makeText(this, "Scan already in progress", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             // Notify the library activity so it drops its current view; the
             // scan itself runs in LibraryScanManager (app-scoped) and is
-            // not bound to this Settings activity's lifecycle.
+            // not bound to this Settings activity's lifecycle. A background
+            // resume-prefetch (if any) is preempted inside startScan.
             onGDriveLibraryReloadRequested?.invoke()
             LibraryScanManager.startScan(this, clearFirst = true)
         }

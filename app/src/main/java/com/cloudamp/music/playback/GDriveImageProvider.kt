@@ -65,6 +65,24 @@ class GDriveImageProvider : ContentProvider() {
         }
 
         /**
+         * Delete cached files whose fileId is not in [keep]. Used after a
+         * full scan so previously-cached covers stay on disk (no needless
+         * re-download), while orphans from removed/replaced covers go away.
+         */
+        fun pruneCache(context: Context, keep: Set<String>) {
+            val dir = File(context.filesDir, CACHE_DIR_NAME)
+            if (!dir.exists()) return
+            val files = dir.listFiles() ?: return
+            var removed = 0
+            for (f in files) {
+                if (!f.isFile || !f.name.endsWith(".img")) continue
+                val fileId = f.name.removeSuffix(".img")
+                if (fileId !in keep && f.delete()) removed++
+            }
+            Log.d(TAG, "Pruned $removed unreferenced album art files (kept ${keep.size} referenced)")
+        }
+
+        /**
          * Download a Drive image into the on-disk cache if it isn't there
          * already. Safe to call from any background thread. Returns true if
          * the image is cached (already or freshly downloaded).

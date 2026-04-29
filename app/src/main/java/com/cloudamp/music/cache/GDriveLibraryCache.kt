@@ -171,15 +171,6 @@ class GDriveLibraryCache(private val context: Context) {
         prefs.edit().putLong(KEY_LAST_LOADED, System.currentTimeMillis()).apply()
     }
 
-    /**
-     * Wipe the on-disk album art cache. Called after a full library scan so
-     * that fresh covers are fetched on next view (covers may have been added,
-     * removed, or replaced since the previous scan).
-     */
-    fun clearAlbumArtCache() {
-        GDriveImageProvider.clearCache(context)
-    }
-
     // ── Library statistics ────────────────────────────────────────────
 
     data class LibraryStats(
