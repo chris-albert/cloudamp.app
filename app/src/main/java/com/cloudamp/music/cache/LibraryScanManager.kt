@@ -90,6 +90,16 @@ object LibraryScanManager {
                 val cache = GDriveLibraryCache.getInstance(appContext)
 
                 if (clearFirst) {
+                    // Emit immediately so the user sees something before
+                    // clearCache walks albumsDir/tracksDir; on libraries
+                    // with thousands of cached JSON files this can take
+                    // several seconds.
+                    _state.value = State.Active(
+                        GDriveLibraryScanner.ScanProgress(
+                            message = "Clearing old library..."
+                        ),
+                        metadataReady = false
+                    )
                     withContext(Dispatchers.IO) { cache.clearCache() }
                 }
 
@@ -97,7 +107,18 @@ object LibraryScanManager {
                 scanner.onProgress = { progress ->
                     val current = _state.value
                     val metadataReady = current is State.Active && current.metadataReady
-                    _state.value = State.Active(progress, metadataReady)
+                    // Preserve totalAlbumArt once it's been computed so the
+                    // progress bar stays visible across phases that don't
+                    // know the cover total (e.g. saveToCache reports).
+                    val preservedTotalArt = if (current is State.Active) {
+                        current.progress.totalAlbumArt
+                    } else 0
+                    val merged = if (progress.totalAlbumArt == 0 && preservedTotalArt > 0) {
+                        progress.copy(totalAlbumArt = preservedTotalArt)
+                    } else {
+                        progress
+                    }
+                    _state.value = State.Active(merged, metadataReady)
                 }
 
                 val result = withContext(Dispatchers.IO) { scanner.scan() }
@@ -115,7 +136,7 @@ object LibraryScanManager {
                 val totalTracks = result.tracksByAlbum.values.sumOf { it.size }
                 _state.value = State.Active(
                     GDriveLibraryScanner.ScanProgress(
-                        message = "Saving library...",
+                        message = "Saving library to device...",
                         artists = result.artists.size,
                         totalArtists = result.artists.size,
                         albums = totalAlbums,

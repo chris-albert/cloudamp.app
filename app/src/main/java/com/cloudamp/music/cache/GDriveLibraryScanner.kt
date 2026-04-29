@@ -98,9 +98,25 @@ class GDriveLibraryScanner(
     private suspend fun scanFolder(rootId: String): ScanResult = coroutineScope {
         // ── Bulk fetch: 3 parallel queries across ALL of Drive ────────────
 
-        report("Fetching folders...")
+        // The three fetches run in parallel, so combine their running counts
+        // into a single message instead of flapping between three separate
+        // phase strings. Each page emits an updated count for its bucket.
+        val foldersSoFar = AtomicInteger(0)
+        val audioSoFar = AtomicInteger(0)
+        val coversSoFar = AtomicInteger(0)
+        fun reportFetch() {
+            val parts = mutableListOf<String>()
+            foldersSoFar.get().takeIf { it > 0 }?.let { parts.add("$it folders") }
+            audioSoFar.get().takeIf { it > 0 }?.let { parts.add("$it audio files") }
+            coversSoFar.get().takeIf { it > 0 }?.let { parts.add("$it cover images") }
+            val msg = if (parts.isEmpty()) "Reading library from Drive..."
+                      else "Reading library from Drive... · ${parts.joinToString(" · ")}"
+            report(msg)
+        }
+        reportFetch()
+
         val foldersDeferred = async {
-            fetchAllPaginated { pageToken ->
+            fetchAllPaginated(onPage = { foldersSoFar.set(it); reportFetch() }) { pageToken ->
                 api.listFiles(
                     query = "mimeType = 'application/vnd.google-apps.folder' and trashed = false",
                     fields = "files(id,name,parents,modifiedTime),nextPageToken",
@@ -113,7 +129,6 @@ class GDriveLibraryScanner(
 
         // Query audio files by MIME type AND by extension (Drive may assign
         // application/octet-stream to FLAC, OGG, etc. instead of audio/)
-        report("Fetching audio files...")
         val audioQuery = "(mimeType contains 'audio/'" +
             " or name contains '.flac' or name contains '.m4a'" +
             " or name contains '.ogg' or name contains '.opus'" +
@@ -122,7 +137,7 @@ class GDriveLibraryScanner(
             " or name contains '.aiff' or name contains '.ape'" +
             ") and trashed = false"
         val audioDeferred = async {
-            fetchAllPaginated { pageToken ->
+            fetchAllPaginated(onPage = { audioSoFar.set(it); reportFetch() }) { pageToken ->
                 api.listFiles(
                     query = audioQuery,
                     fields = "files(id,name,mimeType,size,parents,modifiedTime),nextPageToken",
@@ -133,9 +148,8 @@ class GDriveLibraryScanner(
             }
         }
 
-        report("Fetching cover art...")
         val coversDeferred = async {
-            fetchAllPaginated { pageToken ->
+            fetchAllPaginated(onPage = { coversSoFar.set(it); reportFetch() }) { pageToken ->
                 api.listFiles(
                     query = "(name='cover.jpg' or name='cover.png' or name='cover.jpeg' or name='folder.jpg' or name='folder.png' or name='folder.jpeg' or name='front.jpg' or name='front.png' or name='front.jpeg' or name='album.jpg' or name='album.png' or name='album.jpeg') and mimeType contains 'image/' and trashed = false",
                     fields = "files(id,name,parents),nextPageToken",
@@ -154,7 +168,7 @@ class GDriveLibraryScanner(
 
         // ── Reconstruct tree client-side ──────────────────────────────────
 
-        report("Building library tree...")
+        report("Matching folders to artists and albums...")
 
         // Build folder lookup by ID
         val folderById = allFolders.associateBy { it.id }
@@ -220,7 +234,7 @@ class GDriveLibraryScanner(
         artistsCount = 0
         albumsCount = 0
         tracksCount = 0
-        report("Organizing library...")
+        report("Indexing artists, albums, and tracks...")
 
         val artists = mutableListOf<GDriveArtist>()
         val albumsByArtistMap = mutableMapOf<String, List<GDriveAlbum>>()
@@ -278,14 +292,14 @@ class GDriveLibraryScanner(
 
             artistsCount++
             albumsCount += sortedAlbums.size
-            report("Organizing library...")
+            report("Indexing artists, albums, and tracks...")
         }
 
         val sortedArtists = artists.sortedBy { it.name.lowercase() }
         Log.d(TAG, "Scan complete: ${sortedArtists.size} artists, ${albumsByArtistMap.values.sumOf { it.size }} albums, ${tracksByAlbumMap.values.sumOf { it.size }} tracks")
 
         artistsCount = sortedArtists.size
-        report("Scan complete")
+        report("Library indexed")
 
         ScanResult(sortedArtists, albumsByArtistMap, tracksByAlbumMap)
     }
@@ -361,15 +375,34 @@ class GDriveLibraryScanner(
     }
 
     /**
-     * Save scan results to cache.
+     * Save scan results to cache. Reports per-step progress so the user
+     * doesn't see a long silent gap on libraries with thousands of items
+     * (each artist + album writes its own JSON file).
      */
     fun saveToCache(result: ScanResult) {
         cache.saveArtists(result.artists)
+
+        val artistFiles = result.albumsByArtist.size
+        val albumFiles = result.tracksByAlbum.size
+        val totalFiles = artistFiles + albumFiles
+        var saved = 0
+
         for ((artistId, albums) in result.albumsByArtist) {
             cache.saveArtistAlbums(artistId, albums)
+            saved++
+            // Throttle UI emits — file writes are fast individually but
+            // updating state thousands of times in a tight loop bogs the
+            // Main thread.
+            if (saved % 5 == 0 || saved == totalFiles) {
+                report("Saving library to device... ($saved/$totalFiles)")
+            }
         }
         for ((albumId, tracks) in result.tracksByAlbum) {
             cache.saveAlbumTracks(albumId, tracks)
+            saved++
+            if (saved % 25 == 0 || saved == totalFiles) {
+                report("Saving library to device... ($saved/$totalFiles)")
+            }
         }
 
         val totalCovers = buildSet {
@@ -386,9 +419,11 @@ class GDriveLibraryScanner(
         )
 
         cache.markCacheComplete()
+        report("Library saved")
     }
 
     private suspend fun fetchAllPaginated(
+        onPage: ((totalSoFar: Int) -> Unit)? = null,
         fetcher: suspend (pageToken: String?) -> retrofit2.Response<DriveFileListResponse>
     ): List<DriveFile> {
         val allFiles = mutableListOf<DriveFile>()
@@ -404,6 +439,7 @@ class GDriveLibraryScanner(
                 pageToken = body?.nextPageToken
                 page++
                 Log.d(TAG, "  page $page: ${files.size} items (${allFiles.size} total)")
+                onPage?.invoke(allFiles.size)
             } else {
                 Log.e(TAG, "API error: ${response.code()}")
                 break
