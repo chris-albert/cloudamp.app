@@ -309,6 +309,20 @@ class GDriveLibraryScanner(
         for ((albumId, tracks) in result.tracksByAlbum) {
             cache.saveAlbumTracks(albumId, tracks)
         }
+
+        val totalCovers = buildSet {
+            for (artist in result.artists) artist.imageFileId?.let { add(it) }
+            for (albums in result.albumsByArtist.values) {
+                for (album in albums) album.coverFileId?.let { add(it) }
+            }
+        }.size
+        cache.saveStats(
+            artists = result.artists.size,
+            albums = result.albumsByArtist.values.sumOf { it.size },
+            tracks = result.tracksByAlbum.values.sumOf { it.size },
+            totalCovers = totalCovers
+        )
+
         cache.markCacheComplete()
         // A full scan is the only thing that invalidates the album art cache.
         cache.clearAlbumArtCache()

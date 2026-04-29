@@ -37,6 +37,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var reloadGdriveLibraryButton: Button
     private lateinit var gdriveScanStatusText: TextView
     private lateinit var gdriveScanProgressBar: ProgressBar
+    private lateinit var gdriveLibraryStatsText: TextView
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
@@ -180,6 +181,7 @@ class SettingsActivity : AppCompatActivity() {
         reloadGdriveLibraryButton = findViewById(R.id.reloadGdriveLibraryButton)
         gdriveScanStatusText = findViewById(R.id.gdriveScanStatusText)
         gdriveScanProgressBar = findViewById(R.id.gdriveScanProgressBar)
+        gdriveLibraryStatsText = findViewById(R.id.gdriveLibraryStatsText)
 
         updateGDriveLibraryDisplay()
 
@@ -228,6 +230,13 @@ class SettingsActivity : AppCompatActivity() {
 
                         reloadGdriveLibraryButton.isEnabled = false
                         reloadGdriveLibraryButton.text = "SCAN IN PROGRESS..."
+
+                        // Once metadata is persisted, stats are known and we
+                        // can show artist/album/track totals plus a live
+                        // cached-cover count from the prefetch progress.
+                        if (state.metadataReady) {
+                            renderLibraryStats(liveCachedCovers = state.progress.albumArtFetched)
+                        }
                     }
                     is LibraryScanManager.State.Error -> {
                         gdriveScanStatusText.visibility = View.VISIBLE
@@ -239,6 +248,19 @@ class SettingsActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun renderLibraryStats(liveCachedCovers: Int? = null) {
+        val stats = gdriveLibraryCache.getStats()
+        if (stats == null) {
+            gdriveLibraryStatsText.visibility = View.GONE
+            return
+        }
+        val cached = liveCachedCovers ?: stats.cachedCovers
+        gdriveLibraryStatsText.visibility = View.VISIBLE
+        gdriveLibraryStatsText.text =
+            "Library: ${stats.artists} artists · ${stats.albums} albums · " +
+                "${stats.tracks} tracks · $cached/${stats.totalCovers} covers cached"
     }
 
     private fun formatScanStatus(p: GDriveLibraryScanner.ScanProgress): String =
@@ -266,6 +288,8 @@ class SettingsActivity : AppCompatActivity() {
         } else {
             "Last loaded: Never"
         }
+
+        renderLibraryStats()
     }
 
     private fun showFolderPicker() {

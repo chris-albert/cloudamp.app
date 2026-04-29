@@ -29,6 +29,10 @@ class GDriveLibraryCache(private val context: Context) {
         private const val KEY_ROOT_FOLDER_ID = "gdrive_music_root_id"
         private const val KEY_ROOT_FOLDER_NAME = "gdrive_music_root_name"
         private const val KEY_RECENTLY_PLAYED = "recently_played_album_ids"
+        private const val KEY_STAT_ARTISTS = "stat_artists"
+        private const val KEY_STAT_ALBUMS = "stat_albums"
+        private const val KEY_STAT_TRACKS = "stat_tracks"
+        private const val KEY_STAT_TOTAL_COVERS = "stat_total_covers"
         private const val MAX_RECENTLY_PLAYED = 20
 
         @Volatile
@@ -176,6 +180,42 @@ class GDriveLibraryCache(private val context: Context) {
         GDriveImageProvider.clearCache(context)
     }
 
+    // ── Library statistics ────────────────────────────────────────────
+
+    data class LibraryStats(
+        val artists: Int,
+        val albums: Int,
+        val tracks: Int,
+        val totalCovers: Int,
+        val cachedCovers: Int
+    )
+
+    fun saveStats(artists: Int, albums: Int, tracks: Int, totalCovers: Int) {
+        prefs.edit()
+            .putInt(KEY_STAT_ARTISTS, artists)
+            .putInt(KEY_STAT_ALBUMS, albums)
+            .putInt(KEY_STAT_TRACKS, tracks)
+            .putInt(KEY_STAT_TOTAL_COVERS, totalCovers)
+            .apply()
+    }
+
+    fun getStats(): LibraryStats? {
+        if (!prefs.contains(KEY_STAT_ARTISTS)) return null
+        return LibraryStats(
+            artists = prefs.getInt(KEY_STAT_ARTISTS, 0),
+            albums = prefs.getInt(KEY_STAT_ALBUMS, 0),
+            tracks = prefs.getInt(KEY_STAT_TRACKS, 0),
+            totalCovers = prefs.getInt(KEY_STAT_TOTAL_COVERS, 0),
+            cachedCovers = countCachedCovers()
+        )
+    }
+
+    /** Number of cover image files currently sitting in the album-art cache. */
+    fun countCachedCovers(): Int {
+        return GDriveImageProvider.cacheDir(context).listFiles()
+            ?.count { it.isFile && it.name.endsWith(".img") } ?: 0
+    }
+
     fun getLastLoadedTimestamp(): Long {
         return prefs.getLong(KEY_LAST_LOADED, 0)
     }
@@ -196,6 +236,10 @@ class GDriveLibraryCache(private val context: Context) {
         prefs.edit()
             .remove(KEY_ARTISTS)
             .remove(KEY_LAST_LOADED)
+            .remove(KEY_STAT_ARTISTS)
+            .remove(KEY_STAT_ALBUMS)
+            .remove(KEY_STAT_TRACKS)
+            .remove(KEY_STAT_TOTAL_COVERS)
             .apply()
 
         albumsDir.deleteRecursively()
