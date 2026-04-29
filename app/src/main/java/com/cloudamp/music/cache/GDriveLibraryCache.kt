@@ -6,6 +6,7 @@ import android.util.Log
 import com.cloudamp.music.api.GDriveAlbum
 import com.cloudamp.music.api.GDriveArtist
 import com.cloudamp.music.api.GDriveTrack
+import com.cloudamp.music.playback.GDriveImageProvider
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.io.File
@@ -164,6 +165,15 @@ class GDriveLibraryCache(private val context: Context) {
 
     fun markCacheComplete() {
         prefs.edit().putLong(KEY_LAST_LOADED, System.currentTimeMillis()).apply()
+    }
+
+    /**
+     * Wipe the on-disk album art cache. Called after a full library scan so
+     * that fresh covers are fetched on next view (covers may have been added,
+     * removed, or replaced since the previous scan).
+     */
+    fun clearAlbumArtCache() {
+        GDriveImageProvider.clearCache(context)
     }
 
     fun getLastLoadedTimestamp(): Long {

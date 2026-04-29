@@ -236,6 +236,8 @@ class GDriveLibraryScanner(
             cache.saveAlbumTracks(albumId, tracks)
         }
         cache.markCacheComplete()
+        // A full scan is the only thing that invalidates the album art cache.
+        cache.clearAlbumArtCache()
     }
 
     private suspend fun fetchAllPaginated(
