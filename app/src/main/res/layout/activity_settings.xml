@@ -176,5 +176,24 @@
             android:background="@color/winamp_button"
             android:fontFamily="monospace"/>
 
+        <TextView
+            android:id="@+id/gdriveScanStatusText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/winamp_display_text"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:layout_marginTop="8dp"
+            android:visibility="gone"/>
+
+        <ProgressBar
+            android:id="@+id/gdriveScanProgressBar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:max="100"
+            android:visibility="gone"/>
+
     </LinearLayout>
 </ScrollView>
