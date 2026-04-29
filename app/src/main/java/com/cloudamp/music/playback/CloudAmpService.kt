@@ -625,20 +625,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         val artists = gdriveLibraryCache.getArtists() ?: emptyList()
         val placeholderUri = "android.resource://${packageName}/${R.drawable.ic_gdrive}"
 
-        // Recently Added albums
         val allAlbums = artists.flatMap { artist ->
             gdriveLibraryCache.getArtistAlbums(artist.id) ?: emptyList()
-        }
-        val recentlyAdded = allAlbums.sortedByDescending { it.modifiedTime ?: "" }.take(9)
-        for (album in recentlyAdded) {
-            val imageUrl = album.coverFileId?.let { GDriveImageProvider.buildUri(it).toString() }
-            items.add(createBrowsableItemWithGroup(
-                "gdrive_music_album_${album.id}",
-                album.name,
-                album.artistName,
-                "Recently Added",
-                imageUrl ?: placeholderUri
-            ))
         }
 
         // Discover: random 9
@@ -654,16 +642,33 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             ))
         }
 
-        // All Artists
-        for (artist in artists) {
-            val artistImageId = artist.imageFileId
-                ?: gdriveLibraryCache.getArtistAlbums(artist.id)?.firstOrNull()?.coverFileId
-            val imageUrl = artistImageId?.let { GDriveImageProvider.buildUri(it).toString() }
+        // Recently Played: from NDJSON history (falls back to SharedPreferences)
+        val history = GDrivePlaybackHistory.getInstance(this)
+        val recentlyPlayedIds = history.getRecentlyPlayedAlbumIds(9).ifEmpty {
+            gdriveLibraryCache.getRecentlyPlayedIds().take(9)
+        }
+        val albumById = allAlbums.associateBy { it.id }
+        val recentlyPlayed = recentlyPlayedIds.mapNotNull { albumById[it] }
+        for (album in recentlyPlayed) {
+            val imageUrl = album.coverFileId?.let { GDriveImageProvider.buildUri(it).toString() }
             items.add(createBrowsableItemWithGroup(
-                "gdrive_music_artist_${artist.id}",
-                artist.name,
-                "${artist.albumCount} album${if (artist.albumCount != 1) "s" else ""}",
-                "Artists",
+                "gdrive_music_album_${album.id}",
+                album.name,
+                album.artistName,
+                "Recently Played",
+                imageUrl ?: placeholderUri
+            ))
+        }
+
+        // Recently Added albums
+        val recentlyAdded = allAlbums.sortedByDescending { it.modifiedTime ?: "" }.take(9)
+        for (album in recentlyAdded) {
+            val imageUrl = album.coverFileId?.let { GDriveImageProvider.buildUri(it).toString() }
+            items.add(createBrowsableItemWithGroup(
+                "gdrive_music_album_${album.id}",
+                album.name,
+                album.artistName,
+                "Recently Added",
                 imageUrl ?: placeholderUri
             ))
         }
