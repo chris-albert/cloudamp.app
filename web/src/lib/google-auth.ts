@@ -87,7 +87,7 @@ export async function startAuthFlow() {
 
   const params = new URLSearchParams({
     client_id: clientId,
-    redirect_uri: `${window.location.origin}/callback`,
+    redirect_uri: `${window.location.origin}${import.meta.env.BASE_URL}callback`,
     response_type: "code",
     scope: SCOPES,
     code_challenge: codeChallenge,
@@ -110,7 +110,7 @@ export async function handleCallback(code: string): Promise<void> {
     code,
     code_verifier: codeVerifier,
     grant_type: "authorization_code",
-    redirect_uri: `${window.location.origin}/callback`,
+    redirect_uri: `${window.location.origin}${import.meta.env.BASE_URL}callback`,
   });
 
   const response = await fetch(TOKEN_URL, {
