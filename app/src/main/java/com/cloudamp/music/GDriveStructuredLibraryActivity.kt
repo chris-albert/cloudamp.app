@@ -187,10 +187,11 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
         scope.launch {
             try {
                 val scanner = GDriveLibraryScanner(driveClient.api, libraryCache)
-                scanner.onProgress = { message ->
+                scanner.onProgress = { progress ->
                     scope.launch(Dispatchers.Main) {
-                        loadingTextView.text = message
-                        pathTextView.text = "GDRIVE MUSIC / $message"
+                        val text = formatScanProgress(progress)
+                        loadingTextView.text = text
+                        pathTextView.text = "GDRIVE MUSIC / $text"
                     }
                 }
 
@@ -203,7 +204,7 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
                     return@launch
                 }
 
-                // Save to cache
+                // Save metadata to cache (also clears stale album-art cache).
                 withContext(Dispatchers.IO) {
                     scanner.saveToCache(result)
                 }
@@ -224,6 +225,12 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
                     return@launch
                 }
 
+                // Prefetch album art in the background — library is already
+                // visible at this point; status keeps showing in the path bar.
+                withContext(Dispatchers.IO) {
+                    scanner.prefetchAlbumArt(this@GDriveStructuredLibraryActivity, result)
+                }
+
                 pathTextView.text = "GDRIVE MUSIC"
 
             } catch (e: Exception) {
@@ -237,6 +244,17 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
             }
         }
     }
+
+    private fun formatScanProgress(p: GDriveLibraryScanner.ScanProgress): String =
+        buildString {
+            append(p.message)
+            if (p.artists > 0) {
+                append(" · ${p.artists} artist${if (p.artists != 1) "s" else ""}")
+            }
+            if (p.totalAlbumArt > 0) {
+                append(" · art ${p.albumArtFetched}/${p.totalAlbumArt}")
+            }
+        }
 
     private fun preloadCachedAlbums() {
         val artists = libraryCache.getArtists() ?: return

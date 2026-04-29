@@ -48,6 +48,14 @@ class GDriveImageProvider : ContentProvider() {
         fun cacheDir(context: Context): File =
             File(context.filesDir, CACHE_DIR_NAME).also { it.mkdirs() }
 
+        fun cacheFileFor(context: Context, fileId: String): File =
+            File(cacheDir(context), "$fileId.img")
+
+        fun isCached(context: Context, fileId: String): Boolean {
+            val f = cacheFileFor(context, fileId)
+            return f.exists() && f.length() > 0
+        }
+
         /** Wipe every cached image. Called after a full library scan. */
         fun clearCache(context: Context) {
             val dir = File(context.filesDir, CACHE_DIR_NAME)
@@ -55,58 +63,65 @@ class GDriveImageProvider : ContentProvider() {
             val count = dir.listFiles()?.count { it.delete() } ?: 0
             Log.d(TAG, "Cleared $count cached album art files")
         }
-    }
 
-    private val cacheDir: File by lazy { cacheDir(context!!) }
+        /**
+         * Download a Drive image into the on-disk cache if it isn't there
+         * already. Safe to call from any background thread. Returns true if
+         * the image is cached (already or freshly downloaded).
+         */
+        fun fetchToCache(context: Context, fileId: String): Boolean {
+            val cacheFile = cacheFileFor(context, fileId)
+            if (cacheFile.exists() && cacheFile.length() > 0) return true
+
+            return try {
+                val authManager = GoogleDriveAuthManager(context)
+                val token = authManager.getAccessToken() ?: return false
+
+                val downloadUrl = "https://www.googleapis.com/drive/v3/files/$fileId?alt=media"
+                val connection = URL(downloadUrl).openConnection() as HttpURLConnection
+                connection.setRequestProperty("Authorization", "Bearer $token")
+                connection.connectTimeout = 5000
+                connection.readTimeout = 5000
+                connection.doInput = true
+                connection.connect()
+
+                if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+                    val tmpFile = File(cacheDir(context), "$fileId.img.tmp")
+                    connection.inputStream.use { input ->
+                        FileOutputStream(tmpFile).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    if (tmpFile.length() > 0 && tmpFile.renameTo(cacheFile)) {
+                        true
+                    } else {
+                        tmpFile.delete()
+                        Log.w(TAG, "Failed to finalize cache file for $fileId")
+                        false
+                    }
+                } else {
+                    Log.w(TAG, "Failed to download image for $fileId: HTTP ${connection.responseCode}")
+                    false
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to download image for $fileId: ${e.message}")
+                false
+            }
+        }
+    }
 
     override fun onCreate(): Boolean = true
 
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor? {
         val fileId = uri.pathSegments?.firstOrNull() ?: return null
+        val ctx = context ?: return null
 
-        val cacheFile = File(cacheDir, "$fileId.img")
+        if (!fetchToCache(ctx, fileId)) return null
 
-        // Cache never expires by time — only cleared on full library scan.
-        if (cacheFile.exists() && cacheFile.length() > 0) {
-            return ParcelFileDescriptor.open(cacheFile, ParcelFileDescriptor.MODE_READ_ONLY)
-        }
-
-        // Download the image from Google Drive into the cache.
-        try {
-            val authManager = GoogleDriveAuthManager(context!!)
-            val token = authManager.getAccessToken() ?: return null
-
-            val downloadUrl = "https://www.googleapis.com/drive/v3/files/$fileId?alt=media"
-            val connection = URL(downloadUrl).openConnection() as HttpURLConnection
-            connection.setRequestProperty("Authorization", "Bearer $token")
-            connection.connectTimeout = 5000
-            connection.readTimeout = 5000
-            connection.doInput = true
-            connection.connect()
-
-            if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-                // Write to a temp file first, then atomically rename — avoids
-                // leaving a half-written file behind if the download is cut off.
-                val tmpFile = File(cacheDir, "$fileId.img.tmp")
-                connection.inputStream.use { input ->
-                    FileOutputStream(tmpFile).use { output ->
-                        input.copyTo(output)
-                    }
-                }
-                if (tmpFile.length() > 0 && tmpFile.renameTo(cacheFile)) {
-                    return ParcelFileDescriptor.open(cacheFile, ParcelFileDescriptor.MODE_READ_ONLY)
-                } else {
-                    tmpFile.delete()
-                    Log.w(TAG, "Failed to finalize cache file for $fileId")
-                }
-            } else {
-                Log.w(TAG, "Failed to download image for $fileId: HTTP ${connection.responseCode}")
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to download image for $fileId: ${e.message}")
-        }
-
-        return null
+        return ParcelFileDescriptor.open(
+            cacheFileFor(ctx, fileId),
+            ParcelFileDescriptor.MODE_READ_ONLY
+        )
     }
 
     override fun getType(uri: Uri): String = "image/*"
