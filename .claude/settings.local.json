@@ -1,5 +1,6 @@
 {
   "permissions": {
+    "defaultMode": "bypassPermissions",
     "allow": [
       "Bash(./gradlew compileDebugKotlin:*)",
       "Bash(/usr/libexec/java_home:*)",
@@ -25,7 +26,24 @@
       "Bash(brew list:*)",
       "Bash(/opt/homebrew/opt/openjdk/bin/java:*)",
       "Bash(git fetch:*)",
-      "Bash(git merge:*)"
+      "Bash(git merge:*)",
+      "Bash(ls:*)",
+      "Bash(git -C /Users/christopheralbert/git/cloudamp.app log --oneline -5)",
+      "Bash(xargs basename:*)",
+      "Bash(gh pr view:*)",
+      "Bash(grep:*)",
+      "Bash(git stash:*)",
+      "Bash(git cherry-pick:*)",
+      "Bash(curl:*)",
+      "Bash(nslookup:*)",
+      "Bash(open:*)",
+      "WebSearch",
+      "WebFetch(domain:commons.wikimedia.org)",
+      "Bash(gh pr:*)",
+      "Bash(gh run:*)",
+      "Bash(gh api:*)",
+      "Bash(python3:*)",
+      "WebFetch(domain:musicbrainz.org)"
     ]
   }
 }
