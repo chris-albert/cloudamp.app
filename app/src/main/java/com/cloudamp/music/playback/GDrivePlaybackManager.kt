@@ -10,6 +10,7 @@ import com.cloudamp.music.api.GoogleDriveApiClient
 import com.cloudamp.music.cache.GDriveLibraryCache
 import com.cloudamp.music.cache.GDrivePlaybackHistory
 import com.cloudamp.music.cache.MediaCache
+import com.cloudamp.music.cache.MediaCachePrefetcher
 import com.cloudamp.music.models.Album
 import com.cloudamp.music.models.Artist
 import com.cloudamp.music.models.Image
@@ -51,6 +52,7 @@ class GDrivePlaybackManager private constructor(
 
     private var exoPlayer: ExoPlayer? = null
     private var dataSourceFactory: DataSource.Factory? = null
+    private var prefetcher: MediaCachePrefetcher? = null
     private var service: CloudAmpService? = null
 
     private val queue = mutableListOf<DriveFile>()
@@ -117,6 +119,29 @@ class GDrivePlaybackManager private constructor(
         return Uri.parse("https://www.googleapis.com/drive/v3/files/$fileId?alt=media")
     }
 
+    private fun getPrefetcher(): MediaCachePrefetcher =
+        prefetcher ?: MediaCachePrefetcher(MediaCache.getInstance(context)).also { prefetcher = it }
+
+    /**
+     * Kick off background prefetch of every track in the queue except the
+     * one currently playing. Order: upcoming first (so the next song is
+     * always ready), then earlier tracks for skip-back.
+     */
+    private fun startQueuePrefetch(files: List<DriveFile>, currentIdx: Int) {
+        if (files.size <= 1) return
+        val driveClient = GoogleDriveApiClient.getInstance(context)
+        if (!driveClient.hasAccessToken()) return
+        val upstream: DataSource.Factory = OkHttpDataSource.Factory(driveClient.getStreamingHttpClient())
+        val items = ArrayList<MediaCachePrefetcher.Item>(files.size - 1)
+        for (i in (currentIdx + 1) until files.size) {
+            items.add(MediaCachePrefetcher.Item(files[i].id, buildStreamUri(files[i].id)))
+        }
+        for (i in 0 until currentIdx.coerceAtMost(files.size)) {
+            items.add(MediaCachePrefetcher.Item(files[i].id, buildStreamUri(files[i].id)))
+        }
+        getPrefetcher().prefetch(items, upstream)
+    }
+
     /**
      * Build a MediaItem whose cache key is the Drive file ID. Pinning the
      * key makes cache hits independent of the URL (and any query string
@@ -174,6 +199,8 @@ class GDrivePlaybackManager private constructor(
         updateServiceMetadata()
         updateServiceQueue()
         service?.updatePlaybackState(PlaybackStateCompat.STATE_BUFFERING)
+
+        startQueuePrefetch(files, startIndex)
     }
 
     /**
@@ -210,6 +237,8 @@ class GDrivePlaybackManager private constructor(
         updateServiceMetadata()
         updateServiceQueue()
         service?.updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, positionMs)
+
+        startQueuePrefetch(files, startIndex)
     }
 
     override suspend fun play() {
@@ -377,6 +406,7 @@ class GDrivePlaybackManager private constructor(
         if (ActivePlayback.provider === this) {
             ActivePlayback.clear()
         }
+        prefetcher?.cancel()
         exoPlayer?.release()
         exoPlayer = null
         dataSourceFactory = null
