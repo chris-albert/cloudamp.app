@@ -97,20 +97,25 @@ class GDriveLibraryScanner(
 
     private suspend fun scanFolder(rootId: String): ScanResult = coroutineScope {
         // ── Bulk fetch: 3 parallel queries across ALL of Drive ────────────
-
-        // The three fetches run in parallel, so combine their running counts
-        // into a single message instead of flapping between three separate
-        // phase strings. Each page emits an updated count for its bucket.
+        //
+        // Drive's API has no "give me everything recursively under folder X"
+        // call (the parents field only references the direct parent), so we
+        // run three Drive-wide queries and filter client-side. This means
+        // the running counts here are *pre-filter* — they include files
+        // outside the music root and substring false-positives from
+        // queries like name contains '.flac'. The "matches" wording in the
+        // status text reflects that; the final track/album/artist counts
+        // emerge during the indexing phase below.
         val foldersSoFar = AtomicInteger(0)
         val audioSoFar = AtomicInteger(0)
         val coversSoFar = AtomicInteger(0)
         fun reportFetch() {
             val parts = mutableListOf<String>()
             foldersSoFar.get().takeIf { it > 0 }?.let { parts.add("$it folders") }
-            audioSoFar.get().takeIf { it > 0 }?.let { parts.add("$it audio files") }
-            coversSoFar.get().takeIf { it > 0 }?.let { parts.add("$it cover images") }
-            val msg = if (parts.isEmpty()) "Reading library from Drive..."
-                      else "Reading library from Drive... · ${parts.joinToString(" · ")}"
+            audioSoFar.get().takeIf { it > 0 }?.let { parts.add("$it audio matches") }
+            coversSoFar.get().takeIf { it > 0 }?.let { parts.add("$it cover matches") }
+            val msg = if (parts.isEmpty()) "Searching your Drive..."
+                      else "Searching your Drive... · ${parts.joinToString(" · ")}"
             report(msg)
         }
         reportFetch()
