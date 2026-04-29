@@ -156,7 +156,7 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
         if (System.currentTimeMillis() - lastUpload < UPLOAD_THROTTLE_MS) return
 
         scope.launch {
-            uploadToDrive()
+            consolidateOnDrive()
         }
     }
 
@@ -180,71 +180,8 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
      */
     fun forceUpload() {
         scope.launch {
-            uploadToDrive()
+            consolidateOnDrive()
         }
-    }
-
-    /**
-     * Returns the parent folder ID for the history file: a ".cloudamp"
-     * subfolder inside the user's configured music library root. Creates the
-     * subfolder on Drive if missing. Returns null if the library root has not
-     * been set or Drive is unavailable.
-     *
-     * Also performs a one-time migration on first call: clears the cached
-     * file/folder IDs from the previous storage layout (where history lived in
-     * a ".cloudamp" folder at Drive root) so the next upload re-resolves a
-     * fresh subfolder inside the library root. The local NDJSON file persists,
-     * so historical play events are preserved and re-uploaded.
-     */
-    private suspend fun resolveParentFolderId(): String? {
-        migrateStorageVersionIfNeeded()
-
-        val libraryRootId = GDriveLibraryCache.getInstance(context).getRootFolderId() ?: return null
-
-        val cached = prefs.getString(KEY_DRIVE_FOLDER_ID, null)
-        if (cached != null) return cached
-
-        val client = GoogleDriveApiClient.getInstance(context)
-        if (!client.hasAccessToken()) return null
-
-        try {
-            // Look for an existing .cloudamp subfolder inside the library root.
-            val searchResponse = client.api.listFiles(
-                query = "name = '$SUBFOLDER_NAME' and mimeType = 'application/vnd.google-apps.folder' and '$libraryRootId' in parents and trashed = false",
-                fields = "files(id,name)",
-                pageSize = 1
-            )
-            if (searchResponse.isSuccessful) {
-                val existing = searchResponse.body()?.files?.firstOrNull()
-                if (existing != null) {
-                    prefs.edit().putString(KEY_DRIVE_FOLDER_ID, existing.id).apply()
-                    return existing.id
-                }
-            }
-
-            // Otherwise create it.
-            val metadata = JSONObject().apply {
-                put("name", SUBFOLDER_NAME)
-                put("mimeType", "application/vnd.google-apps.folder")
-                put("parents", org.json.JSONArray().put(libraryRootId))
-            }.toString()
-
-            val response = client.api.createFolder(
-                metadata = metadata.toRequestBody("application/json".toMediaType())
-            )
-            if (response.isSuccessful) {
-                val newId = response.body()?.id
-                if (newId != null) {
-                    prefs.edit().putString(KEY_DRIVE_FOLDER_ID, newId).apply()
-                    return newId
-                }
-            } else {
-                Log.e(TAG, "Failed to create .cloudamp subfolder: ${response.code()}")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error resolving .cloudamp subfolder: ${e.message}")
-        }
-        return null
     }
 
     private fun migrateStorageVersionIfNeeded() {
@@ -256,60 +193,6 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
             .remove(KEY_DRIVE_FOLDER_ID)
             .putInt(KEY_STORAGE_VERSION, CURRENT_STORAGE_VERSION)
             .apply()
-    }
-
-    private suspend fun uploadToDrive() = driveMutex.withLock {
-        if (!localFile.exists() || localFile.length() == 0L) return@withLock
-
-        val client = GoogleDriveApiClient.getInstance(context)
-        if (!client.hasAccessToken()) return@withLock
-
-        try {
-            val folderId = resolveParentFolderId() ?: return@withLock
-            val content = localFile.readText()
-            val mediaBody = content.toRequestBody("application/x-ndjson".toMediaType())
-
-            var fileId = prefs.getString(KEY_DRIVE_FILE_ID, null)
-
-            if (fileId != null) {
-                // Update existing file
-                val response = client.api.updateFileContent(fileId, mediaBody)
-                if (response.isSuccessful) {
-                    prefs.edit().putLong(KEY_LAST_UPLOAD, System.currentTimeMillis()).apply()
-                    Log.d(TAG, "History uploaded to Drive (updated)")
-                    return@withLock
-                } else if (response.code() == 404) {
-                    // File was deleted, clear ID and retry
-                    prefs.edit().remove(KEY_DRIVE_FILE_ID).apply()
-                    fileId = null
-                }
-            }
-
-            if (fileId == null) {
-                // Create new file
-                val metadata = JSONObject().apply {
-                    put("name", HISTORY_FILENAME)
-                    put("parents", org.json.JSONArray().put(folderId))
-                }.toString()
-
-                val metadataPart = metadata.toRequestBody("application/json".toMediaType())
-                val mediaPart = MultipartBody.Part.createFormData("media", HISTORY_FILENAME, mediaBody)
-
-                val response = client.api.createFile(metadataPart, mediaPart)
-                if (response.isSuccessful) {
-                    val newId = response.body()?.id
-                    prefs.edit()
-                        .putString(KEY_DRIVE_FILE_ID, newId)
-                        .putLong(KEY_LAST_UPLOAD, System.currentTimeMillis())
-                        .apply()
-                    Log.d(TAG, "History uploaded to Drive (created, id=$newId)")
-                } else {
-                    Log.e(TAG, "Failed to create history file: ${response.code()}")
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Upload error: ${e.message}")
-        }
     }
 
     /**
@@ -409,9 +292,28 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
                 }
             }
 
-            // 6. Update local file with merged content.
-            if (mergedContent.isNotEmpty()) {
-                localFile.writeText(mergedContent)
+            // 6. Update local file with merged content. Re-read local right
+            //    before writing to pick up any plays appended while we were
+            //    talking to Drive — narrows the lost-append window to a few
+            //    microseconds between this read and the writeText below.
+            if (localFile.exists()) {
+                for (line in localFile.readLines()) {
+                    if (line.isNotBlank()) merged.add(line)
+                }
+            }
+            val finalContent = if (merged.isEmpty()) "" else merged.joinToString("\n") + "\n"
+            if (finalContent.isNotEmpty()) {
+                localFile.writeText(finalContent)
+            }
+            // Push any newly-included lines to Drive so they aren't lost on
+            // next overwrite.
+            if (canonicalFileId != null && finalContent.isNotEmpty() && finalContent != mergedContent) {
+                val finalMedia = finalContent.toRequestBody("application/x-ndjson".toMediaType())
+                try {
+                    client.api.updateFileContent(canonicalFileId, finalMedia)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Final-merge update failed: ${e.message}")
+                }
             }
 
             // 7. Cache canonical IDs.
