@@ -76,6 +76,7 @@ class MediaCache private constructor(context: Context) {
         val entry = JSONObject().apply {
             put("name", name)
             if (totalBytes != null && totalBytes > 0) put("size", totalBytes)
+            put("addedAt", System.currentTimeMillis())
         }
         index.put(fileId, entry)
         writeIndex(index)
@@ -86,6 +87,7 @@ class MediaCache private constructor(context: Context) {
         val name: String,
         val cachedBytes: Long,
         val totalBytes: Long?,
+        val addedAt: Long,
     )
 
     data class Stats(
@@ -109,10 +111,11 @@ class MediaCache private constructor(context: Context) {
                     name = meta?.optString("name").orEmpty().ifEmpty { key },
                     cachedBytes = bytes,
                     totalBytes = meta?.optLong("size", -1L)?.takeIf { it > 0 },
+                    addedAt = meta?.optLong("addedAt", 0L) ?: 0L,
                 )
             )
         }
-        list.sortByDescending { it.cachedBytes }
+        list.sortByDescending { it.addedAt }
         return Stats(cache.cacheSpace, maxBytes, list)
     }
 
