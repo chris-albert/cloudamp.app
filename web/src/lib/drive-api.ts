@@ -14,6 +14,7 @@ export interface DriveFile {
   size?: string;
   parents?: string[];
   modifiedTime?: string;
+  trashed?: boolean;
 }
 
 interface DriveFileListResponse {
@@ -248,4 +249,75 @@ export async function fetchAllPaginated(
   } while (pageToken);
 
   return all;
+}
+
+// ── Changes API ───────────────────────────────────────────────────────
+
+export class PageTokenExpiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PageTokenExpiredError";
+  }
+}
+
+export async function getChangesStartPageToken(): Promise<string> {
+  const url = `${BASE_URL}/changes/startPageToken`;
+  const res = await fetchWithAuth(url);
+  if (!res.ok) throw new Error(`Drive API error: ${res.status}`);
+  const data: { startPageToken: string } = await res.json();
+  return data.startPageToken;
+}
+
+export interface DriveChange {
+  fileId: string;
+  removed: boolean;
+  file?: DriveFile;
+}
+
+interface ChangesListResponse {
+  changes: DriveChange[];
+  nextPageToken?: string;
+  newStartPageToken?: string;
+}
+
+export async function fetchChanges(
+  pageToken: string,
+  onProgress?: (count: number) => void,
+): Promise<{ changes: DriveChange[]; newStartPageToken: string }> {
+  const allChanges: DriveChange[] = [];
+  let currentPageToken: string | undefined = pageToken;
+  let newStartPageToken: string | undefined;
+
+  do {
+    const params = new URLSearchParams({
+      pageToken: currentPageToken!,
+      fields:
+        "changes(fileId,removed,file(id,name,mimeType,size,parents,modifiedTime,trashed)),nextPageToken,newStartPageToken",
+      pageSize: "1000",
+      spaces: "drive",
+      includeRemoved: "true",
+    });
+
+    const res = await fetchWithAuth(`${BASE_URL}/changes?${params}`);
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new PageTokenExpiredError("Change page token expired");
+      }
+      throw new Error(`Drive API error: ${res.status}`);
+    }
+
+    const data: ChangesListResponse = await res.json();
+    allChanges.push(...data.changes);
+    currentPageToken = data.nextPageToken;
+    if (data.newStartPageToken) {
+      newStartPageToken = data.newStartPageToken;
+    }
+    onProgress?.(allChanges.length);
+  } while (currentPageToken);
+
+  if (!newStartPageToken) {
+    throw new Error("No newStartPageToken in changes response");
+  }
+
+  return { changes: allChanges, newStartPageToken };
 }

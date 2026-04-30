@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.cloudamp.music.api.GDriveAlbum
 import com.cloudamp.music.api.GoogleDriveApiClient
+import com.cloudamp.music.api.PageTokenExpiredException
 import com.cloudamp.music.playback.GDriveImageProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +40,8 @@ object LibraryScanManager {
             val progress: GDriveLibraryScanner.ScanProgress,
             val metadataReady: Boolean
         ) : State()
+
+        data class Syncing(val message: String) : State()
 
         data class Error(val message: String) : State()
     }
@@ -121,6 +124,18 @@ object LibraryScanManager {
                     _state.value = State.Active(merged, metadataReady)
                 }
 
+                // Get change token BEFORE scanning so changes during
+                // the scan aren't lost on the next incremental sync.
+                val tokenBeforeScan = try {
+                    val resp = withContext(Dispatchers.IO) {
+                        driveClient.api.getChangesStartPageToken()
+                    }
+                    resp.body()?.startPageToken
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to get start page token", e)
+                    null
+                }
+
                 val result = withContext(Dispatchers.IO) { scanner.scan() }
                 if (result == null) {
                     _state.value = State.Error("Configure GDrive Music Root in Settings")
@@ -147,7 +162,14 @@ object LibraryScanManager {
                     metadataReady = false
                 )
 
-                withContext(Dispatchers.IO) { scanner.saveToCache(result) }
+                withContext(Dispatchers.IO) {
+                    scanner.saveToCache(result)
+                    // Persist raw file lists + change token for incremental sync
+                    cache.saveRawFiles(result.allFolders, result.allAudioFiles, result.allCoverFiles)
+                    if (tokenBeforeScan != null) {
+                        cache.saveChangePageToken(tokenBeforeScan)
+                    }
+                }
 
                 // Metadata is now persisted — library UI can render artists.
                 val current = _state.value
@@ -174,6 +196,101 @@ object LibraryScanManager {
     fun acknowledgeError() {
         if (_state.value is State.Error) {
             _state.value = State.Idle
+        }
+    }
+
+    /**
+     * Attempt incremental sync using the Drive Changes API. Falls back to
+     * a full scan if the change token is missing/expired or the raw file
+     * cache doesn't exist. No-op if a scan is already running.
+     *
+     * The cached library is displayed immediately while sync runs in the
+     * background; the UI only refreshes if changes are found.
+     */
+    fun syncLibrary(context: Context) {
+        if (isScanning) {
+            Log.d(TAG, "syncLibrary ignored — scan already in progress")
+            return
+        }
+        currentJob?.cancel()
+
+        val appContext = context.applicationContext
+        currentJob = scope.launch {
+            var needsFullScan = false
+            try {
+                val cache = GDriveLibraryCache.getInstance(appContext)
+                val token = cache.getChangePageToken()
+
+                // No token or no raw file cache → full scan
+                if (token == null || !cache.hasRawFileCache()) {
+                    Log.d(TAG, "No change token or raw cache — falling back to full scan")
+                    needsFullScan = true
+                    return@launch
+                }
+
+                _state.value = State.Syncing("Checking for changes...")
+
+                val driveClient = GoogleDriveApiClient.getInstance(appContext)
+                val scanner = GDriveLibraryScanner(driveClient.api, cache)
+
+                val folders = withContext(Dispatchers.IO) { cache.getRawFolders() }
+                val audio = withContext(Dispatchers.IO) { cache.getRawAudioFiles() }
+                val covers = withContext(Dispatchers.IO) { cache.getRawCoverFiles() }
+
+                if (folders == null || audio == null || covers == null) {
+                    Log.d(TAG, "Raw file cache unreadable — falling back to full scan")
+                    needsFullScan = true
+                    return@launch
+                }
+
+                val syncResult = withContext(Dispatchers.IO) {
+                    scanner.syncChanges(token, folders, audio, covers)
+                }
+
+                if (syncResult.changesApplied == 0) {
+                    Log.d(TAG, "No changes since last sync")
+                    cache.saveChangePageToken(syncResult.newPageToken)
+                    _state.value = State.Idle
+                    return@launch
+                }
+
+                Log.d(TAG, "Applied ${syncResult.changesApplied} changes")
+                _state.value = State.Syncing("Saving updated library...")
+
+                withContext(Dispatchers.IO) {
+                    scanner.saveToCache(syncResult.scanResult)
+                    cache.saveRawFiles(
+                        syncResult.scanResult.allFolders,
+                        syncResult.scanResult.allAudioFiles,
+                        syncResult.scanResult.allCoverFiles
+                    )
+                    cache.saveChangePageToken(syncResult.newPageToken)
+                }
+
+                // Prefetch any new album art
+                scanner.onProgress = { progress ->
+                    _state.value = State.Active(progress, metadataReady = true)
+                }
+                withContext(Dispatchers.IO) {
+                    scanner.prefetchAlbumArt(appContext, syncResult.scanResult)
+                }
+
+                _state.value = State.Idle
+            } catch (e: PageTokenExpiredException) {
+                Log.w(TAG, "Change token expired — falling back to full scan")
+                _state.value = State.Syncing("Token expired, rescanning...")
+                needsFullScan = true
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                Log.w(TAG, "Sync failed, falling back to cached data", e)
+                _state.value = State.Idle
+            }
+
+            // Launch full scan outside the try/catch so this coroutine
+            // finishes cleanly before startScan cancels currentJob.
+            if (needsFullScan) {
+                startScan(appContext, clearFirst = false)
+            }
         }
     }
 
