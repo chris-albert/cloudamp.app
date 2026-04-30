@@ -3,6 +3,7 @@ package com.cloudamp.music.cache
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import com.cloudamp.music.api.DriveFile
 import com.cloudamp.music.api.GDriveAlbum
 import com.cloudamp.music.api.GDriveArtist
 import com.cloudamp.music.api.GDriveTrack
@@ -20,6 +21,7 @@ class GDriveLibraryCache(private val context: Context) {
     private val cacheDir: File get() = File(context.filesDir, "gdrive_cache")
     private val albumsDir: File get() = File(cacheDir, "albums")
     private val tracksDir: File get() = File(cacheDir, "tracks")
+    private val rawDir: File get() = File(cacheDir, "raw")
 
     companion object {
         private const val TAG = "GDriveLibraryCache"
@@ -33,6 +35,7 @@ class GDriveLibraryCache(private val context: Context) {
         private const val KEY_STAT_ALBUMS = "stat_albums"
         private const val KEY_STAT_TRACKS = "stat_tracks"
         private const val KEY_STAT_TOTAL_COVERS = "stat_total_covers"
+        private const val KEY_CHANGE_PAGE_TOKEN = "change_page_token"
         private const val MAX_RECENTLY_PLAYED = 20
 
         @Volatile
@@ -161,6 +164,43 @@ class GDriveLibraryCache(private val context: Context) {
         return ids.mapNotNull { albumById[it] }
     }
 
+    // ── Change page token (incremental sync) ────────────────────────
+
+    fun saveChangePageToken(token: String) {
+        prefs.edit().putString(KEY_CHANGE_PAGE_TOKEN, token).apply()
+    }
+
+    fun getChangePageToken(): String? = prefs.getString(KEY_CHANGE_PAGE_TOKEN, null)
+
+    // ── Raw Drive file lists (for incremental sync diffs) ─────────────
+
+    fun saveRawFiles(folders: List<DriveFile>, audioFiles: List<DriveFile>, coverFiles: List<DriveFile>) {
+        rawDir.mkdirs()
+        File(rawDir, "folders.json").writeText(gson.toJson(folders))
+        File(rawDir, "audio.json").writeText(gson.toJson(audioFiles))
+        File(rawDir, "covers.json").writeText(gson.toJson(coverFiles))
+    }
+
+    fun getRawFolders(): List<DriveFile>? = readRawFile("folders.json")
+
+    fun getRawAudioFiles(): List<DriveFile>? = readRawFile("audio.json")
+
+    fun getRawCoverFiles(): List<DriveFile>? = readRawFile("covers.json")
+
+    fun hasRawFileCache(): Boolean = rawDir.exists() && File(rawDir, "folders.json").exists()
+
+    private fun readRawFile(name: String): List<DriveFile>? {
+        val file = File(rawDir, name)
+        if (!file.exists()) return null
+        return try {
+            val type = object : TypeToken<List<DriveFile>>() {}.type
+            gson.fromJson(file.readText(), type)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to read raw file $name: ${e.message}", e)
+            null
+        }
+    }
+
     // ── Cache completeness ────────────────────────────────────────────
 
     fun hasFullCache(): Boolean {
@@ -231,9 +271,11 @@ class GDriveLibraryCache(private val context: Context) {
             .remove(KEY_STAT_ALBUMS)
             .remove(KEY_STAT_TRACKS)
             .remove(KEY_STAT_TOTAL_COVERS)
+            .remove(KEY_CHANGE_PAGE_TOKEN)
             .apply()
 
         albumsDir.deleteRecursively()
         tracksDir.deleteRecursively()
+        rawDir.deleteRecursively()
     }
 }

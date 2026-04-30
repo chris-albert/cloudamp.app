@@ -1,17 +1,17 @@
-import { useSyncExternalStore, useState, useCallback } from "react";
+import { useSyncExternalStore, useState, useCallback, useEffect, useRef } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { isAuthenticated, getRootFolderId } from "@/lib/google-auth";
-import { scanLibrary } from "@/lib/library-scanner";
-import { validateLibrary, type LibraryIssue, type IssueSeverity } from "@/lib/library-validator";
+import { type LibraryIssue, type IssueSeverity } from "@/lib/library-validator";
 import {
   getScanState,
   subscribeScanState,
   setScanProgress,
-  setScanResult,
   setScanError,
+  resetScan,
   renameFileInState,
 } from "@/lib/scan-store";
 import { renameFile } from "@/lib/drive-api";
+import { syncLibrary, doFullScan, type SyncOutcome } from "@/lib/incremental-sync";
 
 export function DashboardPage() {
   const authed = isAuthenticated();
@@ -19,7 +19,7 @@ export function DashboardPage() {
   const navigate = useNavigate();
 
   // Show cached results even if the token has expired
-  if (!authed && scanState.status !== "done") {
+  if (!authed && scanState.status !== "done" && scanState.status !== "syncing") {
     return (
       <div className="max-w-md mx-auto mt-24 text-center space-y-4">
         <h1 className="text-2xl font-bold">CloudAmp Library Manager</h1>
@@ -44,6 +44,7 @@ function ScanDashboard() {
   const [severityFilter, setSeverityFilter] = useState<IssueSeverity | "all">("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [syncOutcome, setSyncOutcome] = useState<SyncOutcome | null>(null);
   const [fixAllState, setFixAllState] = useState<{
     running: boolean;
     fixed: number;
@@ -52,17 +53,38 @@ function ScanDashboard() {
     current: string | null;
   } | null>(null);
 
+  // Auto-sync on mount when we have cached results with a change token
+  const didAutoSync = useRef(false);
+  useEffect(() => {
+    if (didAutoSync.current) return;
+    const s = getScanState();
+    if (s.status === "done" && s.changePageToken && isAuthenticated()) {
+      didAutoSync.current = true;
+      syncLibrary()
+        .then((outcome) => setSyncOutcome(outcome))
+        .catch((err) => {
+          setScanError(err instanceof Error ? err.message : String(err));
+        });
+    }
+  }, [scanState.status]);
+
+  // Full rescan (always fetches everything fresh)
   const startScan = useCallback(async () => {
     const rootId = getRootFolderId();
     if (!rootId) return;
 
     try {
-      const result = await scanLibrary(rootId, setScanProgress);
-      const validation = validateLibrary(result);
-      setScanResult(result, validation);
+      await doFullScan(rootId, setScanProgress);
     } catch (err) {
       setScanError(err instanceof Error ? err.message : String(err));
     }
+  }, []);
+
+  // Clear cached library metadata and start fresh
+  const handleClearCache = useCallback(() => {
+    resetScan();
+    setSyncOutcome(null);
+    didAutoSync.current = false;
   }, []);
 
   if (scanState.status === "idle") {
@@ -116,21 +138,30 @@ function ScanDashboard() {
           <div className="text-red-400 font-medium">Scan failed</div>
           <p className="text-sm text-zinc-400">{scanState.error}</p>
         </div>
-        <button
-          onClick={startScan}
-          className="px-4 py-2 rounded-md bg-zinc-800 text-sm hover:bg-zinc-700 transition-colors"
-        >
-          Retry
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={startScan}
+            className="px-4 py-2 rounded-md bg-zinc-800 text-sm hover:bg-zinc-700 transition-colors"
+          >
+            Retry
+          </button>
+          <button
+            onClick={handleClearCache}
+            className="px-4 py-2 rounded-md bg-zinc-800 text-sm text-red-400 hover:bg-zinc-700 transition-colors"
+          >
+            Clear Cache
+          </button>
+        </div>
       </div>
     );
   }
 
-  // Done — show results
+  // Done or syncing — show results (syncing shows cached results with a sync indicator)
   const { result, validation } = scanState;
   if (!result || !validation) return null;
 
   const { stats, issues } = validation;
+  const isSyncing = scanState.status === "syncing";
 
   const filteredIssues = issues.filter((issue) => {
     if (severityFilter !== "all" && issue.severity !== severityFilter) return false;
@@ -180,13 +211,39 @@ function ScanDashboard() {
               </span>
             )}
           </p>
+          {isSyncing && (
+            <p className="mt-1 flex items-center gap-1.5 text-xs text-blue-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+              {scanState.progress?.stage ?? "Syncing..."}
+              {scanState.progress?.detail && (
+                <span className="text-blue-500">({scanState.progress.detail})</span>
+              )}
+            </p>
+          )}
+          {!isSyncing && syncOutcome && (
+            <p className="mt-1 text-xs text-zinc-500">
+              {syncOutcome.type === "no-changes" && "Library is up to date"}
+              {syncOutcome.type === "incremental" && `${syncOutcome.changesApplied} change${syncOutcome.changesApplied !== 1 ? "s" : ""} applied`}
+              {syncOutcome.type === "full" && "Full rescan completed"}
+            </p>
+          )}
         </div>
-        <button
-          onClick={startScan}
-          className="px-4 py-2 rounded-md bg-zinc-800 text-sm font-medium hover:bg-zinc-700 transition-colors"
-        >
-          Rescan
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handleClearCache}
+            className="px-4 py-2 rounded-md bg-zinc-800 text-sm text-red-400 font-medium hover:bg-zinc-700 transition-colors"
+            title="Clear cached library metadata and start fresh"
+          >
+            Clear Cache
+          </button>
+          <button
+            onClick={startScan}
+            disabled={isSyncing}
+            className="px-4 py-2 rounded-md bg-zinc-800 text-sm font-medium hover:bg-zinc-700 disabled:opacity-50 transition-colors"
+          >
+            Rescan
+          </button>
+        </div>
       </div>
 
       {/* Stats cards */}

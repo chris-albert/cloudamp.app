@@ -42,7 +42,16 @@ class GDriveLibraryScanner(
     data class ScanResult(
         val artists: List<GDriveArtist>,
         val albumsByArtist: Map<String, List<GDriveAlbum>>,
-        val tracksByAlbum: Map<String, List<GDriveTrack>>
+        val tracksByAlbum: Map<String, List<GDriveTrack>>,
+        val allFolders: List<DriveFile> = emptyList(),
+        val allAudioFiles: List<DriveFile> = emptyList(),
+        val allCoverFiles: List<DriveFile> = emptyList()
+    )
+
+    data class SyncResult(
+        val scanResult: ScanResult,
+        val newPageToken: String,
+        val changesApplied: Int
     )
 
     /**
@@ -171,12 +180,20 @@ class GDriveLibraryScanner(
 
         Log.d(TAG, "Bulk fetch complete: ${allFolders.size} folders, ${allAudioFiles.size} audio files, ${allCoverFiles.size} cover images")
 
-        // ── Reconstruct tree client-side ──────────────────────────────────
+        buildLibraryTree(rootId, allFolders, allAudioFiles, allCoverFiles)
+    }
 
+    /**
+     * Pure function: reconstructs the Artist→Album→Track tree from raw
+     * Drive file lists. Used by both full scan and incremental sync.
+     */
+    fun buildLibraryTree(
+        rootId: String,
+        allFolders: List<DriveFile>,
+        allAudioFiles: List<DriveFile>,
+        allCoverFiles: List<DriveFile>
+    ): ScanResult {
         report("Matching folders to artists and albums...")
-
-        // Build folder lookup by ID
-        val folderById = allFolders.associateBy { it.id }
 
         // Find artist folders: direct children of root (excluding metadata folders)
         val artistFolders = allFolders
@@ -234,7 +251,6 @@ class GDriveLibraryScanner(
         }.filterKeys { it.isNotEmpty() }
 
         // Set totals so the UI can render "X/Y artists" from the first tick.
-        // artistsCount and the running album/track counts climb as we iterate.
         totalArtistsCount = artistFolders.size
         artistsCount = 0
         albumsCount = 0
@@ -301,12 +317,128 @@ class GDriveLibraryScanner(
         }
 
         val sortedArtists = artists.sortedBy { it.name.lowercase() }
-        Log.d(TAG, "Scan complete: ${sortedArtists.size} artists, ${albumsByArtistMap.values.sumOf { it.size }} albums, ${tracksByAlbumMap.values.sumOf { it.size }} tracks")
+        Log.d(TAG, "Tree built: ${sortedArtists.size} artists, ${albumsByArtistMap.values.sumOf { it.size }} albums, ${tracksByAlbumMap.values.sumOf { it.size }} tracks")
 
         artistsCount = sortedArtists.size
         report("Library indexed")
 
-        ScanResult(sortedArtists, albumsByArtistMap, tracksByAlbumMap)
+        return ScanResult(
+            artists = sortedArtists,
+            albumsByArtist = albumsByArtistMap,
+            tracksByAlbum = tracksByAlbumMap,
+            allFolders = allFolders,
+            allAudioFiles = allAudioFiles,
+            allCoverFiles = allCoverFiles
+        )
+    }
+
+    /**
+     * Fetch changes since [pageToken], apply them to the cached raw file
+     * lists, and rebuild the library tree. Throws [PageTokenExpiredException]
+     * if the token has expired (HTTP 404).
+     */
+    suspend fun syncChanges(
+        pageToken: String,
+        cachedFolders: List<DriveFile>,
+        cachedAudio: List<DriveFile>,
+        cachedCovers: List<DriveFile>
+    ): SyncResult {
+        val rootId = cache.getRootFolderId()
+            ?: throw IllegalStateException("Root folder ID not configured")
+
+        report("Checking for changes...")
+
+        // Paginate through all changes
+        val allChanges = mutableListOf<DriveChange>()
+        var currentToken = pageToken
+        var newStartPageToken: String? = null
+
+        while (true) {
+            val response = api.listChanges(currentToken)
+            if (!response.isSuccessful) {
+                if (response.code() == 404) {
+                    throw PageTokenExpiredException()
+                }
+                throw RuntimeException("Changes API error: ${response.code()}")
+            }
+            val body = response.body() ?: break
+            allChanges.addAll(body.changes)
+            report("Checking for changes...", artFetched = allChanges.size)
+
+            if (body.nextPageToken != null) {
+                currentToken = body.nextPageToken
+            } else {
+                newStartPageToken = body.newStartPageToken
+                break
+            }
+        }
+
+        val finalToken = newStartPageToken
+            ?: throw RuntimeException("Changes API did not return newStartPageToken")
+
+        if (allChanges.isEmpty()) {
+            // No changes — return existing data with updated token
+            return SyncResult(
+                scanResult = buildLibraryTree(rootId, cachedFolders, cachedAudio, cachedCovers),
+                newPageToken = finalToken,
+                changesApplied = 0
+            )
+        }
+
+        report("Applying ${allChanges.size} change${if (allChanges.size != 1) "s" else ""}...")
+
+        // Build mutable maps for O(1) upsert/delete
+        val foldersById = HashMap<String, DriveFile>(cachedFolders.size)
+        for (f in cachedFolders) foldersById[f.id] = f
+        val audioById = HashMap<String, DriveFile>(cachedAudio.size)
+        for (f in cachedAudio) audioById[f.id] = f
+        val coversById = HashMap<String, DriveFile>(cachedCovers.size)
+        for (f in cachedCovers) coversById[f.id] = f
+
+        var changesApplied = 0
+
+        for (change in allChanges) {
+            val fileId = change.fileId
+            val file = change.file
+
+            if (change.removed || file == null || file.trashed == true) {
+                if (foldersById.remove(fileId) != null) changesApplied++
+                if (audioById.remove(fileId) != null) changesApplied++
+                if (coversById.remove(fileId) != null) changesApplied++
+                continue
+            }
+
+            // File exists — classify and upsert
+            if (file.isFolder()) {
+                foldersById[fileId] = file
+                changesApplied++
+            } else if (file.isAudioFile()) {
+                audioById[fileId] = file
+                coversById.remove(fileId)
+                changesApplied++
+            } else if (isCoverFile(file)) {
+                coversById[fileId] = file
+                changesApplied++
+            }
+        }
+
+        val updatedFolders = foldersById.values.toList()
+        val updatedAudio = audioById.values.toList()
+        val updatedCovers = coversById.values.toList()
+
+        report("Rebuilding library tree...")
+        val result = buildLibraryTree(rootId, updatedFolders, updatedAudio, updatedCovers)
+
+        return SyncResult(
+            scanResult = result,
+            newPageToken = finalToken,
+            changesApplied = changesApplied
+        )
+    }
+
+    private fun isCoverFile(file: DriveFile): Boolean {
+        if (!file.mimeType.startsWith("image/")) return false
+        return file.name.lowercase() in COVER_NAMES
     }
 
     /**

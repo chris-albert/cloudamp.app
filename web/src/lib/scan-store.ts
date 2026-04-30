@@ -19,16 +19,19 @@ interface PersistedData {
   result: ScanResult;
   validation: ValidationResult;
   scannedAt: number;
+  changePageToken?: string;
 }
 
 export interface ScanState {
-  status: "idle" | "scanning" | "done" | "error";
+  status: "idle" | "scanning" | "syncing" | "done" | "error";
   progress: ScanProgress | null;
   result: ScanResult | null;
   validation: ValidationResult | null;
   error: string | null;
   /** Timestamp of when the scan completed */
   scannedAt: number | null;
+  /** Token for the Drive Changes API to detect incremental changes */
+  changePageToken: string | null;
 }
 
 // ── IndexedDB helpers ─────────────────────────────────────────────────
@@ -101,6 +104,7 @@ let state: ScanState = {
   validation: null,
   error: null,
   scannedAt: null,
+  changePageToken: null,
 };
 
 const listeners = new Set<() => void>();
@@ -118,6 +122,7 @@ loadFromDB().then((data) => {
       result: data.result,
       validation: data.validation,
       scannedAt: data.scannedAt,
+      changePageToken: data.changePageToken ?? null,
     };
     emit();
   }
@@ -137,10 +142,20 @@ export function setScanProgress(progress: ScanProgress) {
   emit();
 }
 
-export function setScanResult(result: ScanResult, validation: ValidationResult) {
+export function setSyncProgress(progress: ScanProgress) {
+  state = { ...state, status: "syncing", progress };
+  emit();
+}
+
+export function setScanResult(
+  result: ScanResult,
+  validation: ValidationResult,
+  changePageToken?: string,
+) {
   const scannedAt = Date.now();
-  state = { ...state, status: "done", progress: null, result, validation, scannedAt };
-  saveToDB({ result, validation, scannedAt });
+  const token = changePageToken ?? state.changePageToken;
+  state = { ...state, status: "done", progress: null, result, validation, scannedAt, changePageToken: token };
+  saveToDB({ result, validation, scannedAt, changePageToken: token ?? undefined });
   emit();
 }
 
@@ -172,7 +187,7 @@ export function removeArtistFromState(artistId: string) {
   const scannedAt = state.scannedAt ?? Date.now();
 
   state = { ...state, result, validation };
-  saveToDB({ result, validation, scannedAt });
+  saveToDB({ result, validation, scannedAt, changePageToken: state.changePageToken ?? undefined });
   emit();
 }
 
@@ -199,7 +214,7 @@ export function removeAlbumFromState(albumId: string, artistId: string) {
   const scannedAt = state.scannedAt ?? Date.now();
 
   state = { ...state, result, validation };
-  saveToDB({ result, validation, scannedAt });
+  saveToDB({ result, validation, scannedAt, changePageToken: state.changePageToken ?? undefined });
   emit();
 }
 
@@ -280,7 +295,7 @@ export function flattenSubfolderInState(
   const scannedAt = state.scannedAt ?? Date.now();
 
   state = { ...state, result, validation };
-  saveToDB({ result, validation, scannedAt });
+  saveToDB({ result, validation, scannedAt, changePageToken: state.changePageToken ?? undefined });
   emit();
 }
 
@@ -319,7 +334,7 @@ export function removeSubfolderFromState(albumId: string, subfolderId: string) {
   const scannedAt = state.scannedAt ?? Date.now();
 
   state = { ...state, result, validation };
-  saveToDB({ result, validation, scannedAt });
+  saveToDB({ result, validation, scannedAt, changePageToken: state.changePageToken ?? undefined });
   emit();
 }
 
@@ -361,7 +376,7 @@ export function renameFileInState(fileId: string, newName: string) {
   const scannedAt = state.scannedAt ?? Date.now();
 
   state = { ...state, result, validation };
-  saveToDB({ result, validation, scannedAt });
+  saveToDB({ result, validation, scannedAt, changePageToken: state.changePageToken ?? undefined });
   emit();
 }
 
@@ -406,7 +421,7 @@ export function removeTrackFromState(fileId: string) {
   const scannedAt = state.scannedAt ?? Date.now();
 
   state = { ...state, result, validation };
-  saveToDB({ result, validation, scannedAt });
+  saveToDB({ result, validation, scannedAt, changePageToken: state.changePageToken ?? undefined });
   emit();
 }
 
@@ -439,7 +454,7 @@ export function setCoverInState(albumId: string, coverFileId: string) {
   const scannedAt = state.scannedAt ?? Date.now();
 
   state = { ...state, result, validation };
-  saveToDB({ result, validation, scannedAt });
+  saveToDB({ result, validation, scannedAt, changePageToken: state.changePageToken ?? undefined });
   emit();
 }
 
@@ -479,7 +494,7 @@ export function renameAlbumFolderInState(albumId: string, newFolderName: string)
   const scannedAt = state.scannedAt ?? Date.now();
 
   state = { ...state, result, validation };
-  saveToDB({ result, validation, scannedAt });
+  saveToDB({ result, validation, scannedAt, changePageToken: state.changePageToken ?? undefined });
   emit();
 }
 
@@ -514,12 +529,12 @@ export function renameArtistFolderInState(artistId: string, newFolderName: strin
   const scannedAt = state.scannedAt ?? Date.now();
 
   state = { ...state, result, validation };
-  saveToDB({ result, validation, scannedAt });
+  saveToDB({ result, validation, scannedAt, changePageToken: state.changePageToken ?? undefined });
   emit();
 }
 
 export function resetScan() {
-  state = { status: "idle", progress: null, result: null, validation: null, error: null, scannedAt: null };
+  state = { status: "idle", progress: null, result: null, validation: null, error: null, scannedAt: null, changePageToken: null };
   clearDB();
   emit();
 }

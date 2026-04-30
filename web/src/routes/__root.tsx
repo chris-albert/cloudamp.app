@@ -31,7 +31,7 @@ function RootLayout() {
             <CloudAmpLogo className="h-6 w-6 shrink-0" />
             <span className="text-[15px] font-semibold tracking-tight">CloudAmp</span>
           </Link>
-          {(authed || scanState.status === "done") && (
+          {(authed || scanState.status === "done" || scanState.status === "syncing") && (
             <nav className="flex items-center gap-0.5 ml-2">
               <NavLink to="/">Dashboard</NavLink>
               <NavLink to="/library">Library</NavLink>
@@ -39,7 +39,7 @@ function RootLayout() {
               <NavLink to="/settings">Settings</NavLink>
             </nav>
           )}
-          {scanState.status === "scanning" && (
+          {(scanState.status === "scanning" || scanState.status === "syncing") && (
             <div className="ml-auto flex items-center gap-2 text-xs text-zinc-400 truncate">
               <span className="relative flex h-1.5 w-1.5 shrink-0">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-500 opacity-75" />

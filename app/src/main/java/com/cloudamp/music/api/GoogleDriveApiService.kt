@@ -94,6 +94,26 @@ interface GoogleDriveApiService {
         @Path("fileId") fileId: String,
         @Body body: RequestBody
     ): Response<DriveFile>
+
+    /**
+     * Get the start page token for the Changes API.
+     * Used to capture a "now" marker after a full scan so subsequent
+     * incremental syncs only fetch what changed.
+     */
+    @GET("drive/v3/changes/startPageToken")
+    suspend fun getChangesStartPageToken(): Response<StartPageTokenResponse>
+
+    /**
+     * List changes since the given page token.
+     * Paginate with nextPageToken until newStartPageToken is returned.
+     */
+    @GET("drive/v3/changes")
+    suspend fun listChanges(
+        @Query("pageToken") pageToken: String,
+        @Query("fields") fields: String = "changes(fileId,removed,file(id,name,mimeType,size,parents,modifiedTime,trashed)),newStartPageToken,nextPageToken",
+        @Query("pageSize") pageSize: Int = 1000,
+        @Query("spaces") spaces: String = "drive"
+    ): Response<DriveChangeListResponse>
 }
 
 // Google Drive response models
@@ -105,7 +125,8 @@ data class DriveFile(
     val size: String? = null,
     val parents: List<String>? = null,
     val modifiedTime: String? = null,
-    val webContentLink: String? = null
+    val webContentLink: String? = null,
+    val trashed: Boolean? = null
 ) {
     fun isFolder(): Boolean = mimeType == "application/vnd.google-apps.folder"
 
@@ -151,3 +172,23 @@ data class DriveUser(
     val displayName: String?,
     val emailAddress: String?
 )
+
+// ── Changes API models ────────────────────────────────────────────────
+
+data class StartPageTokenResponse(
+    val startPageToken: String
+)
+
+data class DriveChange(
+    val fileId: String,
+    val removed: Boolean = false,
+    val file: DriveFile? = null
+)
+
+data class DriveChangeListResponse(
+    val changes: List<DriveChange>,
+    val newStartPageToken: String? = null,
+    val nextPageToken: String? = null
+)
+
+class PageTokenExpiredException(message: String = "Change page token expired") : Exception(message)

@@ -254,6 +254,13 @@ class SettingsActivity : AppCompatActivity() {
                             renderLibraryStats(liveCachedCovers = state.progress.albumArtFetched)
                         }
                     }
+                    is LibraryScanManager.State.Syncing -> {
+                        gdriveScanStatusText.visibility = View.VISIBLE
+                        gdriveScanStatusText.text = state.message
+                        gdriveScanProgressBar.visibility = View.GONE
+                        reloadGdriveLibraryButton.isEnabled = false
+                        reloadGdriveLibraryButton.text = "SYNCING..."
+                    }
                     is LibraryScanManager.State.Error -> {
                         gdriveScanStatusText.visibility = View.VISIBLE
                         gdriveScanStatusText.text = "Error: ${state.message}"

@@ -187,6 +187,9 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
                 hasLoadedContent = true
                 scrollToRandomArtist()
                 preloadCachedAlbums()
+                // Trigger background incremental sync (falls back to
+                // full scan if no change token / raw cache exists)
+                LibraryScanManager.syncLibrary(this)
                 return
             }
         }
@@ -207,19 +210,23 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
 
     private fun observeScanState() {
         scope.launch {
+            var wasSyncing = false
             LibraryScanManager.state.collect { state ->
                 when (state) {
                     is LibraryScanManager.State.Idle -> {
                         showLoading(false)
                         pathTextView.text = "GDRIVE MUSIC"
-                        // Scan just finished — refresh adapter from cache
-                        // in case metadata changed while we weren't visible.
-                        if (!hasLoadedContent) {
+                        // Scan/sync just finished — refresh adapter from
+                        // cache in case metadata changed.
+                        if (wasSyncing || !hasLoadedContent) {
                             showCachedArtistsIfAny()
-                            if (hasLoadedContent) scrollToRandomArtist()
+                            if (hasLoadedContent && !wasSyncing) scrollToRandomArtist()
+                            if (wasSyncing) preloadCachedAlbums()
                         }
+                        wasSyncing = false
                     }
                     is LibraryScanManager.State.Active -> {
+                        wasSyncing = false
                         val text = formatScanProgress(state.progress)
                         if (!state.metadataReady) {
                             // Fresh scan in progress — drop any stale view
@@ -242,7 +249,16 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
                             pathTextView.text = "GDRIVE MUSIC / $text"
                         }
                     }
+                    is LibraryScanManager.State.Syncing -> {
+                        wasSyncing = true
+                        // Show cached data while syncing, display
+                        // sync status in the breadcrumb.
+                        if (!hasLoadedContent) showCachedArtistsIfAny()
+                        showLoading(false)
+                        pathTextView.text = "GDRIVE MUSIC / ${state.message}"
+                    }
                     is LibraryScanManager.State.Error -> {
+                        wasSyncing = false
                         showLoading(false)
                         pathTextView.text = "GDRIVE MUSIC"
                         if (!hasLoadedContent) {
