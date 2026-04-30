@@ -9,6 +9,8 @@ import com.cloudamp.music.api.GDriveTrack
 import com.cloudamp.music.api.GoogleDriveApiClient
 import com.cloudamp.music.cache.GDriveLibraryCache
 import com.cloudamp.music.cache.GDrivePlaybackHistory
+import com.cloudamp.music.cache.MediaCache
+import com.cloudamp.music.cache.MediaCachePrefetcher
 import com.cloudamp.music.models.Album
 import com.cloudamp.music.models.Artist
 import com.cloudamp.music.models.Image
@@ -50,6 +52,7 @@ class GDrivePlaybackManager private constructor(
 
     private var exoPlayer: ExoPlayer? = null
     private var dataSourceFactory: DataSource.Factory? = null
+    private var prefetcher: MediaCachePrefetcher? = null
     private var service: CloudAmpService? = null
 
     private val queue = mutableListOf<DriveFile>()
@@ -101,7 +104,10 @@ class GDrivePlaybackManager private constructor(
             val hasToken = driveClient.hasAccessToken()
             Log.d(TAG, "Creating DataSource.Factory, hasAccessToken=$hasToken")
             val streamingClient = driveClient.getStreamingHttpClient()
-            dataSourceFactory = OkHttpDataSource.Factory(streamingClient)
+            val upstream = OkHttpDataSource.Factory(streamingClient)
+            // Wrap in a CacheDataSource so streamed bytes persist to disk and
+            // future plays of the same Drive file ID are served locally.
+            dataSourceFactory = MediaCache.getInstance(context).cacheDataSourceFactory(upstream)
         }
         return dataSourceFactory!!
     }
@@ -112,6 +118,40 @@ class GDrivePlaybackManager private constructor(
     private fun buildStreamUri(fileId: String): Uri {
         return Uri.parse("https://www.googleapis.com/drive/v3/files/$fileId?alt=media")
     }
+
+    private fun getPrefetcher(): MediaCachePrefetcher =
+        prefetcher ?: MediaCachePrefetcher(MediaCache.getInstance(context)).also { prefetcher = it }
+
+    /**
+     * Kick off background prefetch of every track in the queue except the
+     * one currently playing. Order: upcoming first (so the next song is
+     * always ready), then earlier tracks for skip-back.
+     */
+    private fun startQueuePrefetch(files: List<DriveFile>, currentIdx: Int) {
+        if (files.size <= 1) return
+        val driveClient = GoogleDriveApiClient.getInstance(context)
+        if (!driveClient.hasAccessToken()) return
+        val upstream: DataSource.Factory = OkHttpDataSource.Factory(driveClient.getStreamingHttpClient())
+        val items = ArrayList<MediaCachePrefetcher.Item>(files.size - 1)
+        for (i in (currentIdx + 1) until files.size) {
+            items.add(MediaCachePrefetcher.Item(files[i].id, buildStreamUri(files[i].id)))
+        }
+        for (i in 0 until currentIdx.coerceAtMost(files.size)) {
+            items.add(MediaCachePrefetcher.Item(files[i].id, buildStreamUri(files[i].id)))
+        }
+        getPrefetcher().prefetch(items, upstream)
+    }
+
+    /**
+     * Build a MediaItem whose cache key is the Drive file ID. Pinning the
+     * key makes cache hits independent of the URL (and any query string
+     * tweaks we might make later).
+     */
+    private fun buildMediaItem(file: DriveFile, uri: Uri): MediaItem =
+        MediaItem.Builder()
+            .setUri(uri)
+            .setCustomCacheKey(file.id)
+            .build()
 
     /**
      * Play a list of Drive audio files starting from the given index.
@@ -141,10 +181,12 @@ class GDrivePlaybackManager private constructor(
         player.stop()
         player.clearMediaItems()
 
+        val mediaCache = MediaCache.getInstance(context)
         files.forEach { file ->
             val uri = buildStreamUri(file.id)
             Log.d(TAG, "Adding media item: ${file.name} -> $uri")
-            player.addMediaItem(MediaItem.fromUri(uri))
+            player.addMediaItem(buildMediaItem(file, uri))
+            mediaCache.registerTrack(file.id, file.name, file.size?.toLongOrNull())
         }
 
         player.seekTo(startIndex, 0)
@@ -157,6 +199,8 @@ class GDrivePlaybackManager private constructor(
         updateServiceMetadata()
         updateServiceQueue()
         service?.updatePlaybackState(PlaybackStateCompat.STATE_BUFFERING)
+
+        startQueuePrefetch(files, startIndex)
     }
 
     /**
@@ -180,8 +224,10 @@ class GDrivePlaybackManager private constructor(
         player.stop()
         player.clearMediaItems()
 
+        val mediaCache = MediaCache.getInstance(context)
         files.forEach { file ->
-            player.addMediaItem(MediaItem.fromUri(buildStreamUri(file.id)))
+            player.addMediaItem(buildMediaItem(file, buildStreamUri(file.id)))
+            mediaCache.registerTrack(file.id, file.name, file.size?.toLongOrNull())
         }
 
         player.playWhenReady = false
@@ -191,6 +237,8 @@ class GDrivePlaybackManager private constructor(
         updateServiceMetadata()
         updateServiceQueue()
         service?.updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, positionMs)
+
+        startQueuePrefetch(files, startIndex)
     }
 
     override suspend fun play() {
@@ -358,6 +406,7 @@ class GDrivePlaybackManager private constructor(
         if (ActivePlayback.provider === this) {
             ActivePlayback.clear()
         }
+        prefetcher?.cancel()
         exoPlayer?.release()
         exoPlayer = null
         dataSourceFactory = null

@@ -205,5 +205,88 @@
             android:max="100"
             android:visibility="gone"/>
 
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="2dp"
+            android:background="@color/winamp_text"
+            android:layout_marginVertical="16dp"/>
+
+        <!-- Streaming Cache Section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Streaming Cache"
+            android:textColor="@color/winamp_text"
+            android:textSize="18sp"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:id="@+id/mediaCacheUsageText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="0 B / 1.00 GB"
+            android:textColor="@color/winamp_display_text"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="4dp"/>
+
+        <ProgressBar
+            android:id="@+id/mediaCacheProgressBar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="1000"
+            android:progress="0"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:id="@+id/mediaCacheCountText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="0 tracks cached"
+            android:textColor="@color/winamp_display_text"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:id="@+id/mediaCacheLimitText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Max size: 1 GB"
+            android:textColor="@color/winamp_display_text"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="4dp"/>
+
+        <Button
+            android:id="@+id/changeMediaCacheLimitButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="CHANGE MAX SIZE"
+            android:textColor="@color/winamp_text"
+            android:background="@color/winamp_button"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="8dp"/>
+
+        <LinearLayout
+            android:id="@+id/mediaCacheTracksContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginBottom="8dp"/>
+
+        <Button
+            android:id="@+id/clearMediaCacheButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="CLEAR STREAMING CACHE"
+            android:textColor="@color/winamp_text"
+            android:background="@color/winamp_button"
+            android:fontFamily="monospace"/>
+
     </LinearLayout>
 </ScrollView>
