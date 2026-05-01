@@ -7,6 +7,7 @@ import { parseTrackFilename, buildCanonicalFilename, isCanonicalAlbumFolder } fr
 import type { LibraryIssue } from "@/lib/library-validator";
 import { searchAlbumYear, extractYear, searchCoverArt, fetchImageBlob, type MusicBrainzRelease, type CoverArtResult } from "@/lib/musicbrainz";
 import { DriveImage } from "@/lib/drive-image";
+import { playAlbum } from "@/lib/player-store";
 
 export function LibraryPage() {
   const scanState = useSyncExternalStore(subscribeScanState, getScanState);
@@ -348,10 +349,30 @@ function LibraryBrowser() {
                 <div className="text-zinc-500">{selectedAlbum.artistName}</div>
                 {selectedAlbum.year && <div className="text-zinc-500">{selectedAlbum.year}</div>}
                 <div className="text-zinc-600 text-xs">{tracks.length} track{tracks.length !== 1 ? "s" : ""}</div>
+                {tracks.length > 0 && (
+                  <button
+                    onClick={() => playAlbum(selectedAlbum, tracks)}
+                    className="mt-2 px-4 py-1.5 rounded-full bg-white text-black text-xs font-semibold hover:bg-zinc-200 transition-colors inline-flex items-center gap-1.5"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5L4 2.5z" /></svg>
+                    Play Album
+                  </button>
+                )}
               </div>
             </div>
           ) : (
-            <AlbumCoverArt album={selectedAlbum} />
+            <div className="space-y-2">
+              <AlbumCoverArt album={selectedAlbum} />
+              {tracks.length > 0 && (
+                <button
+                  onClick={() => playAlbum(selectedAlbum, tracks)}
+                  className="px-4 py-1.5 rounded-full bg-white text-black text-xs font-semibold hover:bg-zinc-200 transition-colors inline-flex items-center gap-1.5"
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5L4 2.5z" /></svg>
+                  Play Album
+                </button>
+              )}
+            </div>
           )}
 
           {albumIssues.length > 0 && (
@@ -391,12 +412,13 @@ function LibraryBrowser() {
               </tr>
             </thead>
             <tbody>
-              {tracks.map((track) => (
+              {tracks.map((track, trackIndex) => (
                 <TrackRow
                   key={track.file.id}
                   track={track}
                   artistName={selectedAlbum.artistName}
                   albumName={selectedAlbum.name}
+                  onPlay={() => playAlbum(selectedAlbum, tracks, trackIndex)}
                 />
               ))}
             </tbody>
@@ -1133,7 +1155,7 @@ function SubfolderPanel({ subfolder, albumId, artistName, albumName, existingTra
   );
 }
 
-function TrackRow({ track, artistName, albumName }: { track: Track; artistName: string; albumName: string }) {
+function TrackRow({ track, artistName, albumName, onPlay }: { track: Track; artistName: string; albumName: string; onPlay: () => void }) {
   const [editing, setEditing] = useState(false);
   const [editNum, setEditNum] = useState("");
   const [editTitle, setEditTitle] = useState("");
@@ -1295,12 +1317,26 @@ function TrackRow({ track, artistName, albumName }: { track: Track; artistName: 
     );
   }
 
+  function handlePlayClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    onPlay();
+  }
+
   return (
     <tr
       className="border-b border-zinc-800/50 hover:bg-zinc-900/50 cursor-pointer group"
       onClick={startEditing}
     >
-      <td className="py-2 text-zinc-500 font-mono text-xs">{num}</td>
+      <td className="py-2 text-zinc-500 font-mono text-xs relative">
+        <span className="group-hover:invisible">{num}</span>
+        <button
+          onClick={handlePlayClick}
+          className="absolute inset-0 flex items-center justify-center invisible group-hover:visible text-white hover:text-green-400 transition-colors"
+          title="Play from here"
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5L4 2.5z" /></svg>
+        </button>
+      </td>
       <td className="py-2">
         <div className="text-zinc-200">{track.trackName}</div>
         <div className="text-xs text-zinc-600">{track.file.name}</div>
