@@ -74,40 +74,47 @@ export function SettingsPage() {
         </div>
       )}
 
-      <div className="space-y-4">
-        <Field label="Client ID" value={clientId} onChange={setClientId} placeholder="xxxx.apps.googleusercontent.com" />
-        <Field label="Client Secret" value={clientSecret} onChange={setClientSecret} placeholder="GOCSPX-..." type="password" />
-        <Field
-          label="Root Folder ID"
-          value={rootFolderId}
-          onChange={setRootFolderId}
-          placeholder="The Google Drive folder ID containing your music"
-          hint="Open the folder in Google Drive and copy the ID from the URL."
-        />
-      </div>
+      <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-8">
+        <div className="space-y-4">
+          <Field label="Client ID" name="Client ID" autoComplete="section-cloudamp Client ID" value={clientId} onChange={setClientId} placeholder="xxxx.apps.googleusercontent.com" />
+          <Field label="Client Secret" name="Client Secret" autoComplete="section-cloudamp Client Secret" value={clientSecret} onChange={setClientSecret} placeholder="GOCSPX-..." type="password" />
+          <Field
+            label="Root Folder ID"
+            name="Root Folder ID"
+            autoComplete="section-cloudamp Root Folder ID"
+            value={rootFolderId}
+            onChange={setRootFolderId}
+            placeholder="The Google Drive folder ID containing your music"
+            hint="Open the folder in Google Drive and copy the ID from the URL."
+          />
+        </div>
 
-      <div className="flex items-center gap-3">
-        <button
-          onClick={handleSave}
-          className="px-4 py-2 rounded-md bg-zinc-800 text-sm font-medium hover:bg-zinc-700 transition-colors"
-        >
-          {saved ? "Saved!" : "Save"}
-        </button>
-        {!authed && clientId && clientSecret && (
+        <div className="flex items-center gap-3">
           <button
-            onClick={handleConnect}
-            className="px-4 py-2 rounded-md bg-blue-600 text-sm font-medium hover:bg-blue-500 transition-colors"
+            type="submit"
+            className="px-4 py-2 rounded-md bg-zinc-800 text-sm font-medium hover:bg-zinc-700 transition-colors"
           >
-            Connect to Google Drive
+            {saved ? "Saved!" : "Save"}
           </button>
-        )}
-      </div>
+          {!authed && clientId && clientSecret && (
+            <button
+              type="button"
+              onClick={handleConnect}
+              className="px-4 py-2 rounded-md bg-blue-600 text-sm font-medium hover:bg-blue-500 transition-colors"
+            >
+              Connect to Google Drive
+            </button>
+          )}
+        </div>
+      </form>
     </div>
   );
 }
 
 function Field({
   label,
+  name,
+  autoComplete,
   value,
   onChange,
   placeholder,
@@ -115,6 +122,8 @@ function Field({
   hint,
 }: {
   label: string;
+  name?: string;
+  autoComplete?: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
@@ -123,9 +132,12 @@ function Field({
 }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-zinc-300 mb-1">{label}</label>
+      <label htmlFor={name} className="block text-sm font-medium text-zinc-300 mb-1">{label}</label>
       <input
+        id={name}
         type={type}
+        name={name}
+        autoComplete={autoComplete}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}

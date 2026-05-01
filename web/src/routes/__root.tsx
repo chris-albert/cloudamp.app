@@ -7,18 +7,24 @@ import {
 import { useSyncExternalStore } from "react";
 import { isAuthenticated } from "@/lib/google-auth";
 import { getScanState, subscribeScanState } from "@/lib/scan-store";
+import { getPlayerState, subscribePlayerState, getCurrentTrack } from "@/lib/player-store";
 import { CloudAmpLogo } from "@/components/CloudAmpLogo";
+import { AudioPlayer } from "@/components/AudioPlayer";
 import { SettingsPage } from "@/routes/settings";
 import { CallbackPage } from "@/routes/callback";
 import { DashboardPage } from "@/routes/dashboard";
 import { LibraryPage } from "@/routes/library";
 import { HistoryPage } from "@/routes/history";
+import { VisualizerPage } from "@/routes/visualizer";
 
 // ── Root layout ───────────────────────────────────────────────────────
 
 function RootLayout() {
   const authed = isAuthenticated();
   const scanState = useSyncExternalStore(subscribeScanState, getScanState);
+  // Subscribe to player state changes so the layout re-renders when the player opens/closes
+  useSyncExternalStore(subscribePlayerState, getPlayerState);
+  const hasPlayer = getCurrentTrack() !== null;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 antialiased">
@@ -33,10 +39,11 @@ function RootLayout() {
           </Link>
           {(authed || scanState.status === "done" || scanState.status === "syncing") && (
             <nav className="flex items-center gap-0.5 ml-2">
-              <NavLink to="/">Dashboard</NavLink>
               <NavLink to="/library">Library</NavLink>
+              <NavLink to="/visualizer">Visualizer</NavLink>
               <NavLink to="/history">History</NavLink>
               <NavLink to="/settings">Settings</NavLink>
+              <NavLink to="/">Issues</NavLink>
             </nav>
           )}
           {(scanState.status === "scanning" || scanState.status === "syncing") && (
@@ -53,9 +60,10 @@ function RootLayout() {
           )}
         </div>
       </header>
-      <main className="max-w-7xl mx-auto px-4 py-6">
+      <main className={`max-w-7xl mx-auto px-4 py-6 ${hasPlayer ? "pb-24" : ""}`}>
         <Outlet />
       </main>
+      <AudioPlayer />
     </div>
   );
 }
@@ -116,12 +124,19 @@ const libraryRoute = createRoute({
   }),
 });
 
+const visualizerRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/visualizer",
+  component: VisualizerPage,
+});
+
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   settingsRoute,
   callbackRoute,
   libraryRoute,
   historyRoute,
+  visualizerRoute,
 ]);
 
 export { rootRoute };

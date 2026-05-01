@@ -203,6 +203,19 @@ export async function fetchFileBlobUrl(fileId: string): Promise<string> {
 }
 
 /**
+ * Fetch an audio file's content as a blob URL for streaming playback.
+ * Returns a blob URL that can be used as an <audio> src.
+ * Caller must revoke the URL when done via URL.revokeObjectURL().
+ */
+export async function fetchAudioBlobUrl(fileId: string): Promise<string> {
+  const url = `${BASE_URL}/files/${encodeURIComponent(fileId)}?alt=media`;
+  const res = await fetchWithAuth(url);
+  if (!res.ok) throw new Error(`Failed to fetch audio: ${res.status}`);
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
+/**
  * Fetch a file's content as text.
  */
 export async function fetchFileText(fileId: string): Promise<string> {
