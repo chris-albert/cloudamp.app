@@ -290,9 +290,15 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
                     val resp = client.api.updateFileContent(canonicalFileId, mediaBody)
                     if (!resp.isSuccessful) {
                         Log.e(TAG, "Consolidation: update canonical failed ${resp.code()}")
+                        if (resp.code() == 404) {
+                            // File was deleted or trashed — fall through to create a new one.
+                            Log.w(TAG, "Canonical file $canonicalFileId no longer exists, will create a new one")
+                            canonicalFileId = null
+                        }
                     }
                 }
-            } else if (mergedContent.isNotEmpty()) {
+            }
+            if (canonicalFileId == null && mergedContent.isNotEmpty()) {
                 val metadata = JSONObject().apply {
                     put("name", HISTORY_FILENAME)
                     put("parents", org.json.JSONArray().put(canonicalFolderId))
