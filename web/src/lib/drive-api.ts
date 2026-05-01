@@ -296,6 +296,55 @@ export async function listFolders(parentId?: string): Promise<DriveFile[]> {
   return all;
 }
 
+/**
+ * Get metadata for a single file by ID.
+ */
+export async function getFile(fileId: string, fields: string): Promise<DriveFile> {
+  const params = new URLSearchParams({ fields });
+  const res = await fetchWithAuth(`${BASE_URL}/files/${fileId}?${params}`);
+  if (!res.ok) throw new Error(`Drive API error: ${res.status}`);
+  return res.json();
+}
+
+export interface SearchResult extends DriveFile {
+  parentName?: string;
+}
+
+/**
+ * Search for folders by name across all Drive locations
+ * (My Drive, Computers, Shared drives).
+ * Returns up to 50 results with resolved parent folder names.
+ */
+export async function searchFolders(query: string): Promise<SearchResult[]> {
+  const q = `name contains '${query.replace(/'/g, "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+  const response = await listFiles(q, "id,name,mimeType,parents");
+
+  const folders = response.files.slice(0, 50);
+  if (folders.length === 0) return [];
+
+  // Resolve parent folder names for disambiguation
+  const parentIds = [...new Set(
+    folders.map((f) => f.parents?.[0]).filter((id): id is string => !!id),
+  )];
+
+  const parentNames = new Map<string, string>();
+  await Promise.all(
+    parentIds.map(async (id) => {
+      try {
+        const parent = await getFile(id, "id,name");
+        parentNames.set(id, parent.name);
+      } catch {
+        // Parent may not be accessible (e.g. Computers root)
+      }
+    }),
+  );
+
+  return folders.map((f) => ({
+    ...f,
+    parentName: f.parents?.[0] ? parentNames.get(f.parents[0]) : undefined,
+  }));
+}
+
 // ── Changes API ───────────────────────────────────────────────────────
 
 export class PageTokenExpiredError extends Error {
