@@ -41,26 +41,21 @@ async function streamFromDrive(request, fileId, token) {
     headers["Range"] = range;
   }
 
-  const driveResponse = await fetch(driveUrl, { headers });
+  try {
+    const driveResponse = await fetch(driveUrl, { headers });
 
-  if (!driveResponse.ok && driveResponse.status !== 206) {
-    return new Response("Drive fetch failed", { status: driveResponse.status });
+    if (!driveResponse.ok && driveResponse.status !== 206) {
+      return new Response(`Drive fetch failed: ${driveResponse.status}`, {
+        status: driveResponse.status,
+      });
+    }
+
+    // Return the drive response directly — the browser can read CORS
+    // responses from the SW. We just need to ensure Accept-Ranges is set.
+    // Creating a new Response from the body can lose the stream in some
+    // browsers, so we return the original response object.
+    return driveResponse;
+  } catch (err) {
+    return new Response(`SW fetch error: ${err.message}`, { status: 502 });
   }
-
-  // Build response headers — forward the ones the browser needs for streaming
-  const responseHeaders = new Headers();
-
-  for (const name of ["Content-Type", "Content-Length", "Content-Range", "Accept-Ranges"]) {
-    const value = driveResponse.headers.get(name);
-    if (value) responseHeaders.set(name, value);
-  }
-
-  if (!responseHeaders.has("Accept-Ranges")) {
-    responseHeaders.set("Accept-Ranges", "bytes");
-  }
-
-  return new Response(driveResponse.body, {
-    status: driveResponse.status,
-    headers: responseHeaders,
-  });
 }

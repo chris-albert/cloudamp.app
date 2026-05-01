@@ -1,0 +1,11 @@
+ {                                                                                 "processes": [                                                             
+      {                                        
+        "name": "dev",
+        "description": "Dev",
+        "command": "cd web; pnpm dev",                                                                    
+        "slots": [
+          { "name": "WEB", "port": 3049 }                                                                 
+        ]                                                                      
+      }                                        
+    ]
+  }
