@@ -281,20 +281,28 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
             }
 
             // 5. Pick / create the canonical file inside the canonical folder.
+            //    Files not created by this OAuth grant are invisible to
+            //    drive.file (update returns 404 even though drive.readonly can
+            //    list/download them). Track those so we skip them in step 8.
             val filesInCanonical = allFiles.filter { it.parents?.contains(canonicalFolderId) == true }
-            var canonicalFileId: String? = filesInCanonical.minByOrNull { it.id }?.id
+            var canonicalFileId: String? = null
+            val inaccessibleFileIds = mutableSetOf<String>()
 
             val mediaBody = mergedContent.toRequestBody("application/x-ndjson".toMediaType())
-            if (canonicalFileId != null) {
-                if (mergedContent.isNotEmpty()) {
-                    val resp = client.api.updateFileContent(canonicalFileId, mediaBody)
-                    if (!resp.isSuccessful) {
-                        Log.e(TAG, "Consolidation: update canonical failed ${resp.code()}")
-                        if (resp.code() == 404) {
-                            // File was deleted or trashed — fall through to create a new one.
-                            Log.w(TAG, "Canonical file $canonicalFileId no longer exists, will create a new one")
-                            canonicalFileId = null
-                        }
+            if (mergedContent.isNotEmpty()) {
+                // Try each candidate file (lowest ID first) until one accepts an update.
+                for (candidate in filesInCanonical.sortedBy { it.id }) {
+                    val resp = client.api.updateFileContent(candidate.id, mediaBody)
+                    if (resp.isSuccessful) {
+                        canonicalFileId = candidate.id
+                        break
+                    }
+                    if (resp.code() == 404) {
+                        // Not writable under current OAuth grant — skip it.
+                        Log.w(TAG, "File ${candidate.id} returned 404 on update (not owned by this app), skipping")
+                        inaccessibleFileIds.add(candidate.id)
+                    } else {
+                        Log.e(TAG, "Consolidation: update ${candidate.id} failed ${resp.code()}")
                     }
                 }
             }
@@ -308,6 +316,7 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
                 val resp = client.api.createFile(metadataPart, mediaPart)
                 if (resp.isSuccessful) {
                     canonicalFileId = resp.body()?.id
+                    Log.d(TAG, "Created new canonical history file: $canonicalFileId")
                 } else {
                     Log.e(TAG, "Consolidation: create canonical failed ${resp.code()}")
                 }
@@ -348,11 +357,13 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
                 .apply()
 
             // 8. Trash duplicate files (everything except the canonical).
+            //    Skip files we already know are inaccessible (not owned by
+            //    this OAuth grant) — trashing them would also 404.
             val trashBody = JSONObject().apply { put("trashed", true) }.toString()
                 .toRequestBody("application/json".toMediaType())
             var trashedFiles = 0
             for (file in allFiles) {
-                if (file.id == canonicalFileId) continue
+                if (file.id == canonicalFileId || file.id in inaccessibleFileIds) continue
                 try {
                     val resp = client.api.trashFile(file.id, trashBody)
                     if (resp.isSuccessful) trashedFiles++
