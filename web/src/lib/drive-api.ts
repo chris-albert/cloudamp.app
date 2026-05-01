@@ -203,6 +203,17 @@ export async function fetchFileBlobUrl(fileId: string): Promise<string> {
 }
 
 /**
+ * Get a valid access token, refreshing if necessary.
+ */
+export async function getValidAccessToken(): Promise<string> {
+  let token = getAccessToken();
+  if (!token) {
+    token = await refreshAccessToken();
+  }
+  return token;
+}
+
+/**
  * Fetch an audio file's content as a blob URL for streaming playback.
  * Returns a blob URL that can be used as an <audio> src.
  * Caller must revoke the URL when done via URL.revokeObjectURL().
