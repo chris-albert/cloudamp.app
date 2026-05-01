@@ -21,7 +21,7 @@ class GoogleDriveAuthManager(private val context: Context) {
 
     companion object {
         private const val TAG = "GDriveAuth"
-        private const val LOOPBACK_HOST = "localhost"
+        private const val LOOPBACK_HOST = "127.0.0.1"
         private const val AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
         private const val TOKEN_PROXY_URL = "https://cloudamp.io/api/token"
 
