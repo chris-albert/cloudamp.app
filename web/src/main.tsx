@@ -4,6 +4,10 @@ import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { routeTree } from "./routes/__root";
 import "./index.css";
 
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js");
+}
+
 const router = createRouter({ routeTree, basepath: "/cloudamp.app" });
 
 declare module "@tanstack/react-router" {

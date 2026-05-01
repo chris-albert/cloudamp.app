@@ -4,7 +4,8 @@
  */
 
 import type { Track, Album } from "./library-scanner";
-import { fetchAudioBlobUrl } from "./drive-api";
+import { fetchAudioBlobUrl, getValidAccessToken } from "./drive-api";
+import { refreshAccessToken } from "./google-auth";
 
 export interface PlayerTrack {
   track: Track;
@@ -93,8 +94,33 @@ function getAudio(): HTMLAudioElement {
       state = { ...state, isLoading: false };
       emit();
     });
+    audio.addEventListener("error", () => {
+      handleAudioError();
+    });
   }
   return audio;
+}
+
+async function handleAudioError() {
+  if (state.currentIndex < 0) return;
+  const currentSrc = state.currentBlobUrl;
+
+  // Only retry for streaming URLs (not blob URLs)
+  if (!currentSrc?.includes("/audio-stream/")) return;
+
+  try {
+    const token = await refreshAccessToken();
+    const fileId = state.queue[state.currentIndex]!.track.file.id;
+    const el = getAudio();
+    const savedTime = el.currentTime;
+
+    el.src = `/audio-stream/${encodeURIComponent(fileId)}?token=${encodeURIComponent(token)}`;
+    el.currentTime = savedTime;
+    await el.play();
+  } catch {
+    state = { ...state, isLoading: false, isPlaying: false };
+    emit();
+  }
 }
 
 // ── Web Audio API (for visualizations) ────────────────────────────────
@@ -150,6 +176,16 @@ function preloadTrack(fileId: string) {
     });
 }
 
+// ── Streaming support ─────────────────────────────────────────────────
+
+function isServiceWorkerReady(): boolean {
+  return navigator.serviceWorker?.controller != null;
+}
+
+function getStreamUrl(fileId: string, token: string): string {
+  return `/audio-stream/${encodeURIComponent(fileId)}?token=${encodeURIComponent(token)}`;
+}
+
 // ── Playback control ──────────────────────────────────────────────────
 
 async function loadAndPlay(index: number) {
@@ -159,27 +195,31 @@ async function loadAndPlay(index: number) {
   const fileId = playerTrack.track.file.id;
   const el = getAudio();
 
-  // Revoke old blob URL if it's not cached
-  if (state.currentBlobUrl && !blobUrlCache.has(fileId)) {
-    // Don't revoke - the cache manages lifetime
-  }
-
   state = { ...state, currentIndex: index, isLoading: true, currentTime: 0, duration: 0, currentBlobUrl: null };
   emit();
 
   try {
-    const blobUrl = await getBlobUrl(fileId);
-    // Check we haven't navigated away during the fetch
-    if (state.currentIndex !== index) return;
+    let src: string;
 
-    el.src = blobUrl;
+    if (isServiceWorkerReady()) {
+      // Streaming path: SW intercepts and proxies to Google Drive
+      const token = await getValidAccessToken();
+      if (state.currentIndex !== index) return;
+      src = getStreamUrl(fileId, token);
+    } else {
+      // Fallback: download entire file as blob (first visit before SW activates)
+      src = await getBlobUrl(fileId);
+      if (state.currentIndex !== index) return;
+    }
+
+    el.src = src;
     el.volume = state.volume;
-    state = { ...state, currentBlobUrl: blobUrl };
+    state = { ...state, currentBlobUrl: src };
     emit();
     await el.play();
 
-    // Preload next track
-    if (index + 1 < state.queue.length) {
+    // Preload next track only in blob mode (streaming handles its own buffering)
+    if (!isServiceWorkerReady() && index + 1 < state.queue.length) {
       preloadTrack(state.queue[index + 1]!.track.file.id);
     }
   } catch (err) {
