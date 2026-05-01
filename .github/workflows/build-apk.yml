@@ -35,7 +35,7 @@ jobs:
           https://raw.githubusercontent.com/gradle/gradle/v8.2.1/gradle/wrapper/gradle-wrapper.jar
 
     - name: Build Debug APK
-      run: ./gradlew assembleDebug --stacktrace --no-daemon
+      run: ./gradlew assembleDebug --stacktrace --no-daemon -PGOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}"
 
     - name: Get version info
       id: version
