@@ -6,7 +6,7 @@ import type { Artist, Album, Track, AlbumSubfolder } from "@/lib/library-scanner
 import { parseTrackFilename, buildCanonicalFilename, isCanonicalAlbumFolder } from "@/lib/filename-parser";
 import type { LibraryIssue } from "@/lib/library-validator";
 import { searchAlbumYear, extractYear, searchCoverArt, fetchImageBlob, type MusicBrainzRelease, type CoverArtResult } from "@/lib/musicbrainz";
-import { DriveImage } from "@/lib/drive-image";
+import { DriveImage, ArtistImage } from "@/lib/drive-image";
 import { playAlbum } from "@/lib/player-store";
 
 export function LibraryPage() {
@@ -217,25 +217,35 @@ function LibraryBrowser() {
       {/* Artist list */}
       {!selectedArtist && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          {filteredArtists.map((artist) => (
-            <button
-              key={artist.id}
-              onClick={() => selectArtist(artist)}
-              className={`flex items-center justify-between rounded-lg border px-4 py-3 text-left transition-colors hover:bg-zinc-800 ${
-                issueArtistIds.has(artist.id)
-                  ? "border-amber-900/50 bg-amber-950/20"
-                  : "border-zinc-800 bg-zinc-900/50"
-              }`}
-            >
-              <div>
-                <div className="text-sm font-medium text-zinc-200">{artist.name}</div>
-                <div className="text-xs text-zinc-500">{artist.albumCount} album{artist.albumCount !== 1 ? "s" : ""}</div>
-              </div>
-              {issueArtistIds.has(artist.id) && (
-                <div className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
-              )}
-            </button>
-          ))}
+          {filteredArtists.map((artist) => {
+            const artistAlbums = result.albumsByArtist[artist.id] ?? [];
+            const fallbackFileId = artistAlbums.find((a) => a.coverFileId)?.coverFileId ?? null;
+            return (
+              <button
+                key={artist.id}
+                onClick={() => selectArtist(artist)}
+                className={`flex items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors hover:bg-zinc-800 ${
+                  issueArtistIds.has(artist.id)
+                    ? "border-amber-900/50 bg-amber-950/20"
+                    : "border-zinc-800 bg-zinc-900/50"
+                }`}
+              >
+                <ArtistImage
+                  imageFileId={artist.imageFileId}
+                  fallbackFileId={fallbackFileId}
+                  name={artist.name}
+                  className="w-10 h-10 shrink-0 rounded border border-zinc-700"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-zinc-200 truncate">{artist.name}</div>
+                  <div className="text-xs text-zinc-500">{artist.albumCount} album{artist.albumCount !== 1 ? "s" : ""}</div>
+                </div>
+                {issueArtistIds.has(artist.id) && (
+                  <div className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -249,7 +259,7 @@ function LibraryBrowser() {
             <button
               key={album.id}
               onClick={() => selectAlbum(album)}
-              className={`flex items-center gap-3 w-full rounded-lg border px-4 py-3 text-left transition-colors hover:bg-zinc-800 ${
+              className={`group flex items-center gap-3 w-full rounded-lg border px-4 py-3 text-left transition-colors hover:bg-zinc-800 ${
                 issueAlbumIds.has(album.id)
                   ? "border-amber-900/50 bg-amber-950/20"
                   : "border-zinc-800 bg-zinc-900/50"
@@ -279,6 +289,18 @@ function LibraryBrowser() {
                   Folder: {album.folderName}
                 </div>
               </div>
+              {(result.tracksByAlbum[album.id] ?? []).length > 0 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    playAlbum(album, result.tracksByAlbum[album.id] ?? []);
+                  }}
+                  className="shrink-0 w-8 h-8 rounded-full bg-white text-black flex items-center justify-center hover:bg-zinc-200 transition-colors opacity-0 group-hover:opacity-100"
+                  title="Play album"
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5L4 2.5z" /></svg>
+                </button>
+              )}
               {issueAlbumIds.has(album.id) && (
                 <div className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
               )}
