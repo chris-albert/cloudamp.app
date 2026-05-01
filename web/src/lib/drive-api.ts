@@ -275,6 +275,27 @@ export async function fetchAllPaginated(
   return all;
 }
 
+// ── Folder Browsing ──────────────────────────────────────────────────
+
+/**
+ * List folders within a parent folder (or the Drive root).
+ * Returns folders sorted by name.
+ */
+export async function listFolders(parentId?: string): Promise<DriveFile[]> {
+  const parent = parentId ?? "root";
+  const query = `'${parent}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+  const all: DriveFile[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const response = await listFiles(query, "id,name,mimeType", pageToken);
+    all.push(...response.files);
+    pageToken = response.nextPageToken;
+  } while (pageToken);
+
+  return all;
+}
+
 // ── Changes API ───────────────────────────────────────────────────────
 
 export class PageTokenExpiredError extends Error {

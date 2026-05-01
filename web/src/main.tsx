@@ -8,7 +8,7 @@ if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js");
 }
 
-const router = createRouter({ routeTree, basepath: "/cloudamp.app" });
+const router = createRouter({ routeTree });
 
 declare module "@tanstack/react-router" {
   interface Register {

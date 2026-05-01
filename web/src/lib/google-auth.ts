@@ -1,18 +1,18 @@
 /**
  * Google OAuth 2.0 PKCE flow for single-page apps.
  * Uses Google's authorization endpoint with code_verifier/code_challenge.
+ * Client ID is baked in at build time. Token exchange goes through a
+ * server-side proxy (/api/token) which holds the client secret.
  */
 
+const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
 const SCOPES = "https://www.googleapis.com/auth/drive";
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
-const TOKEN_URL = "https://oauth2.googleapis.com/token";
 
 const STORAGE_KEYS = {
   accessToken: "cloudamp_access_token",
   refreshToken: "cloudamp_refresh_token",
   expiresAt: "cloudamp_token_expires_at",
-  clientId: "cloudamp_client_id",
-  clientSecret: "cloudamp_client_secret",
   codeVerifier: "cloudamp_code_verifier",
   rootFolderId: "cloudamp_root_folder_id",
 } as const;
@@ -39,15 +39,11 @@ function base64UrlEncode(buffer: ArrayBuffer): string {
 
 export function getStoredCredentials() {
   return {
-    clientId: localStorage.getItem(STORAGE_KEYS.clientId) ?? "",
-    clientSecret: localStorage.getItem(STORAGE_KEYS.clientSecret) ?? "",
     rootFolderId: localStorage.getItem(STORAGE_KEYS.rootFolderId) ?? "",
   };
 }
 
-export function saveCredentials(clientId: string, clientSecret: string, rootFolderId: string) {
-  localStorage.setItem(STORAGE_KEYS.clientId, clientId);
-  localStorage.setItem(STORAGE_KEYS.clientSecret, clientSecret);
+export function saveCredentials(rootFolderId: string) {
   localStorage.setItem(STORAGE_KEYS.rootFolderId, rootFolderId);
 }
 
@@ -76,8 +72,7 @@ export function logout() {
 }
 
 export async function startAuthFlow() {
-  const { clientId } = getStoredCredentials();
-  if (!clientId) throw new Error("Client ID not configured");
+  if (!CLIENT_ID) throw new Error("VITE_GOOGLE_CLIENT_ID not configured");
 
   const codeVerifier = generateRandomString(64);
   localStorage.setItem(STORAGE_KEYS.codeVerifier, codeVerifier);
@@ -86,7 +81,7 @@ export async function startAuthFlow() {
   const codeChallenge = base64UrlEncode(challengeBuffer);
 
   const params = new URLSearchParams({
-    client_id: clientId,
+    client_id: CLIENT_ID,
     redirect_uri: `${window.location.origin}${import.meta.env.BASE_URL}callback`,
     response_type: "code",
     scope: SCOPES,
@@ -100,23 +95,18 @@ export async function startAuthFlow() {
 }
 
 export async function handleCallback(code: string): Promise<void> {
-  const { clientId, clientSecret } = getStoredCredentials();
   const codeVerifier = localStorage.getItem(STORAGE_KEYS.codeVerifier);
   if (!codeVerifier) throw new Error("No code verifier found");
 
-  const body = new URLSearchParams({
-    client_id: clientId,
-    client_secret: clientSecret,
-    code,
-    code_verifier: codeVerifier,
-    grant_type: "authorization_code",
-    redirect_uri: `${window.location.origin}${import.meta.env.BASE_URL}callback`,
-  });
-
-  const response = await fetch(TOKEN_URL, {
+  const response = await fetch("/api/token", {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      grant_type: "authorization_code",
+      code,
+      code_verifier: codeVerifier,
+      redirect_uri: `${window.location.origin}${import.meta.env.BASE_URL}callback`,
+    }),
   });
 
   if (!response.ok) {
@@ -135,21 +125,16 @@ export async function handleCallback(code: string): Promise<void> {
 }
 
 export async function refreshAccessToken(): Promise<string> {
-  const { clientId, clientSecret } = getStoredCredentials();
   const refreshToken = localStorage.getItem(STORAGE_KEYS.refreshToken);
   if (!refreshToken) throw new Error("No refresh token available");
 
-  const body = new URLSearchParams({
-    client_id: clientId,
-    client_secret: clientSecret,
-    refresh_token: refreshToken,
-    grant_type: "refresh_token",
-  });
-
-  const response = await fetch(TOKEN_URL, {
+  const response = await fetch("/api/token", {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    }),
   });
 
   if (!response.ok) throw new Error("Token refresh failed");

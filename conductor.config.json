@@ -1,11 +1,12 @@
- {                                                                                 "processes": [                                                             
-      {                                        
-        "name": "dev",
-        "description": "Dev",
-        "command": "cd web; pnpm dev",                                                                    
-        "slots": [
-          { "name": "WEB", "port": 3049 }                                                                 
-        ]                                                                      
-      }                                        
-    ]
-  }
+{
+  "processes": [
+    {
+      "name": "dev",
+      "description": "Vite dev server",
+      "command": "cd web && npm run dev",
+      "slots": [
+        { "name": "WEB", "port": 3049 }
+      ]
+    }
+  ]
+}

@@ -9,6 +9,12 @@ export default defineConfig({
   server: {
     port: parseInt(process.env.WEB_PORT || "5050", 10),
     strictPort: true,
+    proxy: {
+      "/api": {
+        target: "https://cloudamp.io",
+        changeOrigin: true,
+      },
+    },
   },
   resolve: {
     alias: {
