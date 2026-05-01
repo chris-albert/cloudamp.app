@@ -4,7 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 
 export default defineConfig({
-  base: "/cloudamp.app/",
+  base: "/",
   plugins: [react(), tailwindcss()],
   server: {
     port: parseInt(process.env.WEB_PORT || "5050", 10),
