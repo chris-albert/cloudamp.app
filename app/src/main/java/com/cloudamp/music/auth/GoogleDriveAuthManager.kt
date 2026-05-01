@@ -23,8 +23,7 @@ class GoogleDriveAuthManager(private val context: Context) {
         private const val TOKEN_URL = "https://oauth2.googleapis.com/token"
 
         private val SCOPES = listOf(
-            "https://www.googleapis.com/auth/drive.readonly",
-            "https://www.googleapis.com/auth/drive.file"
+            "https://www.googleapis.com/auth/drive"
         )
     }
 
