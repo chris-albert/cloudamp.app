@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useSyncExternalStore } from "react";
 import { getAnalyserNode, getPlayerState, subscribePlayerState, getCurrentTrack } from "@/lib/player-store";
 
-type VisMode = "eq" | "oscilloscope" | "radial" | "tunnel" | "kaleidoscope" | "warpgrid" | "starburst" | "spiral" | "liquid" | "fractal";
+type VisMode = "eq" | "oscilloscope" | "radial" | "tunnel" | "kaleidoscope" | "warpgrid" | "honeycomb" | "diamond" | "starburst" | "spiral" | "liquid" | "fractal";
 
 const MODES: { id: VisMode; label: string }[] = [
   { id: "eq", label: "EQ Bars" },
@@ -10,6 +10,8 @@ const MODES: { id: VisMode; label: string }[] = [
   { id: "tunnel", label: "Tunnel" },
   { id: "kaleidoscope", label: "Kaleidoscope" },
   { id: "warpgrid", label: "Warp Grid" },
+  { id: "honeycomb", label: "Honeycomb" },
+  { id: "diamond", label: "Diamond" },
   { id: "starburst", label: "Starburst" },
   { id: "spiral", label: "Spiral" },
   { id: "liquid", label: "Liquid" },
@@ -65,7 +67,7 @@ export function VisualizerPage() {
   );
 }
 
-const WEB_GL_MODES: Set<VisMode> = new Set(["tunnel", "kaleidoscope", "warpgrid", "starburst", "spiral", "liquid", "fractal"]);
+const WEB_GL_MODES: Set<VisMode> = new Set(["tunnel", "kaleidoscope", "warpgrid", "honeycomb", "diamond", "starburst", "spiral", "liquid", "fractal"]);
 
 // ── Canvas renderer ─────────────────────────────────────────────────────
 
@@ -620,6 +622,176 @@ void main() {
   fragColor = vec4(prev.rgb + newColor, 1.0);
 }`;
 
+const HONEYCOMB_FS = `#version 300 es
+precision highp float;
+uniform sampler2D u_prev;
+uniform sampler2D u_freq;
+uniform float u_time;
+in vec2 v_uv;
+out vec4 fragColor;
+
+vec3 hsv2rgb(vec3 c) {
+  vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+  vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+  return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+// Hexagonal distance function
+vec4 hexCoord(vec2 uv) {
+  vec2 r = vec2(1.0, 1.732);
+  vec2 h = r * 0.5;
+  vec2 a = mod(uv, r) - h;
+  vec2 b = mod(uv - h, r) - h;
+  vec2 gv = dot(a, a) < dot(b, b) ? a : b;
+  float x = atan(gv.x, gv.y);
+  float y = 0.5 - max(abs(gv.x), dot(abs(gv), normalize(h)));
+  vec2 id = uv - gv;
+  return vec4(x, y, id.x, id.y);
+}
+
+void main() {
+  vec2 center = vec2(0.5);
+  vec2 d = v_uv - center;
+
+  float bass = texture(u_freq, vec2(0.05, 0.5)).r;
+  float mid = texture(u_freq, vec2(0.3, 0.5)).r;
+  float treble = texture(u_freq, vec2(0.7, 0.5)).r;
+  float energy = (bass + mid + treble) / 3.0;
+
+  // Feedback with slight rotation and zoom
+  float rot = (treble - 0.3) * 0.008;
+  float zoom = 0.992 - bass * 0.006;
+  float s = sin(rot);
+  float c = cos(rot);
+  vec2 warped = center + vec2(d.x * c - d.y * s, d.x * s + d.y * c) * zoom;
+  vec4 prev = texture(u_prev, warped);
+  prev.rgb *= 0.94;
+
+  // Audio-displaced hex grid
+  float scale = 10.0;
+  vec2 uv = v_uv * scale;
+  uv.x += sin(uv.y * 0.5 + u_time * 1.5 + bass * 4.0) * 0.2;
+  uv.y += cos(uv.x * 0.5 + u_time * 1.2 + mid * 3.0) * 0.2;
+
+  vec4 hex = hexCoord(uv);
+  float edgeDist = hex.y;
+
+  // Hex cell edges
+  float edge = smoothstep(0.05, 0.0, edgeDist);
+
+  // Per-cell audio lookup using cell ID
+  float cellFreq = fract(hex.z * 0.127 + hex.w * 0.269);
+  float freq = texture(u_freq, vec2(cellFreq, 0.5)).r;
+
+  // Cell fill: pulse from center based on frequency
+  float cellFill = smoothstep(0.15, 0.05, edgeDist - freq * 0.12);
+  cellFill *= freq * energy;
+
+  // Color
+  float hue = mod(u_time * 0.1 + cellFreq * 0.6 + freq * 0.3, 1.0);
+  float sat = 0.75 + energy * 0.2;
+  vec3 edgeColor = hsv2rgb(vec3(hue, sat, edge * (0.4 + freq * 0.6)));
+  vec3 fillColor = hsv2rgb(vec3(mod(hue + 0.15, 1.0), sat * 0.8, cellFill * 0.5));
+
+  // Vertex glow at hex corners
+  float corner = smoothstep(0.02, 0.0, edgeDist) * smoothstep(0.5, 0.0, abs(mod(hex.x * 0.955, 1.047) - 0.524));
+  vec3 cornerColor = hsv2rgb(vec3(mod(hue + 0.3, 1.0), 0.6, corner * energy * 1.5));
+
+  fragColor = vec4(prev.rgb + edgeColor * 0.4 + fillColor * 0.3 + cornerColor * 0.2, 1.0);
+}`;
+
+const DIAMOND_FS = `#version 300 es
+precision highp float;
+uniform sampler2D u_prev;
+uniform sampler2D u_freq;
+uniform float u_time;
+in vec2 v_uv;
+out vec4 fragColor;
+
+vec3 hsv2rgb(vec3 c) {
+  vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+  vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+  return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+void main() {
+  vec2 center = vec2(0.5);
+  vec2 d = v_uv - center;
+  float dist = length(d);
+
+  float bass = texture(u_freq, vec2(0.05, 0.5)).r;
+  float mid = texture(u_freq, vec2(0.3, 0.5)).r;
+  float treble = texture(u_freq, vec2(0.7, 0.5)).r;
+  float energy = (bass + mid + treble) / 3.0;
+
+  // Feedback with slow rotation
+  float rot = 0.008 + mid * 0.006;
+  float zoom = 0.993 - bass * 0.005;
+  float s = sin(rot);
+  float c = cos(rot);
+  vec2 warped = center + vec2(d.x * c - d.y * s, d.x * s + d.y * c) * zoom;
+  vec4 prev = texture(u_prev, warped);
+  prev.rgb *= 0.945;
+
+  // Rotate UV 45 degrees to create diamond grid from square grid
+  float angle = 0.7854 + sin(u_time * 0.4) * 0.1;
+  float sa = sin(angle);
+  float ca = cos(angle);
+  vec2 ruv = vec2(d.x * ca - d.y * sa, d.x * sa + d.y * ca);
+
+  // Multi-scale diamond lattice
+  float scale1 = 12.0 + bass * 4.0;
+  float scale2 = scale1 * 2.0;
+
+  // Wave displacement
+  vec2 uv1 = ruv * scale1;
+  uv1 += vec2(sin(uv1.y * 0.3 + u_time * 1.8) * 0.25 * bass,
+              cos(uv1.x * 0.3 + u_time * 1.3) * 0.25 * mid);
+
+  vec2 uv2 = ruv * scale2;
+  uv2 += vec2(sin(uv2.y * 0.2 + u_time * 2.2) * 0.15 * treble,
+              cos(uv2.x * 0.2 + u_time * 1.7) * 0.15 * energy);
+
+  // Diamond edges (Manhattan distance in rotated space)
+  vec2 cell1 = abs(fract(uv1) - 0.5);
+  float diamond1 = cell1.x + cell1.y;
+  float edge1 = smoothstep(0.02, 0.0, abs(diamond1 - 0.5));
+
+  vec2 cell2 = abs(fract(uv2) - 0.5);
+  float diamond2 = cell2.x + cell2.y;
+  float edge2 = smoothstep(0.015, 0.0, abs(diamond2 - 0.5));
+
+  // Cell centers — bright pulsing nodes
+  float center1 = smoothstep(0.25, 0.0, diamond1);
+  float center2 = smoothstep(0.2, 0.0, diamond2);
+
+  // Audio-driven coloring per cell
+  vec2 cellId1 = floor(uv1);
+  float cellFreq1 = fract(cellId1.x * 0.173 + cellId1.y * 0.317);
+  float freq1 = texture(u_freq, vec2(cellFreq1, 0.5)).r;
+
+  vec2 cellId2 = floor(uv2);
+  float cellFreq2 = fract(cellId2.x * 0.237 + cellId2.y * 0.419);
+  float freq2 = texture(u_freq, vec2(cellFreq2, 0.5)).r;
+
+  // Colors
+  float hue1 = mod(u_time * 0.12 + cellFreq1 * 0.5 + dist * 0.8, 1.0);
+  float hue2 = mod(u_time * 0.12 + cellFreq2 * 0.5 + dist * 1.2 + 0.33, 1.0);
+
+  // Large lattice: thicker, brighter edges
+  vec3 color1 = hsv2rgb(vec3(hue1, 0.8, edge1 * (0.5 + freq1 * 0.5)));
+  vec3 node1 = hsv2rgb(vec3(mod(hue1 + 0.15, 1.0), 0.6, center1 * freq1 * energy * 0.8));
+
+  // Small lattice: thinner, subtler overlay
+  vec3 color2 = hsv2rgb(vec3(hue2, 0.85, edge2 * (0.3 + freq2 * 0.4)));
+  vec3 node2 = hsv2rgb(vec3(mod(hue2 + 0.2, 1.0), 0.7, center2 * freq2 * energy * 0.5));
+
+  // Radial vignette — more energy toward edges
+  float vignette = smoothstep(0.0, 0.4, dist) * 0.3;
+
+  fragColor = vec4(prev.rgb + (color1 + node1) * 0.4 + (color2 + node2) * 0.25 + vignette * energy * 0.1, 1.0);
+}`;
+
 const STARBURST_FS = `#version 300 es
 precision highp float;
 uniform sampler2D u_prev;
@@ -933,6 +1105,8 @@ function initWebGL(canvas: HTMLCanvasElement, mode: VisMode): WebGLState | null 
     tunnel: TUNNEL_FS,
     kaleidoscope: KALEIDOSCOPE_FS,
     warpgrid: WARPGRID_FS,
+    honeycomb: HONEYCOMB_FS,
+    diamond: DIAMOND_FS,
     starburst: STARBURST_FS,
     spiral: SPIRAL_FS,
     liquid: LIQUID_FS,
