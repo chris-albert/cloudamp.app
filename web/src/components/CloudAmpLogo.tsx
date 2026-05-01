@@ -7,7 +7,7 @@ const BASELINE = 38;
 export function CloudAmpLogo({ className }: { className?: string }) {
   return (
     <svg
-      viewBox="0 0 48 48"
+      viewBox="7 5 34 34"
       xmlns="http://www.w3.org/2000/svg"
       className={className}
       aria-hidden="true"
@@ -27,19 +27,24 @@ export function CloudAmpLogo({ className }: { className?: string }) {
           <stop offset="55%" stopColor="#22c55e" />
           <stop offset="100%" stopColor="#22c55e" />
         </linearGradient>
+        <clipPath id="cloudamp-circle">
+          <circle cx="24" cy="24" r="24" />
+        </clipPath>
       </defs>
-      <rect width="48" height="48" rx="9" fill="#1e3a5f" />
-      {BAR_HEIGHTS.map((h, i) => (
-        <rect
-          key={i}
-          x={0.4 + i * BAR_PITCH}
-          y={BASELINE - h}
-          width={BAR_WIDTH}
-          height={h}
-          rx="0.3"
-          fill="url(#cloudamp-eq)"
-        />
-      ))}
+      <g clipPath="url(#cloudamp-circle)">
+        <circle cx="24" cy="24" r="24" fill="#1e3a5f" />
+        {BAR_HEIGHTS.map((h, i) => (
+          <rect
+            key={i}
+            x={0.4 + i * BAR_PITCH}
+            y={BASELINE - h}
+            width={BAR_WIDTH}
+            height={h}
+            rx="0.3"
+            fill="url(#cloudamp-eq)"
+          />
+        ))}
+      </g>
     </svg>
   );
 }
