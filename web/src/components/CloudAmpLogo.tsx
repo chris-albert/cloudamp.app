@@ -7,7 +7,7 @@ const BASELINE = 38;
 export function CloudAmpLogo({ className }: { className?: string }) {
   return (
     <svg
-      viewBox="7 5 34 34"
+      viewBox="7 3 34 34"
       xmlns="http://www.w3.org/2000/svg"
       className={className}
       aria-hidden="true"
