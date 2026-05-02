@@ -166,11 +166,12 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
      * push that merged content. Call on app start.
      */
     fun syncWithDrive() {
+        Log.d(TAG, "syncWithDrive: starting")
         scope.launch {
             try {
                 consolidateOnDrive()
             } catch (e: Exception) {
-                Log.e(TAG, "Drive sync error: ${e.message}")
+                Log.e(TAG, "Drive sync error: ${e.javaClass.simpleName}: ${e.message}", e)
             }
         }
     }
@@ -205,9 +206,18 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
      * download-then-upload sync.
      */
     private suspend fun consolidateOnDrive() = driveMutex.withLock {
-        val libraryRootId = GDriveLibraryCache.getInstance(context).getRootFolderId() ?: return@withLock
+        val libraryRootId = GDriveLibraryCache.getInstance(context).getRootFolderId()
+        if (libraryRootId == null) {
+            Log.w(TAG, "consolidateOnDrive: no library root folder ID configured, skipping")
+            return@withLock
+        }
         val client = GoogleDriveApiClient.getInstance(context)
-        if (!client.hasAccessToken()) return@withLock
+        if (!client.hasAccessToken()) {
+            Log.w(TAG, "consolidateOnDrive: no access token available, skipping")
+            return@withLock
+        }
+
+        Log.d(TAG, "consolidateOnDrive: starting with libraryRootId=$libraryRootId")
 
         migrateStorageVersionIfNeeded()
 
@@ -220,7 +230,12 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
                     pageSize = 100,
                     pageToken = pageToken
                 )
-            } ?: return@withLock
+            }
+            if (folders == null) {
+                Log.e(TAG, "consolidateOnDrive: failed to list .cloudamp subfolders under $libraryRootId")
+                return@withLock
+            }
+            Log.d(TAG, "consolidateOnDrive: found ${folders.size} .cloudamp subfolders")
 
             // 2. Find all playback_history.ndjson files in any of those folders.
             val allFiles = mutableListOf<DriveFile>()
@@ -287,6 +302,7 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
                 val resp = client.api.createFile(metadataPart, mediaPart)
                 if (resp.isSuccessful) {
                     canonicalFileId = resp.body()?.id
+                    Log.d(TAG, "Created new canonical history file: $canonicalFileId")
                 } else {
                     Log.e(TAG, "Consolidation: create canonical failed ${resp.code()}")
                 }
@@ -356,7 +372,7 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
 
             Log.d(TAG, "Consolidation done: kept folder=$canonicalFolderId file=$canonicalFileId, trashed $trashedFolders folders + $trashedFiles files, ${merged.size} unique lines")
         } catch (e: Exception) {
-            Log.e(TAG, "Consolidation error: ${e.message}")
+            Log.e(TAG, "Consolidation error: ${e.javaClass.simpleName}: ${e.message}", e)
         }
     }
 
@@ -368,7 +384,8 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
         do {
             val resp = page(pageToken)
             if (!resp.isSuccessful) {
-                Log.e(TAG, "listFiles failed: ${resp.code()}")
+                val errorBody = try { resp.errorBody()?.string() } catch (_: Exception) { null }
+                Log.e(TAG, "listFiles failed: ${resp.code()} $errorBody")
                 return null
             }
             val body = resp.body() ?: break
@@ -387,8 +404,13 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
         val resp = client.api.createFolder(
             metadata = metadata.toRequestBody("application/json".toMediaType())
         )
-        if (resp.isSuccessful) return resp.body()?.id
-        Log.e(TAG, "Failed to create .cloudamp subfolder: ${resp.code()}")
+        if (resp.isSuccessful) {
+            val id = resp.body()?.id
+            Log.d(TAG, "Created .cloudamp subfolder: id=$id under parent=$libraryRootId")
+            return id
+        }
+        val errorBody = try { resp.errorBody()?.string() } catch (_: Exception) { null }
+        Log.e(TAG, "Failed to create .cloudamp subfolder: ${resp.code()} $errorBody")
         return null
     }
 

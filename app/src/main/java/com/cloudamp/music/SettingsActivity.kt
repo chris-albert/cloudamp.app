@@ -25,9 +25,6 @@ class SettingsActivity : AppCompatActivity() {
 
     // Google Drive fields
     private lateinit var gdriveAuthManager: GoogleDriveAuthManager
-    private lateinit var gdriveClientIdEditText: EditText
-    private lateinit var gdriveClientSecretEditText: EditText
-    private lateinit var saveGdriveCredentialsButton: Button
     private lateinit var loginWithGdriveButton: Button
     private lateinit var clearGdriveButton: Button
     private lateinit var gdriveValidationStatus: TextView
@@ -74,19 +71,15 @@ class SettingsActivity : AppCompatActivity() {
 
         // Streaming cache views
         setupMediaCache()
+
+        // Handle OAuth redirect if activity was launched by deep link
+        handleOAuthRedirect(intent)
     }
 
     private fun setupGoogleDrive() {
-        gdriveClientIdEditText = findViewById(R.id.gdriveClientIdEditText)
-        gdriveClientSecretEditText = findViewById(R.id.gdriveClientSecretEditText)
-        saveGdriveCredentialsButton = findViewById(R.id.saveGdriveCredentialsButton)
         loginWithGdriveButton = findViewById(R.id.loginWithGdriveButton)
         clearGdriveButton = findViewById(R.id.clearGdriveButton)
         gdriveValidationStatus = findViewById(R.id.gdriveValidationStatus)
-
-        // Load existing credentials
-        gdriveAuthManager.getClientId()?.let { gdriveClientIdEditText.setText(it) }
-        gdriveAuthManager.getClientSecret()?.let { gdriveClientSecretEditText.setText(it) }
 
         // Show current status
         if (gdriveAuthManager.hasAccessToken()) {
@@ -94,19 +87,7 @@ class SettingsActivity : AppCompatActivity() {
             validateGdriveToken()
         }
 
-        loginWithGdriveButton.isEnabled = gdriveAuthManager.hasClientCredentials()
-
-        saveGdriveCredentialsButton.setOnClickListener {
-            val clientId = gdriveClientIdEditText.text.toString().trim()
-            val clientSecret = gdriveClientSecretEditText.text.toString().trim()
-            if (clientId.isNotEmpty() && clientSecret.isNotEmpty()) {
-                gdriveAuthManager.saveClientCredentials(clientId, clientSecret)
-                loginWithGdriveButton.isEnabled = true
-                Toast.makeText(this, "Google Drive credentials saved", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, "Please enter both Client ID and Secret", Toast.LENGTH_SHORT).show()
-            }
-        }
+        loginWithGdriveButton.isEnabled = true
 
         loginWithGdriveButton.setOnClickListener {
             startGoogleDriveLogin()
@@ -114,11 +95,8 @@ class SettingsActivity : AppCompatActivity() {
 
         clearGdriveButton.setOnClickListener {
             gdriveAuthManager.clearCredentials()
-            gdriveClientIdEditText.setText("")
-            gdriveClientSecretEditText.setText("")
-            loginWithGdriveButton.isEnabled = false
             updateGdriveStatus("", false)
-            Toast.makeText(this, "Google Drive credentials cleared", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Google Drive disconnected", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -129,35 +107,44 @@ class SettingsActivity : AppCompatActivity() {
             loginWithGdriveButton.isEnabled = false
             updateGdriveStatus("Waiting for authorization...", false)
 
-            // Start listening for the loopback callback in background
-            scope.launch {
-                val codeResult = withContext(Dispatchers.IO) {
-                    gdriveAuthManager.waitForAuthorizationCode()
-                }
-
-                codeResult.onSuccess { code ->
-                    updateGdriveStatus("Exchanging token...", false)
-                    val tokenResult = gdriveAuthManager.exchangeCodeForToken(code)
-                    tokenResult.onSuccess {
-                        updateGdriveStatus("Connected to Google Drive!", true)
-                        validateGdriveToken()
-                    }.onFailure { error ->
-                        updateGdriveStatus("Token exchange failed: ${error.message}", false)
-                    }
-                }.onFailure { error ->
-                    updateGdriveStatus("Authorization failed: ${error.message}", false)
-                }
-
-                loginWithGdriveButton.isEnabled = true
-            }
-
-            // Open browser for authorization
+            // Open browser for authorization — the browser will redirect back
+            // to this activity via the custom URI scheme intent filter.
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
             startActivity(intent)
         } catch (e: Exception) {
             loginWithGdriveButton.isEnabled = true
             updateGdriveStatus("Error: ${e.message}", false)
             Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        handleOAuthRedirect(intent)
+    }
+
+    private fun handleOAuthRedirect(intent: Intent?) {
+        val uri = intent?.data ?: return
+        if (uri.scheme != "com.cloudamp.music" || uri.host != "oauth2callback") return
+
+        val code = uri.getQueryParameter("code")
+        val error = uri.getQueryParameter("error")
+
+        if (code != null) {
+            updateGdriveStatus("Exchanging token...", false)
+            scope.launch {
+                val tokenResult = gdriveAuthManager.exchangeCodeForToken(code)
+                tokenResult.onSuccess {
+                    updateGdriveStatus("Connected to Google Drive!", true)
+                    validateGdriveToken()
+                }.onFailure { err ->
+                    updateGdriveStatus("Token exchange failed: ${err.message}", false)
+                }
+                loginWithGdriveButton.isEnabled = true
+            }
+        } else {
+            updateGdriveStatus("Authorization failed: ${error ?: "unknown error"}", false)
+            loginWithGdriveButton.isEnabled = true
         }
     }
 
