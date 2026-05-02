@@ -20,7 +20,7 @@ class GoogleDriveAuthManager(private val context: Context) {
         private const val TAG = "GDriveAuth"
         private const val AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
         private const val TOKEN_PROXY_URL = "https://cloudamp.io/api/token"
-        private const val REDIRECT_URI = "com.cloudamp.music://oauth2callback"
+        private const val REDIRECT_URI = "https://cloudamp.io/api/android-callback"
 
         // Auth version: bump to force re-auth when credentials change.
         // v1 = proxy-based auth (no client secret on device).
