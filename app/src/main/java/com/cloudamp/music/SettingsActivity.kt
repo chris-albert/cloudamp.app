@@ -71,6 +71,9 @@ class SettingsActivity : AppCompatActivity() {
 
         // Streaming cache views
         setupMediaCache()
+
+        // Handle OAuth redirect if activity was launched by deep link
+        handleOAuthRedirect(intent)
     }
 
     private fun setupGoogleDrive() {
@@ -104,35 +107,44 @@ class SettingsActivity : AppCompatActivity() {
             loginWithGdriveButton.isEnabled = false
             updateGdriveStatus("Waiting for authorization...", false)
 
-            // Start listening for the loopback callback in background
-            scope.launch {
-                val codeResult = withContext(Dispatchers.IO) {
-                    gdriveAuthManager.waitForAuthorizationCode()
-                }
-
-                codeResult.onSuccess { code ->
-                    updateGdriveStatus("Exchanging token...", false)
-                    val tokenResult = gdriveAuthManager.exchangeCodeForToken(code)
-                    tokenResult.onSuccess {
-                        updateGdriveStatus("Connected to Google Drive!", true)
-                        validateGdriveToken()
-                    }.onFailure { error ->
-                        updateGdriveStatus("Token exchange failed: ${error.message}", false)
-                    }
-                }.onFailure { error ->
-                    updateGdriveStatus("Authorization failed: ${error.message}", false)
-                }
-
-                loginWithGdriveButton.isEnabled = true
-            }
-
-            // Open browser for authorization
+            // Open browser for authorization — the browser will redirect back
+            // to this activity via the custom URI scheme intent filter.
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
             startActivity(intent)
         } catch (e: Exception) {
             loginWithGdriveButton.isEnabled = true
             updateGdriveStatus("Error: ${e.message}", false)
             Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        handleOAuthRedirect(intent)
+    }
+
+    private fun handleOAuthRedirect(intent: Intent?) {
+        val uri = intent?.data ?: return
+        if (uri.scheme != "com.cloudamp.music" || uri.host != "oauth2callback") return
+
+        val code = uri.getQueryParameter("code")
+        val error = uri.getQueryParameter("error")
+
+        if (code != null) {
+            updateGdriveStatus("Exchanging token...", false)
+            scope.launch {
+                val tokenResult = gdriveAuthManager.exchangeCodeForToken(code)
+                tokenResult.onSuccess {
+                    updateGdriveStatus("Connected to Google Drive!", true)
+                    validateGdriveToken()
+                }.onFailure { err ->
+                    updateGdriveStatus("Token exchange failed: ${err.message}", false)
+                }
+                loginWithGdriveButton.isEnabled = true
+            }
+        } else {
+            updateGdriveStatus("Authorization failed: ${error ?: "unknown error"}", false)
+            loginWithGdriveButton.isEnabled = true
         }
     }
 
