@@ -96,6 +96,7 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
         albumName: String?,
         artistName: String?
     ) {
+        val now = dateFormat.format(Date())
         val line = JSONObject().apply {
             put("type", "play")
             put("trackId", trackId)
@@ -103,9 +104,10 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
             put("albumId", albumId ?: "")
             put("albumName", albumName ?: "")
             put("artistName", artistName ?: "")
-            put("playedAt", dateFormat.format(Date()))
+            put("playedAt", now)
         }.toString()
 
+        Log.d(TAG, "recordPlay: $trackName (trackId=$trackId) at $now")
         appendLocal(line)
         scheduleUpload()
     }
@@ -153,8 +155,13 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
 
     private fun scheduleUpload() {
         val lastUpload = prefs.getLong(KEY_LAST_UPLOAD, 0)
-        if (System.currentTimeMillis() - lastUpload < UPLOAD_THROTTLE_MS) return
+        val elapsed = System.currentTimeMillis() - lastUpload
+        if (elapsed < UPLOAD_THROTTLE_MS) {
+            Log.d(TAG, "scheduleUpload: throttled (${elapsed / 1000}s since last upload, need ${UPLOAD_THROTTLE_MS / 1000}s)")
+            return
+        }
 
+        Log.d(TAG, "scheduleUpload: throttle window passed, launching consolidateOnDrive")
         scope.launch {
             consolidateOnDrive()
         }
@@ -180,6 +187,7 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
      * Force upload to Drive (e.g. on app pause).
      */
     fun forceUpload() {
+        Log.d(TAG, "forceUpload: triggered")
         scope.launch {
             consolidateOnDrive()
         }
@@ -272,50 +280,88 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
             }
 
             val mergedContent = if (merged.isEmpty()) "" else merged.joinToString("\n") + "\n"
+            Log.d(TAG, "consolidateOnDrive: merged ${merged.size} unique lines from ${allFiles.size} remote file(s) + local")
 
             // 4. Pick / create the canonical folder.
             val canonicalFolderId = if (folders.isNotEmpty()) {
-                folders.minByOrNull { it.id }!!.id
+                val id = folders.minByOrNull { it.id }!!.id
+                Log.d(TAG, "consolidateOnDrive: using existing canonical folder $id")
+                id
             } else {
+                Log.d(TAG, "consolidateOnDrive: no .cloudamp folder found, creating one")
                 createSubfolder(client, libraryRootId) ?: return@withLock
             }
 
-            // 5. Pick / create the canonical file inside the canonical folder.
+            // 5. Pick a writable canonical file inside the canonical folder.
+            //    With drive.file scope, files created by a different OAuth grant
+            //    may return 404 on update. Try each candidate until one accepts,
+            //    or fall through to create a new file.
             val filesInCanonical = allFiles.filter { it.parents?.contains(canonicalFolderId) == true }
-            var canonicalFileId: String? = filesInCanonical.minByOrNull { it.id }?.id
+            var canonicalFileId: String? = null
+            val inaccessibleFileIds = mutableSetOf<String>()
 
-            val mediaBody = mergedContent.toRequestBody("application/x-ndjson".toMediaType())
-            if (canonicalFileId != null) {
-                if (mergedContent.isNotEmpty()) {
-                    val resp = client.api.updateFileContent(canonicalFileId, mediaBody)
-                    if (!resp.isSuccessful) {
-                        Log.e(TAG, "Consolidation: update canonical failed ${resp.code()}")
+            if (mergedContent.isNotEmpty()) {
+                val mediaBody = mergedContent.toRequestBody("application/x-ndjson".toMediaType())
+
+                // Try updating each existing file until one succeeds
+                for (candidate in filesInCanonical.sortedBy { it.id }) {
+                    Log.d(TAG, "consolidateOnDrive: trying to update candidate file ${candidate.id}")
+                    try {
+                        val resp = client.api.updateFileContent(candidate.id, mediaBody)
+                        if (resp.isSuccessful) {
+                            canonicalFileId = candidate.id
+                            Log.d(TAG, "consolidateOnDrive: successfully updated canonical file $canonicalFileId")
+                            break
+                        } else {
+                            val errorBody = try { resp.errorBody()?.string() } catch (_: Exception) { null }
+                            Log.e(TAG, "consolidateOnDrive: update file ${candidate.id} failed ${resp.code()} $errorBody")
+                            if (resp.code() == 404 || resp.code() == 403) {
+                                inaccessibleFileIds.add(candidate.id)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "consolidateOnDrive: update file ${candidate.id} threw: ${e.message}", e)
+                        inaccessibleFileIds.add(candidate.id)
                     }
                 }
-            } else if (mergedContent.isNotEmpty()) {
-                val metadata = JSONObject().apply {
-                    put("name", HISTORY_FILENAME)
-                    put("parents", org.json.JSONArray().put(canonicalFolderId))
-                }.toString()
-                val metadataPart = metadata.toRequestBody("application/json".toMediaType())
-                val mediaPart = MultipartBody.Part.createFormData("media", HISTORY_FILENAME, mediaBody)
-                val resp = client.api.createFile(metadataPart, mediaPart)
-                if (resp.isSuccessful) {
-                    canonicalFileId = resp.body()?.id
-                    Log.d(TAG, "Created new canonical history file: $canonicalFileId")
-                } else {
-                    Log.e(TAG, "Consolidation: create canonical failed ${resp.code()}")
+
+                // If no existing file was writable, create a new one
+                if (canonicalFileId == null) {
+                    Log.d(TAG, "consolidateOnDrive: no writable file found (tried ${filesInCanonical.size}), creating new file")
+                    val metadata = JSONObject().apply {
+                        put("name", HISTORY_FILENAME)
+                        put("parents", org.json.JSONArray().put(canonicalFolderId))
+                    }.toString()
+                    val createMediaBody = mergedContent.toRequestBody("application/x-ndjson".toMediaType())
+                    val metadataPart = metadata.toRequestBody("application/json".toMediaType())
+                    val mediaPart = MultipartBody.Part.createFormData("media", HISTORY_FILENAME, createMediaBody)
+                    val resp = client.api.createFile(metadataPart, mediaPart)
+                    if (resp.isSuccessful) {
+                        canonicalFileId = resp.body()?.id
+                        Log.d(TAG, "consolidateOnDrive: created new canonical history file: $canonicalFileId")
+                    } else {
+                        val errorBody = try { resp.errorBody()?.string() } catch (_: Exception) { null }
+                        Log.e(TAG, "consolidateOnDrive: create canonical failed ${resp.code()} $errorBody")
+                    }
                 }
+            } else {
+                Log.d(TAG, "consolidateOnDrive: no content to write, skipping file update/create")
+                canonicalFileId = filesInCanonical.minByOrNull { it.id }?.id
             }
 
             // 6. Update local file with merged content. Re-read local right
             //    before writing to pick up any plays appended while we were
             //    talking to Drive — narrows the lost-append window to a few
             //    microseconds between this read and the writeText below.
+            val preCount = merged.size
             if (localFile.exists()) {
                 for (line in localFile.readLines()) {
                     if (line.isNotBlank()) merged.add(line)
                 }
+            }
+            val newLines = merged.size - preCount
+            if (newLines > 0) {
+                Log.d(TAG, "consolidateOnDrive: picked up $newLines new local lines appended during Drive sync")
             }
             val finalContent = if (merged.isEmpty()) "" else merged.joinToString("\n") + "\n"
             if (finalContent.isNotEmpty()) {
@@ -324,11 +370,16 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
             // Push any newly-included lines to Drive so they aren't lost on
             // next overwrite.
             if (canonicalFileId != null && finalContent.isNotEmpty() && finalContent != mergedContent) {
+                Log.d(TAG, "consolidateOnDrive: pushing $newLines additional lines to Drive")
                 val finalMedia = finalContent.toRequestBody("application/x-ndjson".toMediaType())
                 try {
-                    client.api.updateFileContent(canonicalFileId, finalMedia)
+                    val resp = client.api.updateFileContent(canonicalFileId, finalMedia)
+                    if (!resp.isSuccessful) {
+                        val errorBody = try { resp.errorBody()?.string() } catch (_: Exception) { null }
+                        Log.e(TAG, "Final-merge update failed: ${resp.code()} $errorBody")
+                    }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Final-merge update failed: ${e.message}")
+                    Log.e(TAG, "Final-merge update threw: ${e.message}", e)
                 }
             }
 
@@ -343,11 +394,16 @@ class GDrivePlaybackHistory private constructor(private val context: Context) {
                 .apply()
 
             // 8. Trash duplicate files (everything except the canonical).
+            //    Skip files that returned 404/403 — we don't own them.
             val trashBody = JSONObject().apply { put("trashed", true) }.toString()
                 .toRequestBody("application/json".toMediaType())
             var trashedFiles = 0
             for (file in allFiles) {
                 if (file.id == canonicalFileId) continue
+                if (file.id in inaccessibleFileIds) {
+                    Log.d(TAG, "Skipping trash for inaccessible file ${file.id}")
+                    continue
+                }
                 try {
                     val resp = client.api.trashFile(file.id, trashBody)
                     if (resp.isSuccessful) trashedFiles++
