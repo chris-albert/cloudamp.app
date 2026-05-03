@@ -112,25 +112,6 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
                     }.filter { it.trackCount > 0 }
                 }
 
-                // Cached Albums: albums with at least one track in the media cache
-                val cachedAlbums = withContext(Dispatchers.IO) {
-                    val mediaCache = MediaCache.getInstance(this@GDriveHomeActivity)
-                    val cachedFileIds = mediaCache.stats().tracks.map { it.fileId }.toSet()
-                    if (cachedFileIds.isEmpty()) {
-                        emptyList()
-                    } else {
-                        allAlbums.filter { album ->
-                            val tracks = libraryCache.getAlbumTracks(album.id) ?: emptyList()
-                            tracks.any { it.file.id in cachedFileIds }
-                        }
-                    }
-                }
-                if (cachedAlbums.isNotEmpty()) {
-                    cachedAlbumsAdapter.setAlbums(cachedAlbums)
-                    findViewById<View>(R.id.cachedAlbumsHeader).visibility = View.VISIBLE
-                    findViewById<View>(R.id.cachedAlbumsRecyclerView).visibility = View.VISIBLE
-                }
-
                 // Recently Played: from NDJSON history (falls back to SharedPreferences)
                 val recentlyPlayed = withContext(Dispatchers.IO) {
                     val history = GDrivePlaybackHistory.getInstance(this@GDriveHomeActivity)
@@ -158,6 +139,31 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
                 // Discover: random 10 albums
                 val discover = allAlbums.shuffled().take(10)
                 discoverAdapter.setAlbums(discover)
+
+                // Cached: albums with at least one track in the media cache,
+                // sorted by most recently cached track first
+                val cachedAlbums = withContext(Dispatchers.IO) {
+                    val mediaCache = MediaCache.getInstance(this@GDriveHomeActivity)
+                    val cachedTracks = mediaCache.stats().tracks
+                    if (cachedTracks.isEmpty()) {
+                        emptyList()
+                    } else {
+                        val cachedFileIds = cachedTracks.map { it.fileId }.toSet()
+                        val addedAtByFileId = cachedTracks.associate { it.fileId to it.addedAt }
+                        allAlbums.mapNotNull { album ->
+                            val tracks = libraryCache.getAlbumTracks(album.id) ?: emptyList()
+                            val maxAddedAt = tracks
+                                .mapNotNull { addedAtByFileId[it.file.id] }
+                                .maxOrNull()
+                            if (maxAddedAt != null) album to maxAddedAt else null
+                        }.sortedByDescending { it.second }.map { it.first }
+                    }
+                }
+                if (cachedAlbums.isNotEmpty()) {
+                    cachedAlbumsAdapter.setAlbums(cachedAlbums)
+                    findViewById<View>(R.id.cachedAlbumsHeader).visibility = View.VISIBLE
+                    findViewById<View>(R.id.cachedAlbumsRecyclerView).visibility = View.VISIBLE
+                }
 
             } catch (e: Exception) {
                 e.printStackTrace()

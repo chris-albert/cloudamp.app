@@ -674,21 +674,27 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             ))
         }
 
-        // Cached Albums: albums with at least one track in the media cache
+        // Cached: albums with at least one track in the media cache,
+        // sorted by most recently cached track first
         val mediaCache = MediaCache.getInstance(this)
-        val cachedFileIds = mediaCache.stats().tracks.map { it.fileId }.toSet()
-        if (cachedFileIds.isNotEmpty()) {
-            val cachedAlbums = allAlbums.filter { album ->
+        val cachedTracks = mediaCache.stats().tracks
+        if (cachedTracks.isNotEmpty()) {
+            val cachedFileIds = cachedTracks.map { it.fileId }.toSet()
+            val addedAtByFileId = cachedTracks.associate { it.fileId to it.addedAt }
+            val cachedAlbums = allAlbums.mapNotNull { album ->
                 val tracks = gdriveLibraryCache.getAlbumTracks(album.id) ?: emptyList()
-                tracks.any { it.file.id in cachedFileIds }
-            }
+                val maxAddedAt = tracks
+                    .mapNotNull { addedAtByFileId[it.file.id] }
+                    .maxOrNull()
+                if (maxAddedAt != null) album to maxAddedAt else null
+            }.sortedByDescending { it.second }.map { it.first }
             for (album in cachedAlbums) {
                 val imageUrl = album.coverFileId?.let { GDriveImageProvider.buildUri(it).toString() }
                 items.add(createBrowsableItemWithGroup(
                     "gdrive_music_album_${album.id}",
                     album.name,
                     album.artistName,
-                    "Cached Albums",
+                    "Cached",
                     imageUrl ?: placeholderUri
                 ))
             }
