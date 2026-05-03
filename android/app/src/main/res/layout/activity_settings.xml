@@ -35,51 +35,6 @@
 
         </LinearLayout>
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="1. Create OAuth credentials at:\nhttps://console.cloud.google.com\n\n2. Enable the Google Drive API\n\n3. Create an OAuth 2.0 Client ID\n   (Desktop application type)\n\n4. Copy the Client ID and Secret below"
-            android:textColor="@color/winamp_display_text"
-            android:textSize="12sp"
-            android:fontFamily="monospace"
-            android:layout_marginBottom="16dp"/>
-
-        <EditText
-            android:id="@+id/gdriveClientIdEditText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="Google OAuth Client ID"
-            android:textColor="@color/winamp_text"
-            android:textColorHint="@color/winamp_display_text"
-            android:background="@color/winamp_list_background"
-            android:padding="12dp"
-            android:fontFamily="monospace"
-            android:inputType="textPassword"
-            android:layout_marginBottom="8dp"/>
-
-        <EditText
-            android:id="@+id/gdriveClientSecretEditText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="Google OAuth Client Secret"
-            android:textColor="@color/winamp_text"
-            android:textColorHint="@color/winamp_display_text"
-            android:background="@color/winamp_list_background"
-            android:padding="12dp"
-            android:fontFamily="monospace"
-            android:inputType="textPassword"
-            android:layout_marginBottom="12dp"/>
-
-        <Button
-            android:id="@+id/saveGdriveCredentialsButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="SAVE CREDENTIALS"
-            android:textColor="@color/winamp_text"
-            android:background="@color/winamp_button"
-            android:fontFamily="monospace"
-            android:layout_marginBottom="8dp"/>
-
         <Button
             android:id="@+id/loginWithGdriveButton"
             android:layout_width="match_parent"
@@ -88,7 +43,6 @@
             android:textColor="@color/winamp_text"
             android:background="@color/winamp_button"
             android:fontFamily="monospace"
-            android:enabled="false"
             android:layout_marginBottom="8dp"/>
 
         <Button
@@ -113,7 +67,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="\nNote: Google Drive provides read-only access\nto your personal music files."
+            android:text="\nConnect your Google Drive to stream\nyour personal music library."
             android:textColor="@color/winamp_display_text"
             android:textSize="12sp"
             android:fontFamily="monospace"

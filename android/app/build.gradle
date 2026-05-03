@@ -25,6 +25,8 @@ android {
         targetSdk 34
         versionCode versionCodeValue
         versionName versionNameValue
+
+        buildConfigField "String", "GOOGLE_CLIENT_ID", "\"${findProperty('GOOGLE_CLIENT_ID') ?: ''}\""
     }
 
     signingConfigs {
@@ -61,6 +63,7 @@ android {
 
     buildFeatures {
         viewBinding true
+        buildConfig true
     }
 }
 
