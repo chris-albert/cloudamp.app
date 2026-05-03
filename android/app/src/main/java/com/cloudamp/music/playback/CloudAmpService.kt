@@ -31,6 +31,7 @@ import com.cloudamp.music.api.GDriveTrack
 import com.cloudamp.music.api.GoogleDriveApiClient
 import com.cloudamp.music.cache.GDriveLibraryCache
 import com.cloudamp.music.cache.GDrivePlaybackHistory
+import com.cloudamp.music.cache.MediaCache
 import com.cloudamp.music.cache.PlaybackStateStore
 import com.cloudamp.music.cache.SavedQueuesManager
 import com.cloudamp.music.models.Track
@@ -671,6 +672,26 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 "Recently Added",
                 imageUrl ?: placeholderUri
             ))
+        }
+
+        // Cached Albums: albums with at least one track in the media cache
+        val mediaCache = MediaCache.getInstance(this)
+        val cachedFileIds = mediaCache.stats().tracks.map { it.fileId }.toSet()
+        if (cachedFileIds.isNotEmpty()) {
+            val cachedAlbums = allAlbums.filter { album ->
+                val tracks = gdriveLibraryCache.getAlbumTracks(album.id) ?: emptyList()
+                tracks.any { it.file.id in cachedFileIds }
+            }
+            for (album in cachedAlbums) {
+                val imageUrl = album.coverFileId?.let { GDriveImageProvider.buildUri(it).toString() }
+                items.add(createBrowsableItemWithGroup(
+                    "gdrive_music_album_${album.id}",
+                    album.name,
+                    album.artistName,
+                    "Cached Albums",
+                    imageUrl ?: placeholderUri
+                ))
+            }
         }
     }
 

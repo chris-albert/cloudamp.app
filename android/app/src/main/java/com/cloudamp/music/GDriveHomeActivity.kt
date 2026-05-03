@@ -17,6 +17,7 @@ import com.cloudamp.music.api.GDriveAlbum
 import com.cloudamp.music.cache.GDriveLibraryCache
 import com.cloudamp.music.cache.GDrivePlaybackHistory
 import com.cloudamp.music.cache.LibraryScanManager
+import com.cloudamp.music.cache.MediaCache
 import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.ui.GDriveHomeAdapter
@@ -32,6 +33,7 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
     private lateinit var navigationView: NavigationView
     private lateinit var toggle: ActionBarDrawerToggle
 
+    private lateinit var cachedAlbumsAdapter: GDriveHomeAdapter
     private lateinit var recentPlayedAdapter: GDriveHomeAdapter
     private lateinit var recentAddedAdapter: GDriveHomeAdapter
     private lateinit var discoverAdapter: GDriveHomeAdapter
@@ -84,6 +86,7 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
 
     private fun setupRecyclerViews() {
         loadingContainer = findViewById(R.id.loadingContainer)
+        cachedAlbumsAdapter = setupHorizontalRecyclerView(findViewById(R.id.cachedAlbumsRecyclerView))
         recentPlayedAdapter = setupHorizontalRecyclerView(findViewById(R.id.recentPlayedRecyclerView))
         recentAddedAdapter = setupHorizontalRecyclerView(findViewById(R.id.recentAddedRecyclerView))
         discoverAdapter = setupHorizontalRecyclerView(findViewById(R.id.discoverRecyclerView))
@@ -107,6 +110,25 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
                     artists.flatMap { artist ->
                         libraryCache.getArtistAlbums(artist.id) ?: emptyList()
                     }.filter { it.trackCount > 0 }
+                }
+
+                // Cached Albums: albums with at least one track in the media cache
+                val cachedAlbums = withContext(Dispatchers.IO) {
+                    val mediaCache = MediaCache.getInstance(this@GDriveHomeActivity)
+                    val cachedFileIds = mediaCache.stats().tracks.map { it.fileId }.toSet()
+                    if (cachedFileIds.isEmpty()) {
+                        emptyList()
+                    } else {
+                        allAlbums.filter { album ->
+                            val tracks = libraryCache.getAlbumTracks(album.id) ?: emptyList()
+                            tracks.any { it.file.id in cachedFileIds }
+                        }
+                    }
+                }
+                if (cachedAlbums.isNotEmpty()) {
+                    cachedAlbumsAdapter.setAlbums(cachedAlbums)
+                    findViewById<View>(R.id.cachedAlbumsHeader).visibility = View.VISIBLE
+                    findViewById<View>(R.id.cachedAlbumsRecyclerView).visibility = View.VISIBLE
                 }
 
                 // Recently Played: from NDJSON history (falls back to SharedPreferences)
