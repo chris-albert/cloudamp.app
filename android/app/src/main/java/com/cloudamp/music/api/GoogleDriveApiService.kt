@@ -59,7 +59,7 @@ interface GoogleDriveApiService {
     /**
      * Update file content (media only, no metadata change).
      */
-    @PUT("upload/drive/v3/files/{fileId}")
+    @PATCH("upload/drive/v3/files/{fileId}")
     suspend fun updateFileContent(
         @Path("fileId") fileId: String,
         @Body media: RequestBody,
