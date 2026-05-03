@@ -10,22 +10,26 @@ CloudAmp is a native Android music player written in Kotlin that integrates with
 
 ```
 cloudamp.app/
-├── app/
-│   ├── src/main/
-│   │   ├── java/com/cloudamp/music/
-│   │   │   ├── api/              # Spotify API client (Retrofit)
-│   │   │   ├── auth/             # OAuth 2.0 PKCE authentication
-│   │   │   ├── cache/            # Persistent library caching
-│   │   │   ├── models/           # Data classes for API responses
-│   │   │   ├── playback/         # PlaybackManager & MediaBrowserService
-│   │   │   ├── ui/               # RecyclerView adapters
-│   │   │   ├── MainActivity.kt   # Library browsing
-│   │   │   ├── NowPlayingActivity.kt
-│   │   │   └── SettingsActivity.kt
-│   │   └── res/                  # Layouts, drawables, values
-│   └── build.gradle              # App-level dependencies
-├── build.gradle                  # Project-level config
-├── settings.gradle
+├── android/                      # Android project root
+│   ├── app/
+│   │   ├── src/main/
+│   │   │   ├── java/com/cloudamp/music/
+│   │   │   │   ├── api/              # Spotify API client (Retrofit)
+│   │   │   │   ├── auth/             # OAuth 2.0 PKCE authentication
+│   │   │   │   ├── cache/            # Persistent library caching
+│   │   │   │   ├── models/           # Data classes for API responses
+│   │   │   │   ├── playback/         # PlaybackManager & MediaBrowserService
+│   │   │   │   ├── ui/               # RecyclerView adapters
+│   │   │   │   ├── MainActivity.kt   # Library browsing
+│   │   │   │   ├── NowPlayingActivity.kt
+│   │   │   │   └── SettingsActivity.kt
+│   │   │   └── res/                  # Layouts, drawables, values
+│   │   └── build.gradle              # App-level dependencies
+│   ├── build.gradle                  # Project-level config
+│   ├── settings.gradle
+│   ├── gradlew / gradlew.bat
+│   └── gradle/                       # Gradle wrapper
+├── web/                          # Web app (React + Vite + Cloudflare Pages)
 └── .github/workflows/            # CI/CD pipelines
 ```
 
@@ -174,6 +178,7 @@ override fun getItemViewType(position: Int): Int {
 
 ```bash
 # Build and install debug APK
+cd android
 ./gradlew assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 
@@ -225,6 +230,9 @@ Key dependencies to be aware of:
 ## Useful Commands
 
 ```bash
+# All Gradle commands run from the android/ directory
+cd android
+
 # Get version info
 ./gradlew printVersionCode
 ./gradlew printVersionName
