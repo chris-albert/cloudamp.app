@@ -3,6 +3,13 @@ name: Deploy Web to Cloudflare Pages
 on:
   push:
     branches: [main]
+    paths:
+      - 'web/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 
 concurrency:

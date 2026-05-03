@@ -2,14 +2,23 @@ name: Build CloudAmp APK
 
 on:
   push:
-    branches: [ "claude/import-previous-app-Oa4wc", "main" ]
+    branches: [ "main" ]
+    paths:
+      - 'android/**'
+      - '.github/workflows/build-apk.yml'
   pull_request:
     branches: [ "main" ]
+    paths:
+      - 'android/**'
+      - '.github/workflows/build-apk.yml'
   workflow_dispatch:  # Allows manual trigger from GitHub UI
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
 
     steps:
     - name: Checkout code
@@ -55,7 +64,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: CloudAmp-v${{ steps.version.outputs.code }}
-        path: app/build/outputs/apk/debug/CloudAmp-v${{ steps.version.outputs.code }}.apk
+        path: android/app/build/outputs/apk/debug/CloudAmp-v${{ steps.version.outputs.code }}.apk
         retention-days: 30
 
     - name: Upload APK Summary

@@ -71,7 +71,7 @@ A Winamp-inspired Android music player that integrates with Spotify for library 
 ```bash
 # Clone the repository
 git clone https://github.com/chris-albert/cloudamp.app.git
-cd cloudamp.app
+cd cloudamp.app/android
 
 # Build debug APK
 ./gradlew assembleDebug
@@ -115,7 +115,7 @@ CloudAmp requests the following permissions:
 ### Project Structure
 
 ```
-app/src/main/java/com/cloudamp/music/
+android/app/src/main/java/com/cloudamp/music/
 ├── MainActivity.kt              # Library browsing screen
 ├── NowPlayingActivity.kt        # Playback control screen
 ├── SettingsActivity.kt          # OAuth and settings
@@ -176,6 +176,9 @@ Version codes are generated dynamically based on build timestamp:
 ### Gradle Tasks
 
 ```bash
+# All Gradle commands run from the android/ directory
+cd android
+
 # Print current version
 ./gradlew printVersionCode
 ./gradlew printVersionName
@@ -190,8 +193,8 @@ Version codes are generated dynamically based on build timestamp:
 ### CI/CD
 
 GitHub Actions automatically builds APKs on:
-- Push to `main` branch
-- Pull requests to `main`
+- Push to `main` branch (only when `android/` files change)
+- Pull requests to `main` (only when `android/` files change)
 - Manual workflow dispatch
 
 APK artifacts are retained for 30 days.
