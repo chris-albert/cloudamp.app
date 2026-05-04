@@ -1,21 +1,26 @@
-import { useState, useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { isAuthenticated } from "@/lib/google-auth";
-import { fetchPlaybackHistory, type HistoryEvent, type PlayEvent } from "@/lib/playback-history";
+import { fetchPlaybackHistory, type PlayEvent } from "@/lib/playback-history";
 import { getScanState, subscribeScanState } from "@/lib/scan-store";
+import {
+  getHistoryState,
+  subscribeHistoryState,
+  setHistoryLoading,
+  setHistoryEvents,
+  setHistoryError,
+} from "@/lib/history-store";
 import { DriveImage } from "@/lib/drive-image";
 
-type HistoryStatus = "idle" | "loading" | "done" | "error";
 type ViewMode = "recent" | "all";
 
 export function HistoryPage() {
   const authed = isAuthenticated();
-  const [status, setStatus] = useState<HistoryStatus>("idle");
-  const [events, setEvents] = useState<HistoryEvent[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const historyState = useSyncExternalStore(subscribeHistoryState, getHistoryState);
   const [viewMode, setViewMode] = useState<ViewMode>("recent");
   const [search, setSearch] = useState("");
   const [selectedAlbum, setSelectedAlbum] = useState<RecentAlbum | null>(null);
   const scanState = useSyncExternalStore(subscribeScanState, getScanState);
+  const didAutoLoad = useRef(false);
 
   const coverByAlbumId = useMemo(() => {
     const map = new Map<string, string>();
@@ -30,17 +35,32 @@ export function HistoryPage() {
   }, [scanState.result]);
 
   const loadHistory = useCallback(async () => {
-    setStatus("loading");
-    setError(null);
+    setHistoryLoading();
     try {
       const history = await fetchPlaybackHistory();
-      setEvents(history);
-      setStatus("done");
+      setHistoryEvents(history);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      setStatus("error");
+      setHistoryError(err instanceof Error ? err.message : String(err));
     }
   }, []);
+
+  // Auto-load history on mount when authenticated
+  useEffect(() => {
+    if (didAutoLoad.current) return;
+    if (!authed) return;
+
+    const s = getHistoryState();
+    if (s.status === "idle") {
+      didAutoLoad.current = true;
+      loadHistory();
+    } else if (s.status === "done") {
+      // Have cached data — refresh in background
+      didAutoLoad.current = true;
+      fetchPlaybackHistory()
+        .then((events) => setHistoryEvents(events))
+        .catch(() => {}); // silently fail background refresh
+    }
+  }, [authed, loadHistory]);
 
   if (!authed) {
     return (
@@ -53,26 +73,7 @@ export function HistoryPage() {
     );
   }
 
-  if (status === "idle") {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">History</h1>
-          <p className="mt-1 text-sm text-zinc-400">
-            View your playback history synced from the CloudAmp Android app.
-          </p>
-        </div>
-        <button
-          onClick={loadHistory}
-          className="px-5 py-2.5 rounded-md bg-blue-600 text-sm font-medium hover:bg-blue-500 transition-colors"
-        >
-          Load History
-        </button>
-      </div>
-    );
-  }
-
-  if (status === "loading") {
+  if (historyState.status === "idle" || (historyState.status === "loading" && historyState.events.length === 0)) {
     return (
       <div className="mt-24 text-center space-y-4">
         <div className="h-8 w-8 mx-auto border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -81,13 +82,13 @@ export function HistoryPage() {
     );
   }
 
-  if (status === "error") {
+  if (historyState.status === "error" && historyState.events.length === 0) {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">History</h1>
         <div className="rounded-lg border border-red-900/50 bg-red-950/30 p-4 space-y-2">
           <div className="text-red-400 font-medium">Failed to load history</div>
-          <p className="text-sm text-zinc-400">{error}</p>
+          <p className="text-sm text-zinc-400">{historyState.error}</p>
         </div>
         <button
           onClick={loadHistory}
@@ -99,7 +100,8 @@ export function HistoryPage() {
     );
   }
 
-  // Done — show results
+  // Done (or loading with cached data) — show results
+  const events = historyState.events;
   const playEvents = events.filter((e): e is PlayEvent => e.type === "play");
 
   const filteredEvents = playEvents.filter((e) => {
@@ -125,13 +127,19 @@ export function HistoryPage() {
           <h1 className="text-2xl font-bold">History</h1>
           <p className="mt-1 text-sm text-zinc-400">
             {playEvents.length} play{playEvents.length !== 1 ? "s" : ""} recorded
+            {historyState.fetchedAt && (
+              <span className="ml-2 text-zinc-500">
+                &middot; Updated {formatTimeAgo(historyState.fetchedAt)}
+              </span>
+            )}
           </p>
         </div>
         <button
           onClick={loadHistory}
-          className="px-4 py-2 rounded-md bg-zinc-800 text-sm font-medium hover:bg-zinc-700 transition-colors"
+          disabled={historyState.status === "loading"}
+          className="px-4 py-2 rounded-md bg-zinc-800 text-sm font-medium hover:bg-zinc-700 disabled:opacity-50 transition-colors"
         >
-          Refresh
+          {historyState.status === "loading" ? "Refreshing..." : "Refresh"}
         </button>
       </div>
 
@@ -287,6 +295,17 @@ function formatRelativeDate(iso: string): string {
   } catch {
     return "";
   }
+}
+
+function formatTimeAgo(timestamp: number): string {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
 function RecentAlbumsView({

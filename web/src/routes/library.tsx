@@ -1,7 +1,9 @@
 import { useSyncExternalStore, useState, useEffect, useCallback, useRef } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { getScanState, subscribeScanState, removeArtistFromState, removeAlbumFromState, flattenSubfolderInState, removeSubfolderFromState, renameFileInState, removeTrackFromState, renameAlbumFolderInState, renameArtistFolderInState, setCoverInState } from "@/lib/scan-store";
+import { getScanState, subscribeScanState, setScanProgress, setScanError, removeArtistFromState, removeAlbumFromState, flattenSubfolderInState, removeSubfolderFromState, renameFileInState, removeTrackFromState, renameAlbumFolderInState, renameArtistFolderInState, setCoverInState } from "@/lib/scan-store";
 import { formatFileSize, trashFile, moveFile, renameFile, uploadFile } from "@/lib/drive-api";
+import { isAuthenticated, getRootFolderId } from "@/lib/google-auth";
+import { syncLibrary, doFullScan } from "@/lib/incremental-sync";
 import type { Artist, Album, Track, AlbumSubfolder } from "@/lib/library-scanner";
 import { parseTrackFilename, buildCanonicalFilename, isCanonicalAlbumFolder } from "@/lib/filename-parser";
 import type { LibraryIssue } from "@/lib/library-validator";
@@ -11,18 +13,99 @@ import { playAlbum } from "@/lib/player-store";
 
 export function LibraryPage() {
   const scanState = useSyncExternalStore(subscribeScanState, getScanState);
+  const didAutoScan = useRef(false);
 
-  if (scanState.status !== "done" || !scanState.result) {
+  // Auto-trigger scan/sync when library page loads with no data
+  useEffect(() => {
+    if (didAutoScan.current) return;
+    if (!isAuthenticated()) return;
+    const rootId = getRootFolderId();
+    if (!rootId) return;
+
+    const s = getScanState();
+    if (s.status === "idle") {
+      didAutoScan.current = true;
+      doFullScan(rootId, setScanProgress).catch((err) => {
+        setScanError(err instanceof Error ? err.message : String(err));
+      });
+    } else if (s.status === "done" && s.changePageToken) {
+      didAutoScan.current = true;
+      syncLibrary().catch((err) => {
+        setScanError(err instanceof Error ? err.message : String(err));
+      });
+    }
+  }, [scanState.status]);
+
+  if (!isAuthenticated()) {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">Library</h1>
         <p className="text-zinc-400">
-          No scan data available.{" "}
-          <Link to="/" className="underline hover:text-white">
-            Run a scan
+          Connect your Google Drive in{" "}
+          <Link to="/settings" className="underline hover:text-white">
+            Settings
           </Link>{" "}
-          first.
+          to browse your music library.
         </p>
+      </div>
+    );
+  }
+
+  if (scanState.status === "scanning") {
+    return (
+      <div className="mt-24 text-center space-y-4">
+        <div className="h-8 w-8 mx-auto border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="text-lg font-medium">{scanState.progress?.stage ?? "Scanning library..."}</div>
+        {scanState.progress?.detail && (
+          <div className="text-sm text-zinc-500">{scanState.progress.detail}</div>
+        )}
+      </div>
+    );
+  }
+
+  if (scanState.status === "error") {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-2xl font-bold">Library</h1>
+        <div className="rounded-lg border border-red-900/50 bg-red-950/30 p-4 space-y-2">
+          <div className="text-red-400 font-medium">Failed to load library</div>
+          <p className="text-sm text-zinc-400">{scanState.error}</p>
+        </div>
+        <button
+          onClick={() => {
+            const rootId = getRootFolderId();
+            if (rootId) {
+              doFullScan(rootId, setScanProgress).catch((err) => {
+                setScanError(err instanceof Error ? err.message : String(err));
+              });
+            }
+          }}
+          className="px-4 py-2 rounded-md bg-zinc-800 text-sm hover:bg-zinc-700 transition-colors"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (scanState.status === "idle" || !scanState.result) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-2xl font-bold">Library</h1>
+        {!getRootFolderId() ? (
+          <p className="text-zinc-400">
+            Choose a music folder in{" "}
+            <Link to="/settings" className="underline hover:text-white">
+              Settings
+            </Link>{" "}
+            to get started.
+          </p>
+        ) : (
+          <div className="mt-12 text-center space-y-4">
+            <div className="h-8 w-8 mx-auto border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <div className="text-lg font-medium">Loading library...</div>
+          </div>
+        )}
       </div>
     );
   }
