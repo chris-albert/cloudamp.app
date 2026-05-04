@@ -9,10 +9,9 @@ import type { ScanResult, ScanProgress, Track, Album } from "./library-scanner";
 import { parseTrackFilename, parseAlbumFolderName } from "./filename-parser";
 import type { ValidationResult } from "./library-validator";
 import { validateLibrary } from "./library-validator";
+import { openDB, SCAN_CACHE_STORE } from "./db";
 
-const DB_NAME = "cloudamp";
-const DB_VERSION = 1;
-const STORE_NAME = "scan_cache";
+const STORE_NAME = SCAN_CACHE_STORE;
 const CACHE_KEY = "latest";
 
 interface PersistedData {
@@ -35,20 +34,6 @@ export interface ScanState {
 }
 
 // ── IndexedDB helpers ─────────────────────────────────────────────────
-
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME);
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
 
 async function loadFromDB(): Promise<PersistedData | null> {
   try {

@@ -2,6 +2,7 @@ import {
   createRootRoute,
   createRoute,
   Link,
+  Navigate,
   Outlet,
 } from "@tanstack/react-router";
 import { useSyncExternalStore } from "react";
@@ -12,7 +13,6 @@ import { CloudAmpLogo } from "@/components/CloudAmpLogo";
 import { AudioPlayer } from "@/components/AudioPlayer";
 import { SettingsPage } from "@/routes/settings";
 import { CallbackPage } from "@/routes/callback";
-import { DashboardPage } from "@/routes/dashboard";
 import { LibraryPage } from "@/routes/library";
 import { HistoryPage } from "@/routes/history";
 import { VisualizerPage } from "@/routes/visualizer";
@@ -31,7 +31,8 @@ function RootLayout() {
       <header className="sticky top-0 z-50 border-b border-zinc-800/60 bg-zinc-950/70 backdrop-blur-md supports-[backdrop-filter]:bg-zinc-950/60">
         <div className="max-w-7xl mx-auto px-4 h-11 flex items-center gap-3">
           <Link
-            to="/"
+            to="/library"
+            search={{ artistId: undefined, albumId: undefined }}
             className="flex items-center gap-2 text-white -mx-1.5 px-1.5 py-1 rounded-md hover:bg-zinc-800/40 transition-colors"
           >
             <CloudAmpLogo className="h-6 w-6 shrink-0" />
@@ -43,7 +44,6 @@ function RootLayout() {
               <NavLink to="/visualizer">Visualizer</NavLink>
               <NavLink to="/history">History</NavLink>
               <NavLink to="/settings">Settings</NavLink>
-              <NavLink to="/">Issues</NavLink>
             </nav>
           )}
           {(scanState.status === "scanning" || scanState.status === "syncing") && (
@@ -77,11 +77,16 @@ function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
       to={to}
       className={`${navLinkBase} text-zinc-400 hover:text-white hover:bg-zinc-800/60`}
       activeProps={{ className: `${navLinkBase} text-white bg-zinc-800/80 shadow-sm shadow-black/20` }}
-      activeOptions={{ exact: to === "/" }}
     >
       {children}
     </Link>
   );
+}
+
+// ── Redirect component for index route ────────────────────────────────
+
+function IndexRedirect() {
+  return <Navigate to="/library" search={{ artistId: undefined, albumId: undefined }} />;
 }
 
 // ── Route tree ────────────────────────────────────────────────────────
@@ -93,7 +98,7 @@ const rootRoute = createRootRoute({
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
-  component: DashboardPage,
+  component: IndexRedirect,
 });
 
 const settingsRoute = createRoute({
