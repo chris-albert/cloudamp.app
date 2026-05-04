@@ -157,10 +157,6 @@ class CachedAlbumsActivity : AppCompatActivity(), NavigationView.OnNavigationIte
                 startActivity(Intent(this, GDriveHomeActivity::class.java))
                 finish()
             }
-            R.id.nav_saved_queues -> {
-                startActivity(Intent(this, SavedQueuesActivity::class.java))
-                finish()
-            }
             R.id.nav_cached -> {
                 // Already here
             }

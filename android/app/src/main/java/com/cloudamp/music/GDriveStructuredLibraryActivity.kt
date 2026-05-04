@@ -396,10 +396,6 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
                 startActivity(Intent(this, GDriveHomeActivity::class.java))
                 finish()
             }
-            R.id.nav_saved_queues -> {
-                startActivity(Intent(this, SavedQueuesActivity::class.java))
-                finish()
-            }
             R.id.nav_cached -> {
                 startActivity(Intent(this, CachedAlbumsActivity::class.java))
                 finish()
