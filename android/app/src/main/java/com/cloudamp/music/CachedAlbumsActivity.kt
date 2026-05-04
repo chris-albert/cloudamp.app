@@ -11,14 +11,15 @@ import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
-import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.cloudamp.music.api.GDriveAlbum
+import com.cloudamp.music.api.GDriveTrack
 import com.cloudamp.music.cache.GDriveLibraryCache
 import com.cloudamp.music.cache.MediaCache
 import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.GDrivePlaybackManager
-import com.cloudamp.music.ui.GDriveHomeAdapter
+import com.cloudamp.music.ui.CachedAlbumsAdapter
 import com.google.android.material.navigation.NavigationView
 import kotlinx.coroutines.*
 
@@ -32,7 +33,7 @@ class CachedAlbumsActivity : AppCompatActivity(), NavigationView.OnNavigationIte
     private lateinit var toggle: ActionBarDrawerToggle
 
     private lateinit var recyclerView: RecyclerView
-    private lateinit var adapter: GDriveHomeAdapter
+    private lateinit var adapter: CachedAlbumsAdapter
     private lateinit var emptyContainer: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,9 +71,10 @@ class CachedAlbumsActivity : AppCompatActivity(), NavigationView.OnNavigationIte
         recyclerView = findViewById(R.id.cachedAlbumsRecyclerView)
         emptyContainer = findViewById(R.id.emptyContainer)
 
-        recyclerView.layoutManager = GridLayoutManager(this, 2)
-        adapter = GDriveHomeAdapter(
-            onAlbumClick = { album -> playAlbum(album) }
+        recyclerView.layoutManager = LinearLayoutManager(this)
+        adapter = CachedAlbumsAdapter(
+            onAlbumExpand = { album, position -> loadAlbumTracks(album, position) },
+            onTrackClick = { track, albumTracks, trackPosition -> playTracks(albumTracks, trackPosition) }
         )
         recyclerView.adapter = adapter
     }
@@ -123,18 +125,21 @@ class CachedAlbumsActivity : AppCompatActivity(), NavigationView.OnNavigationIte
         }
     }
 
-    private fun playAlbum(album: GDriveAlbum) {
-        val tracks = libraryCache.getAlbumTracks(album.id)
-        if (tracks.isNullOrEmpty()) {
+    private fun loadAlbumTracks(album: GDriveAlbum, position: Int) {
+        val tracks = libraryCache.getAlbumTracks(album.id) ?: emptyList()
+        adapter.setAlbumTracks(position, tracks)
+    }
+
+    private fun playTracks(tracks: List<GDriveTrack>, startPosition: Int) {
+        if (tracks.isEmpty()) {
             Toast.makeText(this, "No tracks found", Toast.LENGTH_SHORT).show()
             return
         }
 
         val gdrivePlayback = GDrivePlaybackManager.getInstance(this)
         CloudAmpService.ensureForeground(this)
-        gdrivePlayback.playGDriveTracks(tracks, 0)
+        gdrivePlayback.playGDriveTracks(tracks, startPosition)
 
-        Toast.makeText(this, "Playing: ${album.name}", Toast.LENGTH_SHORT).show()
         startActivity(Intent(this, NowPlayingActivity::class.java))
     }
 
