@@ -72,6 +72,12 @@
             android:exported="false"
             android:parentActivityName=".MainActivity" />
 
+        <!-- Cached Albums Activity -->
+        <activity
+            android:name=".CachedAlbumsActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity" />
+
         <!-- Media Browser Service for Android Auto -->
         <service
             android:name=".playback.CloudAmpService"

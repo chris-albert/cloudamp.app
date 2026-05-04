@@ -11,19 +11,18 @@ import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.cloudamp.music.api.GDriveAlbum
 import com.cloudamp.music.cache.GDriveLibraryCache
-import com.cloudamp.music.cache.GDrivePlaybackHistory
-import com.cloudamp.music.cache.LibraryScanManager
+import com.cloudamp.music.cache.MediaCache
 import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.ui.GDriveHomeAdapter
 import com.google.android.material.navigation.NavigationView
 import kotlinx.coroutines.*
 
-class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelectedListener {
+class CachedAlbumsActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelectedListener {
 
     private lateinit var libraryCache: GDriveLibraryCache
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -32,25 +31,19 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
     private lateinit var navigationView: NavigationView
     private lateinit var toggle: ActionBarDrawerToggle
 
-    private lateinit var recentPlayedAdapter: GDriveHomeAdapter
-    private lateinit var recentAddedAdapter: GDriveHomeAdapter
-    private lateinit var discoverAdapter: GDriveHomeAdapter
-    private lateinit var loadingContainer: LinearLayout
+    private lateinit var recyclerView: RecyclerView
+    private lateinit var adapter: GDriveHomeAdapter
+    private lateinit var emptyContainer: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_gdrive_home)
+        setContentView(R.layout.activity_cached_albums)
 
         libraryCache = GDriveLibraryCache.getInstance(this)
 
         setupDrawer()
-        setupRecyclerViews()
-        loadContent()
-    }
-
-    override fun onResume() {
-        super.onResume()
-        LibraryScanManager.resumePrefetchIfNeeded(this)
+        setupRecyclerView()
+        loadCachedAlbums()
     }
 
     private fun setupDrawer() {
@@ -70,83 +63,62 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
         toggle.syncState()
 
         navigationView.setNavigationItemSelectedListener(this)
-        navigationView.setCheckedItem(R.id.nav_gdrive_home)
+        navigationView.setCheckedItem(R.id.nav_cached)
     }
 
-    private fun setupHorizontalRecyclerView(recyclerView: RecyclerView): GDriveHomeAdapter {
-        recyclerView.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
-        val adapter = GDriveHomeAdapter(
+    private fun setupRecyclerView() {
+        recyclerView = findViewById(R.id.cachedAlbumsRecyclerView)
+        emptyContainer = findViewById(R.id.emptyContainer)
+
+        recyclerView.layoutManager = GridLayoutManager(this, 2)
+        adapter = GDriveHomeAdapter(
             onAlbumClick = { album -> playAlbum(album) }
         )
         recyclerView.adapter = adapter
-        return adapter
     }
 
-    private fun setupRecyclerViews() {
-        loadingContainer = findViewById(R.id.loadingContainer)
-        recentPlayedAdapter = setupHorizontalRecyclerView(findViewById(R.id.recentPlayedRecyclerView))
-        recentAddedAdapter = setupHorizontalRecyclerView(findViewById(R.id.recentAddedRecyclerView))
-        discoverAdapter = setupHorizontalRecyclerView(findViewById(R.id.discoverRecyclerView))
-    }
-
-    private fun showLoading(show: Boolean) {
-        loadingContainer.visibility = if (show) View.VISIBLE else View.GONE
-    }
-
-    private fun loadContent() {
+    private fun loadCachedAlbums() {
         if (!libraryCache.hasFullCache()) {
-            // No cache available, nothing to show
+            emptyContainer.visibility = View.VISIBLE
             return
         }
 
-        showLoading(true)
         scope.launch {
             try {
-                val allAlbums = withContext(Dispatchers.IO) {
-                    val artists = libraryCache.getArtists() ?: emptyList()
-                    artists.flatMap { artist ->
-                        libraryCache.getArtistAlbums(artist.id) ?: emptyList()
-                    }.filter { it.trackCount > 0 }
-                }
+                val cachedAlbums = withContext(Dispatchers.IO) {
+                    val mediaCache = MediaCache.getInstance(this@CachedAlbumsActivity)
+                    val cachedTracks = mediaCache.stats().tracks
+                    if (cachedTracks.isEmpty()) {
+                        emptyList()
+                    } else {
+                        val artists = libraryCache.getArtists() ?: emptyList()
+                        val allAlbums = artists.flatMap { artist ->
+                            libraryCache.getArtistAlbums(artist.id) ?: emptyList()
+                        }.filter { it.trackCount > 0 }
 
-                // Recently Played: from NDJSON history (falls back to SharedPreferences)
-                val recentlyPlayed = withContext(Dispatchers.IO) {
-                    val history = GDrivePlaybackHistory.getInstance(this@GDriveHomeActivity)
-                    val historyAlbumIds = history.getRecentlyPlayedAlbumIds(10)
-                    // Use history IDs if available, else fall back to cache
-                    val albumIds = historyAlbumIds.ifEmpty {
-                        libraryCache.getRecentlyPlayedIds().take(10)
+                        val addedAtByFileId = cachedTracks.associate { it.fileId to it.addedAt }
+                        allAlbums.mapNotNull { album ->
+                            val tracks = libraryCache.getAlbumTracks(album.id) ?: emptyList()
+                            val maxAddedAt = tracks
+                                .mapNotNull { addedAtByFileId[it.file.id] }
+                                .maxOrNull()
+                            if (maxAddedAt != null) album to maxAddedAt else null
+                        }.sortedByDescending { it.second }.map { it.first }
                     }
-                    // Resolve IDs to album objects
-                    val albumById = allAlbums.associateBy { it.id }
-                    albumIds.mapNotNull { albumById[it] }
-                }
-                if (recentlyPlayed.isNotEmpty()) {
-                    recentPlayedAdapter.setAlbums(recentlyPlayed)
-                    findViewById<View>(R.id.recentPlayedHeader).visibility = View.VISIBLE
-                    findViewById<View>(R.id.recentPlayedRecyclerView).visibility = View.VISIBLE
                 }
 
-                // Recently Added: sort by modifiedTime desc, take 10
-                val recentlyAdded = allAlbums
-                    .sortedByDescending { it.modifiedTime ?: "" }
-                    .take(10)
-                recentAddedAdapter.setAlbums(recentlyAdded)
-
-                // Discover: random 10 albums
-                val discover = allAlbums.shuffled().take(10)
-                discoverAdapter.setAlbums(discover)
-
-
+                if (cachedAlbums.isEmpty()) {
+                    emptyContainer.visibility = View.VISIBLE
+                } else {
+                    adapter.setAlbums(cachedAlbums)
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
                 Toast.makeText(
-                    this@GDriveHomeActivity,
-                    "Error loading content: ${e.message}",
+                    this@CachedAlbumsActivity,
+                    "Error loading cached albums: ${e.message}",
                     Toast.LENGTH_LONG
                 ).show()
-            } finally {
-                showLoading(false)
             }
         }
     }
@@ -177,15 +149,15 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
                 finish()
             }
             R.id.nav_gdrive_home -> {
-                // Already here
+                startActivity(Intent(this, GDriveHomeActivity::class.java))
+                finish()
             }
             R.id.nav_saved_queues -> {
                 startActivity(Intent(this, SavedQueuesActivity::class.java))
                 finish()
             }
             R.id.nav_cached -> {
-                startActivity(Intent(this, CachedAlbumsActivity::class.java))
-                finish()
+                // Already here
             }
             R.id.nav_settings -> {
                 startActivity(Intent(this, SettingsActivity::class.java))

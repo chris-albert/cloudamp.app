@@ -286,6 +286,10 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
                 startActivity(Intent(this, SavedQueuesActivity::class.java))
                 finish()
             }
+            R.id.nav_cached -> {
+                startActivity(Intent(this, CachedAlbumsActivity::class.java))
+                finish()
+            }
             R.id.nav_settings -> {
                 startActivity(Intent(this, SettingsActivity::class.java))
             }

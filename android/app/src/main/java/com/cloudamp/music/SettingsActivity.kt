@@ -3,7 +3,6 @@ package com.cloudamp.music
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.view.Gravity
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
@@ -44,7 +43,6 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var mediaCacheCountText: TextView
     private lateinit var mediaCacheLimitText: TextView
     private lateinit var mediaCacheProgressBar: ProgressBar
-    private lateinit var mediaCacheTracksContainer: LinearLayout
     private lateinit var clearMediaCacheButton: Button
     private lateinit var changeMediaCacheLimitButton: Button
 
@@ -499,7 +497,6 @@ class SettingsActivity : AppCompatActivity() {
         mediaCacheCountText = findViewById(R.id.mediaCacheCountText)
         mediaCacheLimitText = findViewById(R.id.mediaCacheLimitText)
         mediaCacheProgressBar = findViewById(R.id.mediaCacheProgressBar)
-        mediaCacheTracksContainer = findViewById(R.id.mediaCacheTracksContainer)
         clearMediaCacheButton = findViewById(R.id.clearMediaCacheButton)
         changeMediaCacheLimitButton = findViewById(R.id.changeMediaCacheLimitButton)
 
@@ -552,47 +549,9 @@ class SettingsActivity : AppCompatActivity() {
                 "Max size: $limitLabel"
             }
 
-            mediaCacheTracksContainer.removeAllViews()
-            for (track in stats.tracks) {
-                mediaCacheTracksContainer.addView(buildCachedTrackRow(track))
-            }
         }
     }
 
-    private fun buildCachedTrackRow(track: MediaCache.CachedTrack): View {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = 4 }
-        }
-        val name = TextView(this).apply {
-            text = track.name
-            setTextColor(getColor(R.color.winamp_text))
-            textSize = 12f
-            typeface = android.graphics.Typeface.MONOSPACE
-            ellipsize = android.text.TextUtils.TruncateAt.END
-            isSingleLine = true
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        }
-        val sizeLabel = if (track.totalBytes != null && track.totalBytes > track.cachedBytes) {
-            "${MediaCache.formatBytes(track.cachedBytes)} / ${MediaCache.formatBytes(track.totalBytes)}"
-        } else {
-            MediaCache.formatBytes(track.cachedBytes)
-        }
-        val size = TextView(this).apply {
-            text = sizeLabel
-            setTextColor(getColor(R.color.winamp_display_text))
-            textSize = 12f
-            typeface = android.graphics.Typeface.MONOSPACE
-            setPadding(16, 0, 0, 0)
-        }
-        row.addView(name)
-        row.addView(size)
-        return row
-    }
 
     private fun showMediaCacheLimitPicker() {
         val cache = MediaCache.getInstance(this)
