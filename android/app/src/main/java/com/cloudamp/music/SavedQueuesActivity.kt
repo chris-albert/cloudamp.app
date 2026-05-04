@@ -70,7 +70,6 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
         toggle.syncState()
 
         navigationView.setNavigationItemSelectedListener(this)
-        navigationView.setCheckedItem(R.id.nav_saved_queues)
     }
 
     private fun setupRecyclerView() {
