@@ -151,6 +151,56 @@ export function getAnalyserNode(): AnalyserNode | null {
   return analyserNode;
 }
 
+// ── Microphone input (for visualizations) ─────────────────────────────
+
+let micAudioContext: AudioContext | null = null;
+let micAnalyserNode: AnalyserNode | null = null;
+let micStream: MediaStream | null = null;
+
+/**
+ * Start capturing microphone audio and return an AnalyserNode for visualization.
+ * The mic audio is NOT routed to speakers — only to the analyser.
+ */
+export async function startMicAnalyser(): Promise<AnalyserNode> {
+  if (micAnalyserNode && micAudioContext && micStream) {
+    if (micAudioContext.state === "suspended") {
+      await micAudioContext.resume();
+    }
+    return micAnalyserNode;
+  }
+
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const ctx = new AudioContext();
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 2048;
+  analyser.smoothingTimeConstant = 0.8;
+
+  const source = ctx.createMediaStreamSource(stream);
+  source.connect(analyser);
+  // Do NOT connect analyser to ctx.destination — we don't want mic playback through speakers
+
+  micAudioContext = ctx;
+  micAnalyserNode = analyser;
+  micStream = stream;
+
+  return analyser;
+}
+
+/**
+ * Stop microphone capture and clean up resources.
+ */
+export function stopMicAnalyser() {
+  if (micStream) {
+    for (const track of micStream.getTracks()) track.stop();
+    micStream = null;
+  }
+  if (micAudioContext) {
+    micAudioContext.close();
+    micAudioContext = null;
+  }
+  micAnalyserNode = null;
+}
+
 // ── Cache for preloaded blob URLs ──────────────────────────────────────
 
 const blobUrlCache = new Map<string, string>();

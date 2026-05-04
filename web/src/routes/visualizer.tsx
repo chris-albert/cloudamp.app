@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useSyncExternalStore } from "react";
-import { getAnalyserNode, getPlayerState, subscribePlayerState, getCurrentTrack } from "@/lib/player-store";
+import { getAnalyserNode, getPlayerState, subscribePlayerState, getCurrentTrack, startMicAnalyser, stopMicAnalyser } from "@/lib/player-store";
 
 type VisMode = "eq" | "oscilloscope" | "radial" | "tunnel" | "kaleidoscope" | "warpgrid" | "honeycomb" | "diamond" | "starburst" | "spiral" | "liquid" | "fractal";
 
@@ -25,11 +25,40 @@ export function VisualizerPage() {
   const [mode, setMode] = useState<VisMode>(
     () => (localStorage.getItem("cloudamp_vis_mode") as VisMode) || "eq",
   );
+  const [micActive, setMicActive] = useState(false);
+  const [micAnalyser, setMicAnalyser] = useState<AnalyserNode | null>(null);
 
   function selectMode(m: VisMode) {
     setMode(m);
     localStorage.setItem("cloudamp_vis_mode", m);
   }
+
+  async function toggleMic() {
+    if (micActive) {
+      stopMicAnalyser();
+      setMicAnalyser(null);
+      setMicActive(false);
+    } else {
+      try {
+        const analyser = await startMicAnalyser();
+        setMicAnalyser(analyser);
+        setMicActive(true);
+      } catch (err) {
+        console.error("Microphone access denied:", err);
+      }
+    }
+  }
+
+  // Clean up mic on unmount
+  useEffect(() => {
+    return () => {
+      if (micActive) {
+        stopMicAnalyser();
+      }
+    };
+  }, [micActive]);
+
+  const hasSource = currentTrack || micActive;
 
   return (
     <div className="space-y-4 flex flex-col" style={{ minHeight: "calc(100vh - 10rem)" }}>
@@ -48,19 +77,36 @@ export function VisualizerPage() {
             {m.label}
           </button>
         ))}
+        <div className="w-px h-6 bg-zinc-700 mx-1" />
+        <button
+          onClick={toggleMic}
+          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
+            micActive
+              ? "bg-red-600 text-white hover:bg-red-700"
+              : "bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700"
+          }`}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+            <line x1="12" y1="19" x2="12" y2="23" />
+            <line x1="8" y1="23" x2="16" y2="23" />
+          </svg>
+          Mic
+        </button>
       </div>
 
       {/* Canvas area */}
       <div className="flex-1 rounded-lg border border-zinc-800 bg-black overflow-hidden relative min-h-[400px]">
-        {!currentTrack ? (
+        {!hasSource ? (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center space-y-2">
               <div className="text-zinc-600 text-4xl">♪</div>
-              <div className="text-sm text-zinc-500">Play something to see visualizations</div>
+              <div className="text-sm text-zinc-500">Play something or enable mic to see visualizations</div>
             </div>
           </div>
         ) : (
-          <VisualizerCanvas mode={mode} />
+          <VisualizerCanvas mode={mode} micAnalyser={micActive ? micAnalyser : null} />
         )}
       </div>
     </div>
@@ -71,7 +117,7 @@ const WEB_GL_MODES: Set<VisMode> = new Set(["tunnel", "kaleidoscope", "warpgrid"
 
 // ── Canvas renderer ─────────────────────────────────────────────────────
 
-function VisualizerCanvas({ mode }: { mode: VisMode }) {
+function VisualizerCanvas({ mode, micAnalyser }: { mode: VisMode; micAnalyser: AnalyserNode | null }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const glCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -117,7 +163,8 @@ function VisualizerCanvas({ mode }: { mode: VisMode }) {
 
   // Main render loop
   useEffect(() => {
-    const analyser = getAnalyserNode();
+    // Use mic analyser if available, otherwise fall back to music analyser
+    const analyser = micAnalyser || getAnalyserNode();
     if (!analyser) return;
 
     const freqData = new Uint8Array(analyser.frequencyBinCount);
@@ -181,7 +228,7 @@ function VisualizerCanvas({ mode }: { mode: VisMode }) {
       rendererRef.current.destroy?.();
       rendererRef.current = {};
     };
-  }, [isWebGL, mode]);
+  }, [isWebGL, mode, micAnalyser]);
 
   return (
     <div ref={containerRef} className="absolute inset-0">
