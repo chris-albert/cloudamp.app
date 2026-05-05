@@ -8,22 +8,22 @@
         <item
             android:id="@+id/nav_gdrive_music_library"
             android:icon="@drawable/ic_library"
-            android:title="Music" />
+            android:title="Library" />
         <item
             android:id="@+id/nav_gdrive_library"
             android:icon="@drawable/ic_folder"
-            android:title="Library" />
+            android:title="Drive" />
+        <item
+            android:id="@+id/nav_cached"
+            android:icon="@drawable/ic_save"
+            android:title="Cached" />
     </group>
-    <item android:title="">
-        <menu>
-            <item
-                android:id="@+id/nav_cached"
-                android:icon="@drawable/ic_save"
-                android:title="Cached" />
-            <item
-                android:id="@+id/nav_settings"
-                android:icon="@android:drawable/ic_menu_preferences"
-                android:title="Settings" />
-        </menu>
-    </item>
+    <group
+        android:id="@+id/nav_group_settings"
+        android:checkableBehavior="single">
+        <item
+            android:id="@+id/nav_settings"
+            android:icon="@android:drawable/ic_menu_preferences"
+            android:title="Settings" />
+    </group>
 </menu>

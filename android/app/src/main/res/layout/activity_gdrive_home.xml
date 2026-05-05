@@ -139,6 +139,7 @@
         app:headerLayout="@layout/nav_header"
         app:menu="@menu/nav_drawer_menu"
         app:itemTextColor="@color/winamp_text"
-        app:itemIconTint="@color/winamp_text" />
+        app:itemIconTint="@color/winamp_text"
+        app:subheaderTextAppearance="@style/CloudAmpNavSubheader" />
 
 </androidx.drawerlayout.widget.DrawerLayout>
