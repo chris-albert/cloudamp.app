@@ -71,6 +71,7 @@ jobs:
         retention-days: 30
 
     - name: Authenticate to Google Cloud
+      id: auth
       uses: google-github-actions/auth@v2
       with:
         workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
@@ -90,6 +91,8 @@ jobs:
           --app "${{ secrets.FIREBASE_APP_ID }}" \
           --groups "testers" \
           --release-notes "$NOTES"
+      env:
+        GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
       working-directory: .
 
     - name: Upload APK Summary
