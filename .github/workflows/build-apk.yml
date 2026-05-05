@@ -76,6 +76,7 @@ jobs:
       with:
         workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
         service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+        token_format: access_token
 
     - name: Upload to Firebase App Distribution
       run: |
@@ -90,9 +91,8 @@ jobs:
           android/app/build/outputs/apk/debug/CloudAmp-v${{ steps.version.outputs.code }}.apk \
           --app "${{ secrets.FIREBASE_APP_ID }}" \
           --groups "testers" \
-          --release-notes "$NOTES"
-      env:
-        GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
+          --release-notes "$NOTES" \
+          --token "${{ steps.auth.outputs.access_token }}"
       working-directory: .
 
     - name: Upload APK Summary
