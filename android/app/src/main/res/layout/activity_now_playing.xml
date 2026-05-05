@@ -292,12 +292,21 @@
     </LinearLayout>
 
     <!-- Mini EQ Visualizer Pane (tap to open fullscreen) -->
-    <com.cloudamp.music.ui.EqVisualizerView
-        android:id="@+id/miniEqView"
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="80dp"
-        android:background="#000000"
-        android:clickable="true"
-        android:focusable="true"/>
+        android:layout_height="160dp"
+        android:background="#303030"
+        android:orientation="vertical"
+        android:padding="8dp"
+        android:layout_marginTop="8dp">
+
+        <com.cloudamp.music.ui.EqVisualizerView
+            android:id="@+id/miniEqView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#000000"
+            android:clickable="true"
+            android:focusable="true"/>
+    </LinearLayout>
 
 </LinearLayout>
