@@ -1,17 +1,22 @@
 package com.cloudamp.music
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.media.audiofx.Visualizer
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.widget.EditText
 import android.widget.ImageButton
-import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import com.cloudamp.music.ui.EqVisualizerView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.cloudamp.music.cache.SavedQueuesManager
@@ -23,8 +28,15 @@ import kotlinx.coroutines.*
 
 class NowPlayingActivity : AppCompatActivity() {
 
+    companion object {
+        private const val PERMISSION_REQUEST_RECORD_AUDIO = 1002
+    }
+
     private lateinit var savedQueuesManager: SavedQueuesManager
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+    private lateinit var miniEqView: EqVisualizerView
+    private var visualizer: Visualizer? = null
 
     private lateinit var trackTitleTextView: TextView
     private lateinit var trackArtistTextView: TextView
@@ -101,8 +113,9 @@ class NowPlayingActivity : AppCompatActivity() {
             showSaveQueueDialog()
         }
 
-        // Tap the digital display to open visualizer
-        findViewById<LinearLayout>(R.id.digitalDisplaySection).setOnClickListener {
+        // Mini EQ visualizer pane — tap to open fullscreen
+        miniEqView = findViewById(R.id.miniEqView)
+        miniEqView.setOnClickListener {
             startActivity(Intent(this, VisualizerActivity::class.java))
         }
     }
@@ -334,12 +347,89 @@ class NowPlayingActivity : AppCompatActivity() {
         return String.format("%d:%02d", minutes, seconds)
     }
 
+    override fun onResume() {
+        super.onResume()
+        startMiniVisualizer()
+    }
+
+    override fun onPause() {
+        stopMiniVisualizer()
+        super.onPause()
+    }
+
+    private fun startMiniVisualizer() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.RECORD_AUDIO),
+                PERMISSION_REQUEST_RECORD_AUDIO
+            )
+            return
+        }
+
+        val sessionId = ActivePlayback.provider?.getAudioSessionId() ?: 0
+        if (sessionId == 0) return
+
+        if (visualizer != null) return
+
+        try {
+            visualizer = Visualizer(sessionId).apply {
+                captureSize = Visualizer.getCaptureSizeRange()[1]
+                setDataCaptureListener(
+                    object : Visualizer.OnDataCaptureListener {
+                        override fun onWaveFormDataCapture(
+                            vis: Visualizer?, waveform: ByteArray?, samplingRate: Int
+                        ) {}
+
+                        override fun onFftDataCapture(
+                            vis: Visualizer?, fft: ByteArray?, samplingRate: Int
+                        ) {
+                            fft?.let { data ->
+                                miniEqView.post { miniEqView.updateFft(data) }
+                            }
+                        }
+                    },
+                    Visualizer.getMaxCaptureRate(),
+                    false,
+                    true
+                )
+                enabled = true
+            }
+        } catch (_: Exception) {
+            // Visualizer may fail if audio session is invalid
+        }
+    }
+
+    private fun stopMiniVisualizer() {
+        visualizer?.apply {
+            enabled = false
+            release()
+        }
+        visualizer = null
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == PERMISSION_REQUEST_RECORD_AUDIO) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                startMiniVisualizer()
+            }
+        }
+    }
+
     override fun onSupportNavigateUp(): Boolean {
         finish()
         return true
     }
 
     override fun onDestroy() {
+        stopMiniVisualizer()
         updateHandler.removeCallbacks(updateRunnable)
         scope.cancel()
         super.onDestroy()
