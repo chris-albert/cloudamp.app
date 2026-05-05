@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "38107383551",
+    "project_id": "cloudamp-ce461",
+    "storage_bucket": "cloudamp-ce461.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:38107383551:android:5f221fceebdde7c885eeca",
+        "android_client_info": {
+          "package_name": "com.cloudamp.music"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAXjhftc7qXp23aICbM-3aMDdVVegcTQrg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
