@@ -1,10 +1,12 @@
 package com.cloudamp.music
 
+import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
@@ -97,6 +99,11 @@ class NowPlayingActivity : AppCompatActivity() {
 
         saveQueueButton.setOnClickListener {
             showSaveQueueDialog()
+        }
+
+        // Tap the digital display to open visualizer
+        findViewById<LinearLayout>(R.id.digitalDisplaySection).setOnClickListener {
+            startActivity(Intent(this, VisualizerActivity::class.java))
         }
     }
 

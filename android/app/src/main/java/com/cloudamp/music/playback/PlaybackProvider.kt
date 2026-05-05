@@ -18,6 +18,9 @@ interface PlaybackProvider {
     fun getDuration(): Long
     fun isPlaying(): Boolean
 
+    // Audio session (for visualizer)
+    fun getAudioSessionId(): Int
+
     // Transport controls
     suspend fun play()
     suspend fun pause()

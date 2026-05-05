@@ -26,14 +26,17 @@
             android:fontFamily="monospace"
             android:textStyle="bold"/>
 
-        <!-- Digital Display Section -->
+        <!-- Digital Display Section (tap to open visualizer) -->
         <LinearLayout
+            android:id="@+id/digitalDisplaySection"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="#000000"
             android:orientation="vertical"
             android:padding="8dp"
-            android:layout_margin="4dp">
+            android:layout_margin="4dp"
+            android:clickable="true"
+            android:focusable="true">
 
             <!-- Time Display -->
             <LinearLayout
