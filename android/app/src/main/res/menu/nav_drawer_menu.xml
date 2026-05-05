@@ -1,35 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:title="Google Drive">
-        <menu>
-            <group android:checkableBehavior="single">
-                <item
-                    android:id="@+id/nav_gdrive_home"
-                    android:icon="@drawable/ic_gdrive"
-                    android:title="GDrive Home" />
-                <item
-                    android:id="@+id/nav_gdrive_music_library"
-                    android:icon="@drawable/ic_gdrive"
-                    android:title="GDrive Music" />
-                <item
-                    android:id="@+id/nav_gdrive_library"
-                    android:icon="@drawable/ic_gdrive"
-                    android:title="GDrive Library" />
-            </group>
-        </menu>
-    </item>
-    <item android:title="Queues">
-        <menu>
-            <group android:checkableBehavior="single">
-                <item
-                    android:id="@+id/nav_saved_queues"
-                    android:icon="@drawable/ic_saved_queues"
-                    android:title="Saved Queues" />
-            </group>
-        </menu>
-    </item>
+    <group android:checkableBehavior="single">
+        <item
+            android:id="@+id/nav_gdrive_home"
+            android:icon="@drawable/ic_home"
+            android:title="Home" />
+        <item
+            android:id="@+id/nav_gdrive_music_library"
+            android:icon="@drawable/ic_library"
+            android:title="Music" />
+        <item
+            android:id="@+id/nav_gdrive_library"
+            android:icon="@drawable/ic_folder"
+            android:title="Library" />
+    </group>
     <item android:title="">
         <menu>
+            <item
+                android:id="@+id/nav_cached"
+                android:icon="@drawable/ic_save"
+                android:title="Cached" />
             <item
                 android:id="@+id/nav_settings"
                 android:icon="@android:drawable/ic_menu_preferences"

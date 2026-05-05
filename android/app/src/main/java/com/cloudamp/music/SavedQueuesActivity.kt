@@ -70,7 +70,6 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
         toggle.syncState()
 
         navigationView.setNavigationItemSelectedListener(this)
-        navigationView.setCheckedItem(R.id.nav_saved_queues)
     }
 
     private fun setupRecyclerView() {
@@ -191,8 +190,9 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
                 startActivity(Intent(this, GDriveHomeActivity::class.java))
                 finish()
             }
-            R.id.nav_saved_queues -> {
-                // Already here
+            R.id.nav_cached -> {
+                startActivity(Intent(this, CachedAlbumsActivity::class.java))
+                finish()
             }
             R.id.nav_settings -> {
                 startActivity(Intent(this, SettingsActivity::class.java))
