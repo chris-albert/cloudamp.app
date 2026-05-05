@@ -21,6 +21,7 @@ import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.ui.GDriveHomeAdapter
 import com.google.android.material.navigation.NavigationView
+import com.google.firebase.appdistribution.FirebaseAppDistribution
 import kotlinx.coroutines.*
 
 class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelectedListener {
@@ -42,6 +43,8 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
         setContentView(R.layout.activity_gdrive_home)
 
         libraryCache = GDriveLibraryCache.getInstance(this)
+
+        FirebaseAppDistribution.getInstance().updateIfNewReleaseAvailable()
 
         setupDrawer()
         setupRecyclerViews()
