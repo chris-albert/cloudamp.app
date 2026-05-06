@@ -22,7 +22,7 @@ class EqVisualizerView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
-) : View(context, attrs, defStyleAttr) {
+) : View(context, attrs, defStyleAttr), AudioVisualizerView {
 
     private val barPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val peakPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -37,7 +37,7 @@ class EqVisualizerView @JvmOverloads constructor(
      * Update the FFT data. Called from the Visualizer callback.
      * The byte array is the raw FFT output from Android's Visualizer.
      */
-    fun updateFft(data: ByteArray) {
+    override fun updateFft(data: ByteArray) {
         fftData = data
         invalidate()
     }

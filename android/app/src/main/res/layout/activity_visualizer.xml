@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/vizContainer"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#000000">
@@ -7,6 +8,27 @@
     <com.cloudamp.music.ui.EqVisualizerView
         android:id="@+id/eqVisualizerView"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"
+        android:visibility="visible" />
+
+    <com.cloudamp.music.ui.WarpGridView
+        android:id="@+id/warpGridView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/modeLabelView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_margin="16dp"
+        android:text="EQ BARS"
+        android:textColor="#99ffffff"
+        android:textSize="11sp"
+        android:fontFamily="monospace"
+        android:background="#33000000"
+        android:padding="6dp"
+        android:visibility="gone" />
 
 </FrameLayout>
