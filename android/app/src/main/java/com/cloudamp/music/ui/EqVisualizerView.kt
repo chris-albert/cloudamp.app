@@ -11,13 +11,12 @@ import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.ln
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.sqrt
 
 /**
  * Custom view that renders an EQ bar visualization from FFT data.
- * Logarithmically maps frequency bins to visual bars with gradient colors,
- * peak tracking, and a reflection effect.
+ * Logarithmically maps frequency bins to visual bars with gradient colors
+ * and peak tracking.
  */
 class EqVisualizerView @JvmOverloads constructor(
     context: Context,
@@ -27,8 +26,6 @@ class EqVisualizerView @JvmOverloads constructor(
 
     private val barPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val peakPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val reflectionPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-
     private val barCount = 64
     private val gap = 2f * resources.displayMetrics.density
     private val peaks = FloatArray(barCount)
@@ -58,8 +55,7 @@ class EqVisualizerView @JvmOverloads constructor(
         val bars = computeLogBars(data)
 
         val barWidth = (w - gap * (barCount - 1)) / barCount
-        val baseY = h * 0.80f
-        val reflSpace = h - baseY
+        val baseY = h
 
         for (i in 0 until barCount) {
             // Smooth the bars for a less jittery look
@@ -99,18 +95,6 @@ class EqVisualizerView @JvmOverloads constructor(
                 canvas.drawRect(x, baseY - peaks[i], x + barWidth, baseY - peaks[i] + 2f * resources.displayMetrics.density, peakPaint)
             }
 
-            // Reflection
-            val reflH = min(barH * 0.4f, reflSpace)
-            if (reflH > 0) {
-                val reflGradient = LinearGradient(
-                    x, baseY, x, baseY + reflH,
-                    hslToColor(hue, sat, light, 0.3f),
-                    hslToColor(hue, sat, light, 0f),
-                    Shader.TileMode.CLAMP
-                )
-                reflectionPaint.shader = reflGradient
-                canvas.drawRect(x, baseY, x + barWidth, baseY + reflH, reflectionPaint)
-            }
         }
     }
 
