@@ -12,6 +12,7 @@ import kotlin.math.floor
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sqrt
 
 /**
  * Custom view that renders an EQ bar visualization from FFT data.
@@ -115,7 +116,11 @@ class EqVisualizerView @JvmOverloads constructor(
 
     /**
      * Convert Android Visualizer FFT bytes to logarithmically-spaced bar magnitudes (0..1).
-     * The FFT data from Android is interleaved real/imaginary pairs.
+     *
+     * The FFT data from Android is interleaved real/imaginary byte pairs.
+     * Raw FFT magnitudes naturally skew heavily toward the low end, so we
+     * apply a frequency-dependent gain ramp and sqrt compression to produce
+     * perceptually balanced bars (white noise should look roughly flat).
      */
     private fun computeLogBars(fft: ByteArray): FloatArray {
         val out = FloatArray(barCount)
@@ -134,21 +139,26 @@ class EqVisualizerView @JvmOverloads constructor(
             var sum = 0f
             var count = 0
             for (b in startBin until endBin) {
-                // FFT data: real at index 2*b, imaginary at index 2*b+1
                 val realIdx = 2 * b
                 val imagIdx = 2 * b + 1
                 if (imagIdx < fft.size) {
                     val real = fft[realIdx].toFloat()
                     val imag = fft[imagIdx].toFloat()
-                    val magnitude = Math.sqrt((real * real + imag * imag).toDouble()).toFloat()
+                    val magnitude = sqrt(real * real + imag * imag)
                     sum += magnitude
                     count++
                 }
             }
 
             if (count > 0) {
-                // Normalize: max possible magnitude from bytes is ~181 (128*sqrt(2))
-                out[i] = (sum / count / 128f).coerceIn(0f, 1f)
+                val avgMag = sum / count
+                // Frequency-dependent gain: ramp from 1x (bass) to 4x (treble)
+                // to compensate for natural FFT energy rolloff
+                val t = i.toFloat() / (barCount - 1)
+                val gain = 1.0f + t * 3.0f
+                val normalized = (avgMag * gain / 180f).coerceIn(0f, 1f)
+                // sqrt compression: brings quiet signals up for better visual range
+                out[i] = sqrt(normalized)
             }
         }
         return out
