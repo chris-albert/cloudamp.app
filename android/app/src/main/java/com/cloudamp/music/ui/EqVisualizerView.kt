@@ -152,11 +152,7 @@ class EqVisualizerView @JvmOverloads constructor(
 
             if (count > 0) {
                 val avgMag = sum / count
-                // Frequency-dependent gain: ramp from 1x (bass) to 2.5x (treble)
-                // to compensate for natural FFT energy rolloff
-                val t = i.toFloat() / (barCount - 1)
-                val gain = 1.0f + t * 1.5f
-                val normalized = (avgMag * gain / 180f).coerceIn(0f, 1f)
+                val normalized = (avgMag / 180f).coerceIn(0f, 1f)
                 // sqrt compression: brings quiet signals up for better visual range
                 out[i] = sqrt(normalized)
             }
