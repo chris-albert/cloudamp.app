@@ -9,12 +9,12 @@
         <item name="android:textColorSecondary">@color/winamp_display_text</item>
         <item name="actionBarStyle">@style/CloudAmpActionBar</item>
     </style>
-    
+
     <style name="CloudAmpActionBar" parent="Widget.AppCompat.ActionBar">
         <item name="background">@color/winamp_header</item>
         <item name="titleTextStyle">@style/CloudAmpActionBarTitle</item>
     </style>
-    
+
     <style name="CloudAmpActionBarTitle" parent="TextAppearance.AppCompat.Widget.ActionBar.Title">
         <item name="android:textColor">@color/winamp_text</item>
         <item name="android:fontFamily">monospace</item>
@@ -23,6 +23,13 @@
     <style name="CloudAmpNavSubheader" parent="TextAppearance.AppCompat.Body2">
         <item name="android:textSize">0sp</item>
         <item name="android:minHeight">0dp</item>
+    </style>
+
+    <style name="Theme.CloudAmp.Fullscreen" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowBackground">@color/black</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
     </style>
 
     <style name="Theme.CloudAmp.Dialog" parent="Theme.AppCompat.Dialog.Alert">

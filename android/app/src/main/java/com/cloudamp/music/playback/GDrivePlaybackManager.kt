@@ -395,6 +395,10 @@ class GDrivePlaybackManager private constructor(
         return exoPlayer?.isPlaying ?: false
     }
 
+    override fun getAudioSessionId(): Int {
+        return exoPlayer?.audioSessionId ?: 0
+    }
+
     /**
      * Deactivates GDrive as the provider and releases the player.
      */
