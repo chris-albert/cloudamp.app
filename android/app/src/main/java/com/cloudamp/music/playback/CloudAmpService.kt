@@ -72,6 +72,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         const val SAVED_QUEUES_ID = "saved_queues"
         const val SEARCH_ID = "search"
         const val CUSTOM_ACTION_SAVE_QUEUE = "save_queue"
+        const val SHUFFLE_DISCOVER_ID = "gdrive_shuffle_discover"
 
         private const val CHANNEL_ID = "cloudamp_playback"
         private const val NOTIFICATION_ID = 1
@@ -518,6 +519,12 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                     loadSavedQueues(mediaItems)
                 }
 
+                SHUFFLE_DISCOVER_ID -> {
+                    // Notify Auto to reload the home page with fresh random albums
+                    notifyChildrenChanged(GDRIVE_MUSIC_ID)
+                    loadGDriveMusicHome(mediaItems)
+                }
+
                 else -> {
                     // Handle dynamic IDs
                     when {
@@ -630,8 +637,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             gdriveLibraryCache.getArtistAlbums(artist.id) ?: emptyList()
         }
 
-        // Discover: random 9
-        val discover = allAlbums.shuffled().take(9)
+        // Discover: random 8 + shuffle button
+        val discover = allAlbums.shuffled().take(8)
         for (album in discover) {
             val imageUrl = album.coverFileId?.let { GDriveImageProvider.buildUri(it).toString() }
             items.add(createBrowsableItemWithGroup(
@@ -642,6 +649,12 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 imageUrl ?: placeholderUri
             ))
         }
+        items.add(createBrowsableItemWithGroup(
+            SHUFFLE_DISCOVER_ID,
+            "Shuffle",
+            "Refresh discover list",
+            "Discover"
+        ))
 
         // Recently Played: from NDJSON history (falls back to SharedPreferences)
         val history = GDrivePlaybackHistory.getInstance(this)

@@ -37,6 +37,7 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
     private lateinit var recentAddedAdapter: GDriveHomeAdapter
     private lateinit var discoverAdapter: GDriveHomeAdapter
     private lateinit var loadingContainer: LinearLayout
+    private var allAlbumsCache: List<GDriveAlbum> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -89,7 +90,21 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
         loadingContainer = findViewById(R.id.loadingContainer)
         recentPlayedAdapter = setupHorizontalRecyclerView(findViewById(R.id.recentPlayedRecyclerView))
         recentAddedAdapter = setupHorizontalRecyclerView(findViewById(R.id.recentAddedRecyclerView))
-        discoverAdapter = setupHorizontalRecyclerView(findViewById(R.id.discoverRecyclerView))
+
+        val discoverRv = findViewById<RecyclerView>(R.id.discoverRecyclerView)
+        discoverRv.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        discoverAdapter = GDriveHomeAdapter(
+            onAlbumClick = { album -> playAlbum(album) },
+            onShuffleClick = { reshuffleDiscover() }
+        )
+        discoverRv.adapter = discoverAdapter
+    }
+
+    private fun reshuffleDiscover() {
+        if (allAlbumsCache.isNotEmpty()) {
+            val discover = allAlbumsCache.shuffled().take(9)
+            discoverAdapter.setAlbums(discover, showShuffleButton = true)
+        }
     }
 
     private fun showLoading(show: Boolean) {
@@ -136,9 +151,10 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
                     .take(10)
                 recentAddedAdapter.setAlbums(recentlyAdded)
 
-                // Discover: random 10 albums
-                val discover = allAlbums.shuffled().take(10)
-                discoverAdapter.setAlbums(discover)
+                // Discover: random 9 albums + shuffle button
+                allAlbumsCache = allAlbums
+                val discover = allAlbums.shuffled().take(9)
+                discoverAdapter.setAlbums(discover, showShuffleButton = true)
 
 
             } catch (e: Exception) {
