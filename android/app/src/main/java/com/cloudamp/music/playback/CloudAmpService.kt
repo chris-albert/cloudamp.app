@@ -630,7 +630,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             gdriveLibraryCache.getArtistAlbums(artist.id) ?: emptyList()
         }
 
-        // Discover: random 9
+        // Discover: random 9 (re-randomised each time the user navigates here)
         val discover = allAlbums.shuffled().take(9)
         for (album in discover) {
             val imageUrl = album.coverFileId?.let { GDriveImageProvider.buildUri(it).toString() }
