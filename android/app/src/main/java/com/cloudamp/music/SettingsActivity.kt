@@ -127,6 +127,13 @@ class SettingsActivity : AppCompatActivity() {
 
         val code = uri.getQueryParameter("code")
         val error = uri.getQueryParameter("error")
+        val state = uri.getQueryParameter("state")
+
+        if (!gdriveAuthManager.validateState(state)) {
+            updateGdriveStatus("Authorization failed: invalid state parameter", false)
+            loginWithGdriveButton.isEnabled = true
+            return
+        }
 
         if (code != null) {
             updateGdriveStatus("Exchanging token...", false)

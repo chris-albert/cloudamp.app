@@ -19,11 +19,13 @@ export const onRequestGet: PagesFunction = async (context) => {
   const url = new URL(context.request.url);
   const code = url.searchParams.get("code");
   const error = url.searchParams.get("error");
+  const state = url.searchParams.get("state");
 
   // Build the deep link back to the Android app
   const appUri = new URL(`${APP_SCHEME}://${APP_HOST}`);
   if (code) appUri.searchParams.set("code", code);
   if (error) appUri.searchParams.set("error", error);
+  if (state) appUri.searchParams.set("state", state);
 
   const deepLink = appUri.toString();
 
