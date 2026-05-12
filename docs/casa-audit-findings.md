@@ -150,7 +150,7 @@ Pre-publication security review based on OWASP ASVS 4.0 (the framework used by G
 - **Files:** `web/functions/api/token.ts:16`
 - **Issue:** No `onRequestOptions` handler, no explicit CORS policy. Security posture depends on platform defaults.
 - **Fix:** Add explicit CORS with origin allowlist, or add a `_middleware.ts`.
-- [ ] Fixed
+- [x] Fixed
 
 ### W5. No rate limiting on any endpoint
 - **ASVS:** V11.1.1
@@ -164,7 +164,7 @@ Pre-publication security review based on OWASP ASVS 4.0 (the framework used by G
 - **Files:** `web/functions/api/token.ts:74`, `web/functions/api/android-callback.ts:62`
 - **Issue:** Missing `Cache-Control: no-store` on token responses, missing `X-Frame-Options`, `CSP`, `HSTS`, `X-Content-Type-Options` on all responses.
 - **Fix:** Add security headers to all responses. Token responses must include `Cache-Control: no-store`.
-- [ ] Fixed
+- [x] Fixed
 
 ### W7. Google API errors proxied verbatim
 - **ASVS:** V7.4.1
@@ -206,14 +206,14 @@ These will receive positive marks in the CASA assessment:
 4. ~~A5 - Set usesCleartextTraffic=false~~ **DONE**
 5. ~~A6 - Set allowBackup=false~~ **DONE**
 6. ~~W1 - Add auth/origin check to token proxy~~ **DONE**
-7. W6 - Add Cache-Control: no-store to token responses
+7. ~~W6 - Add Cache-Control: no-store to token responses~~ **DONE**
 
 ### Should fix (likely flagged but may not block):
 8. A11 - Add network security config
 9. ~~W2 - Add OAuth state parameter~~ **DONE**
 10. W3 - Validate redirect_uri
-11. W4 - Add CORS configuration
-12. W6 - Add security headers
+11. ~~W4 - Add CORS configuration~~ **DONE**
+12. ~~W6 - Add security headers~~ **DONE**
 13. A8 - Track token expiration
 14. A10 - Verify MediaBrowser clients
 

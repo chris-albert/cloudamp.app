@@ -107,7 +107,12 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   });
 
   const data = await googleResponse.json();
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = {
+    "Cache-Control": "no-store",
+    "Pragma": "no-cache",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+  };
   if (origin) Object.assign(headers, corsHeaders(origin));
   return Response.json(data, { status: googleResponse.status, headers });
 };
