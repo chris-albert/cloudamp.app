@@ -125,14 +125,14 @@ Pre-publication security review based on OWASP ASVS 4.0 (the framework used by G
 - **Files:** `web/functions/api/token.ts:16-75`
 - **Issue:** Anyone on the internet can POST to `https://cloudamp.io/api/token` and use the app's `GOOGLE_CLIENT_SECRET` to exchange codes or refresh tokens. No origin check, no auth, no rate limiting.
 - **Fix:** Add origin validation (allowlist of known origins), and consider adding a shared app key or CORS restriction.
-- [ ] Fixed
+- [x] Fixed
 
 ### W2. Missing OAuth `state` parameter (CSRF)
 - **ASVS:** V3.5.2, V2.1.1
 - **Files:** `web/functions/api/android-callback.ts:18-28`, `web/src/lib/google-auth.ts:83-94`
 - **Issue:** Neither the Android callback nor the web auth flow use an OAuth `state` parameter. An attacker could force a victim to link the attacker's Google account.
 - **Fix:** Generate a random `state` value, store it, and validate it on the callback.
-- [ ] Fixed
+- [x] Fixed
 
 ---
 

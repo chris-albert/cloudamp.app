@@ -13,7 +13,43 @@ interface TokenRequestBody {
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 
+const ALLOWED_ORIGINS = [
+  "https://cloudamp.io",
+  "https://www.cloudamp.io",
+];
+
+function isAllowedOrigin(origin: string | null): boolean {
+  // No Origin header = non-browser client (e.g. Android app) — allow
+  if (!origin) return true;
+  return ALLOWED_ORIGINS.includes(origin);
+}
+
+function corsHeaders(origin: string): Record<string, string> {
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Max-Age": "86400",
+  };
+}
+
+export const onRequestOptions: PagesFunction<Env> = async (context) => {
+  const origin = context.request.headers.get("Origin");
+  if (!origin || !ALLOWED_ORIGINS.includes(origin)) {
+    return new Response(null, { status: 403 });
+  }
+  return new Response(null, { status: 204, headers: corsHeaders(origin) });
+};
+
 export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const origin = context.request.headers.get("Origin");
+  if (!isAllowedOrigin(origin)) {
+    return Response.json(
+      { error: "forbidden", error_description: "Origin not allowed" },
+      { status: 403 },
+    );
+  }
+
   const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } = context.env;
 
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
@@ -71,5 +107,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   });
 
   const data = await googleResponse.json();
-  return Response.json(data, { status: googleResponse.status });
+  const headers: Record<string, string> = {};
+  if (origin) Object.assign(headers, corsHeaders(origin));
+  return Response.json(data, { status: googleResponse.status, headers });
 };

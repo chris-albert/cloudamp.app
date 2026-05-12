@@ -65,6 +65,7 @@ class GoogleDriveAuthManager(private val context: Context) {
             remove("refresh_token")
             remove("access_token")
             remove("code_verifier")
+            remove("oauth_state")
             apply()
         }
     }
@@ -95,6 +96,12 @@ class GoogleDriveAuthManager(private val context: Context) {
         return Base64.encodeToString(digest, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
     }
 
+    private fun generateState(): String {
+        val bytes = ByteArray(32)
+        SecureRandom().nextBytes(bytes)
+        return Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+    }
+
     /**
      * Build the Google OAuth authorization URL.
      * Uses a custom URI scheme (com.cloudamp.music://oauth2callback) as the
@@ -105,8 +112,12 @@ class GoogleDriveAuthManager(private val context: Context) {
 
         val codeVerifier = generateCodeVerifier()
         val codeChallenge = generateCodeChallenge(codeVerifier)
+        val state = generateState()
 
-        prefs.edit().putString("code_verifier", codeVerifier).apply()
+        prefs.edit()
+            .putString("code_verifier", codeVerifier)
+            .putString("oauth_state", state)
+            .apply()
 
         return Uri.parse(AUTH_URL).buildUpon().apply {
             appendQueryParameter("client_id", clientId)
@@ -117,7 +128,19 @@ class GoogleDriveAuthManager(private val context: Context) {
             appendQueryParameter("code_challenge", codeChallenge)
             appendQueryParameter("access_type", "offline")
             appendQueryParameter("prompt", "consent")
+            appendQueryParameter("state", state)
         }.build().toString()
+    }
+
+    /**
+     * Validate the OAuth state parameter returned in the callback.
+     * Returns true if the state matches what was sent; false otherwise.
+     */
+    fun validateState(returnedState: String?): Boolean {
+        val expectedState = prefs.getString("oauth_state", null)
+        if (expectedState == null || expectedState != returnedState) return false
+        prefs.edit().remove("oauth_state").apply()
+        return true
     }
 
     /**

@@ -14,6 +14,7 @@ const STORAGE_KEYS = {
   refreshToken: "cloudamp_refresh_token",
   expiresAt: "cloudamp_token_expires_at",
   codeVerifier: "cloudamp_code_verifier",
+  oauthState: "cloudamp_oauth_state",
   rootFolderId: "cloudamp_root_folder_id",
 } as const;
 
@@ -77,6 +78,9 @@ export async function startAuthFlow() {
   const codeVerifier = generateRandomString(64);
   localStorage.setItem(STORAGE_KEYS.codeVerifier, codeVerifier);
 
+  const state = generateRandomString(32);
+  localStorage.setItem(STORAGE_KEYS.oauthState, state);
+
   const challengeBuffer = await sha256(codeVerifier);
   const codeChallenge = base64UrlEncode(challengeBuffer);
 
@@ -89,12 +93,18 @@ export async function startAuthFlow() {
     code_challenge_method: "S256",
     access_type: "offline",
     prompt: "consent",
+    state,
   });
 
   window.location.href = `${AUTH_URL}?${params.toString()}`;
 }
 
-export async function handleCallback(code: string): Promise<void> {
+export async function handleCallback(code: string, state: string | null): Promise<void> {
+  const expectedState = localStorage.getItem(STORAGE_KEYS.oauthState);
+  if (!expectedState || expectedState !== state) {
+    throw new Error("Invalid OAuth state — possible CSRF attack");
+  }
+
   const codeVerifier = localStorage.getItem(STORAGE_KEYS.codeVerifier);
   if (!codeVerifier) throw new Error("No code verifier found");
 
@@ -122,6 +132,7 @@ export async function handleCallback(code: string): Promise<void> {
   const expiresAt = Date.now() + data.expires_in * 1000;
   localStorage.setItem(STORAGE_KEYS.expiresAt, String(expiresAt));
   localStorage.removeItem(STORAGE_KEYS.codeVerifier);
+  localStorage.removeItem(STORAGE_KEYS.oauthState);
 }
 
 export async function refreshAccessToken(): Promise<string> {

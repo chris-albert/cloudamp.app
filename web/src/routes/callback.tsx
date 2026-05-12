@@ -9,6 +9,7 @@ export function CallbackPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
+    const state = params.get("state");
     const errorParam = params.get("error");
 
     if (errorParam) {
@@ -21,7 +22,7 @@ export function CallbackPage() {
       return;
     }
 
-    handleCallback(code)
+    handleCallback(code, state)
       .then(() => navigate({ to: "/" }))
       .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }, [navigate]);
