@@ -42,7 +42,7 @@ export function LibraryPage() {
         <h1 className="text-2xl font-bold">Library</h1>
         <p className="text-zinc-400">
           Connect your Google Drive in{" "}
-          <Link to="/settings" className="underline hover:text-white">
+          <Link to="/app/settings" className="underline hover:text-white">
             Settings
           </Link>{" "}
           to browse your music library.
@@ -95,7 +95,7 @@ export function LibraryPage() {
         {!getRootFolderId() ? (
           <p className="text-zinc-400">
             Choose a music folder in{" "}
-            <Link to="/settings" className="underline hover:text-white">
+            <Link to="/app/settings" className="underline hover:text-white">
               Settings
             </Link>{" "}
             to get started.
@@ -119,7 +119,7 @@ function LibraryBrowser() {
   const validation = scanState.validation;
   const navigate = useNavigate();
 
-  const searchParams = useSearch({ from: "/library" });
+  const searchParams = useSearch({ from: "/app/library" });
   const initialArtistId = searchParams.artistId;
   const initialAlbumId = searchParams.albumId;
 
@@ -153,7 +153,7 @@ function LibraryBrowser() {
     setSelectedArtist(artist);
     setSelectedAlbum(null);
     navigate({
-      to: "/library",
+      to: "/app/library",
       search: artist ? { artistId: artist.id, albumId: undefined } : { artistId: undefined, albumId: undefined },
       replace: true,
     });
@@ -163,13 +163,13 @@ function LibraryBrowser() {
     setSelectedAlbum(album);
     if (album && selectedArtist) {
       navigate({
-        to: "/library",
+        to: "/app/library",
         search: { artistId: selectedArtist.id, albumId: album.id },
         replace: true,
       });
     } else if (selectedArtist) {
       navigate({
-        to: "/library",
+        to: "/app/library",
         search: { artistId: selectedArtist.id, albumId: undefined },
         replace: true,
       });
@@ -186,7 +186,7 @@ function LibraryBrowser() {
       setShowDeleteConfirm(false);
       setSelectedAlbum(null);
       navigate({
-        to: "/library",
+        to: "/app/library",
         search: { artistId: selectedArtist.id, albumId: undefined },
         replace: true,
       });
@@ -208,7 +208,7 @@ function LibraryBrowser() {
       setSelectedArtist(null);
       setSelectedAlbum(null);
       navigate({
-        to: "/library",
+        to: "/app/library",
         search: { artistId: undefined, albumId: undefined },
         replace: true,
       });

@@ -51,7 +51,7 @@ export function SettingsPage() {
   function handleLogout() {
     logout();
     setUserInfo(null);
-    navigate({ to: "/settings" });
+    navigate({ to: "/app/settings" });
   }
 
   function handleFolderSelect(folderId: string, name: string) {
@@ -548,7 +548,7 @@ function IssueRow({ issue }: { issue: LibraryIssue }) {
   if (hasLink) {
     return (
       <Link
-        to="/library"
+        to="/app/library"
         search={{ artistId: issue.artistId!, albumId: issue.albumId }}
         className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3 hover:bg-zinc-800/80 hover:border-zinc-700 transition-colors cursor-pointer"
       >
