@@ -5,17 +5,17 @@ plugins {
     id 'com.google.firebase.crashlytics'
 }
 
-def getVersionCode() {
-    // Use compact timestamp for auto-incrementing version code
-    // Format: MMDDHHMM (e.g., 01241628 for Jan 24 at 16:28)
-    // Max value: 12311259 (fits within Integer.MAX_VALUE)
-    def date = new Date()
-    def formattedDate = date.format('MMddHHmm')
-    return formattedDate.toInteger()
-}
+// Read semver from version.properties
+def versionProps = new Properties()
+versionProps.load(new FileInputStream(rootProject.file("version.properties")))
+def versionMajor = versionProps['major'].toInteger()
+def versionMinor = versionProps['minor'].toInteger()
+def versionPatch = versionProps['patch'].toInteger()
 
-def versionCodeValue = getVersionCode()
-def versionNameValue = "1.0." + versionCodeValue
+def versionCodeValue = versionMajor * 10000 + versionMinor * 100 + versionPatch
+def versionNameBase = "${versionMajor}.${versionMinor}.${versionPatch}"
+// CI passes VERSION_SUFFIX for RC builds (e.g. "-rc.42")
+def versionNameValue = versionNameBase + (findProperty('VERSION_SUFFIX') ?: '')
 
 android {
     namespace 'com.cloudamp.music'
