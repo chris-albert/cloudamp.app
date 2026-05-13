@@ -7,7 +7,7 @@ Pre-publication security review based on OWASP ASVS 4.0 (the framework used by G
 | Severity | Count | Status |
 |----------|-------|--------|
 | HIGH     | 6 (Android) + 2 (Worker) = 8 | All Fixed |
-| MEDIUM   | 8 (Android) + 6 (Worker) = 14 | Pending |
+| MEDIUM   | 9 (Android) + 6 (Worker) = 15 | Pending |
 | LOW      | 5 (Android) + 2 (Worker) = 7 | Informational |
 
 ---
@@ -65,6 +65,13 @@ Pre-publication security review based on OWASP ASVS 4.0 (the framework used by G
 - **Files:** `GoogleDriveApiClient.kt:108-109`
 - **Issue:** The streaming OkHttp client uses `Level.HEADERS`, which logs the full `Authorization: Bearer <token>` header on every audio stream request.
 - **Fix:** Gate on `BuildConfig.DEBUG`.
+- [x] Fixed
+
+### A7b. Overly broad Google Drive OAuth scope (Android)
+- **ASVS:** V4.1.3
+- **Files:** `android/app/src/main/java/com/cloudamp/music/auth/GoogleDriveAuthManager.kt:33-35`
+- **Issue:** The Android app requests the full `https://www.googleapis.com/auth/drive` scope, which grants read/write access to the user's entire Google Drive. CASA auditors flag this as a principle-of-least-privilege violation. The Android app only needs to read the user's existing music files and write to its own `.cloudamp` folder (playback history sync). All Android write operations (create/update `playback_history.ndjson`, create `.cloudamp` folder, trash duplicates) target files the app itself created, which are covered by `drive.file`.
+- **Fix:** Replace the single `https://www.googleapis.com/auth/drive` scope with two narrower scopes: `https://www.googleapis.com/auth/drive.readonly` (browse and stream the user's existing music files) and `https://www.googleapis.com/auth/drive.file` (create and manage the app's own `.cloudamp` folder and playback history file). The web app (`web/src/lib/google-auth.ts:9`) legitimately requires the full `drive` scope because it supports trashing, renaming, and moving the user's existing files — operations that `drive.file` cannot cover since those files were not created by the app.
 - [x] Fixed
 
 ### A8. No token expiration tracking (`expires_in` ignored)
@@ -209,16 +216,17 @@ These will receive positive marks in the CASA assessment:
 7. ~~W6 - Add Cache-Control: no-store to token responses~~ **DONE**
 
 ### Should fix (likely flagged but may not block):
-8. A11 - Add network security config
-9. ~~W2 - Add OAuth state parameter~~ **DONE**
-10. W3 - Validate redirect_uri
-11. ~~W4 - Add CORS configuration~~ **DONE**
-12. ~~W6 - Add security headers~~ **DONE**
-13. A8 - Track token expiration
-14. A10 - Verify MediaBrowser clients
+8. A7b - Narrow Android Drive OAuth scope to `drive.readonly` + `drive.file`
+9. A11 - Add network security config
+10. ~~W2 - Add OAuth state parameter~~ **DONE**
+11. W3 - Validate redirect_uri
+12. ~~W4 - Add CORS configuration~~ **DONE**
+13. ~~W6 - Add security headers~~ **DONE**
+14. A8 - Track token expiration
+15. A10 - Verify MediaBrowser clients
 
 ### Nice to have (strengthens assessment):
-15. A12 - Proper release keystore
-16. A13 - Enable ProGuard/R8
-17. W5 - Rate limiting
-18. W7 - Sanitize error responses
+16. A12 - Proper release keystore
+17. A13 - Enable ProGuard/R8
+18. W5 - Rate limiting
+19. W7 - Sanitize error responses

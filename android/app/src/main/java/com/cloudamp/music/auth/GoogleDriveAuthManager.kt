@@ -27,11 +27,13 @@ class GoogleDriveAuthManager(private val context: Context) {
 
         // Auth version: bump to force re-auth when credentials change.
         // v1 = proxy-based auth (no client secret on device).
+        // v2 = narrowed scopes (drive.readonly + drive.file instead of full drive).
         private const val KEY_AUTH_VERSION = "auth_version"
-        private const val CURRENT_AUTH_VERSION = 1
+        private const val CURRENT_AUTH_VERSION = 2
 
         private val SCOPES = listOf(
-            "https://www.googleapis.com/auth/drive"
+            "https://www.googleapis.com/auth/drive.readonly",
+            "https://www.googleapis.com/auth/drive.file"
         )
 
         private const val ENCRYPTED_PREFS_FILE = "gdrive_auth_encrypted"
