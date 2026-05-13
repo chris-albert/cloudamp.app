@@ -17,7 +17,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       id-token: write
     defaults:
       run:
@@ -26,6 +26,8 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
@@ -46,6 +48,15 @@ jobs:
         curl -L -o gradle/wrapper/gradle-wrapper.jar \
           https://raw.githubusercontent.com/gradle/gradle/v8.2.1/gradle/wrapper/gradle-wrapper.jar
 
+    - name: Determine version suffix
+      id: suffix
+      run: |
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          echo "value=-rc.${{ github.run_number }}" >> $GITHUB_OUTPUT
+        else
+          echo "value=" >> $GITHUB_OUTPUT
+        fi
+
     - name: Decode release keystore
       run: echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > app/keystore/release.keystore
 
@@ -56,27 +67,28 @@ jobs:
           -PRELEASE_KEYSTORE_PATH=keystore/release.keystore \
           -PRELEASE_KEYSTORE_PASSWORD="${{ secrets.RELEASE_KEYSTORE_PASSWORD }}" \
           -PRELEASE_KEY_ALIAS="${{ secrets.RELEASE_KEY_ALIAS }}" \
-          -PRELEASE_KEY_PASSWORD="${{ secrets.RELEASE_KEY_PASSWORD }}"
+          -PRELEASE_KEY_PASSWORD="${{ secrets.RELEASE_KEY_PASSWORD }}" \
+          -PVERSION_SUFFIX="${{ steps.suffix.outputs.value }}"
 
     - name: Get version info
       id: version
       run: |
+        VERSION_NAME=$(./gradlew -q printVersionName -PVERSION_SUFFIX="${{ steps.suffix.outputs.value }}" | tail -1)
         VERSION_CODE=$(./gradlew -q printVersionCode | tail -1)
-        VERSION_NAME=$(./gradlew -q printVersionName | tail -1)
         echo "code=$VERSION_CODE" >> $GITHUB_OUTPUT
         echo "name=$VERSION_NAME" >> $GITHUB_OUTPUT
         echo "Version: $VERSION_NAME ($VERSION_CODE)"
 
     - name: Rename APK with version
       run: |
-        VERSION_CODE="${{ steps.version.outputs.code }}"
-        cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/CloudAmp-v${VERSION_CODE}.apk
+        cp app/build/outputs/apk/release/app-release.apk \
+          app/build/outputs/apk/release/CloudAmp-v${{ steps.version.outputs.name }}.apk
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: CloudAmp-v${{ steps.version.outputs.code }}
-        path: android/app/build/outputs/apk/release/CloudAmp-v${{ steps.version.outputs.code }}.apk
+        name: CloudAmp-v${{ steps.version.outputs.name }}
+        path: android/app/build/outputs/apk/release/CloudAmp-v${{ steps.version.outputs.name }}.apk
         retention-days: 30
 
     - name: Authenticate to Google Cloud
@@ -97,11 +109,25 @@ jobs:
           NOTES="$NOTES - ${{ github.event.head_commit.message }}"
         fi
         firebase appdistribution:distribute \
-          android/app/build/outputs/apk/release/CloudAmp-v${{ steps.version.outputs.code }}.apk \
+          android/app/build/outputs/apk/release/CloudAmp-v${{ steps.version.outputs.name }}.apk \
           --app "${{ secrets.FIREBASE_APP_ID }}" \
           --groups "testers" \
           --release-notes "$NOTES" \
           --token "${{ steps.auth.outputs.access_token }}"
+      working-directory: .
+
+    - name: Bump patch version
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+        cd ..
+        PATCH=$(grep '^patch=' android/version.properties | cut -d= -f2)
+        NEW_PATCH=$((PATCH + 1))
+        sed -i "s/^patch=.*/patch=$NEW_PATCH/" android/version.properties
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add android/version.properties
+        git commit -m "chore: bump version to $(grep '^major=' android/version.properties | cut -d= -f2).$(grep '^minor=' android/version.properties | cut -d= -f2).$NEW_PATCH [skip ci]"
+        git push
       working-directory: .
 
     - name: Upload APK Summary
@@ -115,4 +141,4 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "**Build type:** Release (signed, minified)" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        ls -lh app/build/outputs/apk/release/CloudAmp-v${{ steps.version.outputs.code }}.apk >> $GITHUB_STEP_SUMMARY
+        ls -lh app/build/outputs/apk/release/CloudAmp-v${{ steps.version.outputs.name }}.apk >> $GITHUB_STEP_SUMMARY
