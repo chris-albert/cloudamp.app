@@ -2,6 +2,7 @@ package com.cloudamp.music.api
 
 import android.content.Context
 import android.util.Log
+import com.cloudamp.music.BuildConfig
 import com.cloudamp.music.auth.GoogleDriveAuthManager
 import kotlinx.coroutines.runBlocking
 import okhttp3.Authenticator
@@ -35,18 +36,19 @@ class GoogleDriveApiClient(private val context: Context) {
     private val authManager = GoogleDriveAuthManager(context)
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
+        level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
+                else HttpLoggingInterceptor.Level.NONE
     }
 
     private val authInterceptor = Interceptor { chain ->
         val token = authManager.getAccessToken()
         val request = if (token != null) {
-            Log.d(TAG, "Auth interceptor: adding Bearer token (${token.take(10)}...) for ${chain.request().url}")
+            if (BuildConfig.DEBUG) Log.d(TAG, "Auth interceptor: adding Bearer token for ${chain.request().url}")
             chain.request().newBuilder()
                 .addHeader("Authorization", "Bearer $token")
                 .build()
         } else {
-            Log.w(TAG, "Auth interceptor: NO token available for ${chain.request().url}")
+            if (BuildConfig.DEBUG) Log.w(TAG, "Auth interceptor: NO token available for ${chain.request().url}")
             chain.request()
         }
         chain.proceed(request)
@@ -103,10 +105,9 @@ class GoogleDriveApiClient(private val context: Context) {
      * entire audio files into memory and stall playback).
      */
     fun getStreamingHttpClient(): OkHttpClient {
-        // Use HEADERS-level logging only (not BODY) to see request/response
-        // status codes without buffering audio data into memory.
         val headersOnlyLogging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.HEADERS
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.HEADERS
+                    else HttpLoggingInterceptor.Level.NONE
         }
         return OkHttpClient.Builder()
             .addInterceptor(authInterceptor)

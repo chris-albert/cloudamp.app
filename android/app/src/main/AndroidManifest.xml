@@ -8,13 +8,19 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <!-- Signature-level permission for the GDrive image ContentProvider.
+         Only apps signed with the same key (i.e. this app) can read from it. -->
+    <permission
+        android:name="com.cloudamp.music.permission.READ_GDRIVE_IMAGES"
+        android:protectionLevel="signature" />
+
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="CloudAmp"
         android:theme="@style/Theme.CloudAmp"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="false">
 
         <!-- Main Activity -->
         <activity
@@ -96,11 +102,13 @@
             </intent-filter>
         </service>
 
-        <!-- GDrive Image Provider for Android Auto -->
+        <!-- GDrive Image Provider for Android Auto.
+             Protected by signature-level permission so only this app can access it. -->
         <provider
             android:name=".playback.GDriveImageProvider"
             android:authorities="com.cloudamp.music.gdriveimages"
             android:exported="true"
+            android:readPermission="com.cloudamp.music.permission.READ_GDRIVE_IMAGES"
             android:grantUriPermissions="true" />
 
         <!-- Media Button Receiver -->

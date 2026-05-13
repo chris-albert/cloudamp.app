@@ -1,9 +1,12 @@
 package com.cloudamp.music.auth
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.net.Uri
 import android.util.Base64
 import android.util.Log
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -30,9 +33,54 @@ class GoogleDriveAuthManager(private val context: Context) {
         private val SCOPES = listOf(
             "https://www.googleapis.com/auth/drive"
         )
+
+        private const val ENCRYPTED_PREFS_FILE = "gdrive_auth_encrypted"
+        private const val LEGACY_PREFS_FILE = "gdrive_auth"
     }
 
-    private val prefs = context.getSharedPreferences("gdrive_auth", Context.MODE_PRIVATE)
+    private val prefs: SharedPreferences = createEncryptedPrefs()
+
+    private fun createEncryptedPrefs(): SharedPreferences {
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+
+        val encryptedPrefs = EncryptedSharedPreferences.create(
+            context,
+            ENCRYPTED_PREFS_FILE,
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+
+        migrateLegacyPrefs(encryptedPrefs)
+
+        return encryptedPrefs
+    }
+
+    /**
+     * One-time migration from plaintext SharedPreferences to EncryptedSharedPreferences.
+     * Copies tokens/state, then deletes the legacy file.
+     */
+    private fun migrateLegacyPrefs(encryptedPrefs: SharedPreferences) {
+        val legacyPrefs = context.getSharedPreferences(LEGACY_PREFS_FILE, Context.MODE_PRIVATE)
+        if (legacyPrefs.all.isEmpty()) return
+
+        Log.d(TAG, "Migrating legacy plaintext prefs to encrypted storage")
+        val editor = encryptedPrefs.edit()
+        for ((key, value) in legacyPrefs.all) {
+            when (value) {
+                is String -> editor.putString(key, value)
+                is Int -> editor.putInt(key, value)
+                is Boolean -> editor.putBoolean(key, value)
+                is Long -> editor.putLong(key, value)
+                is Float -> editor.putFloat(key, value)
+            }
+        }
+        editor.apply()
+        legacyPrefs.edit().clear().apply()
+    }
+
     private val httpClient = OkHttpClient()
     private val clientId: String = com.cloudamp.music.BuildConfig.GOOGLE_CLIENT_ID
 
