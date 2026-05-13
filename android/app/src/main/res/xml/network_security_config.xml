@@ -6,16 +6,4 @@
             <certificates src="system" />
         </trust-anchors>
     </base-config>
-
-    <!-- Pin certificates for first-party domains -->
-    <domain-config>
-        <domain includeSubdomains="true">googleapis.com</domain>
-        <domain includeSubdomains="true">cloudamp.io</domain>
-        <pin-set expiration="2027-01-01">
-            <!-- GTS Root R1 (Google Trust Services) — covers googleapis.com -->
-            <pin digest="SHA-256">hxqRlPTu1bMS/0DITB1SSu0vd4u/8l8TPoNPPYoeTkA=</pin>
-            <!-- ISRG Root X1 (Let's Encrypt) — covers cloudamp.io on Cloudflare -->
-            <pin digest="SHA-256">C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=</pin>
-        </pin-set>
-    </domain-config>
 </network-security-config>

@@ -88,11 +88,11 @@ Pre-publication security review based on OWASP ASVS 4.0 (the framework used by G
 - **Fix:** Verify `clientPackageName` against a known-good list (Android Auto, system UI, self).
 - [x] Fixed
 
-### A11. No network security config / no certificate pinning
-- **ASVS:** V6.2.1, V9.2.3
+### A11. No network security config
+- **ASVS:** V6.2.1
 - **Files:** (absent)
-- **Issue:** No `res/xml/network_security_config.xml` exists. No certificate pinning for `googleapis.com` or `cloudamp.io`.
-- **Fix:** Add a network security config with certificate pinning and cleartext restrictions.
+- **Issue:** No `res/xml/network_security_config.xml` exists.
+- **Fix:** Add a network security config with cleartext restrictions and system trust anchors. Certificate pinning (V9.2.3) intentionally omitted — leaf certs for googleapis.com and Cloudflare rotate frequently, and pinning would cause hard failures requiring app updates. Google recommends against pinning for apps using their APIs.
 - [x] Fixed
 
 ### A12. Release builds use debug keystore
