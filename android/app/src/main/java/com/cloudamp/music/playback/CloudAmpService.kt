@@ -470,8 +470,17 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         clientPackageName: String,
         clientUid: Int,
         rootHints: Bundle?
-    ): BrowserRoot {
-        // Allow all clients (Android Auto, etc.)
+    ): BrowserRoot? {
+        val allowed = setOf(
+            packageName,                                // self
+            "com.google.android.projection.gearhead",   // Android Auto
+            "com.google.android.googlequicksearchbox",  // Google Assistant
+            "com.android.systemui",                     // system media controls
+        )
+        if (clientPackageName !in allowed) {
+            Log.w(TAG, "Rejecting MediaBrowser connection from: $clientPackageName")
+            return null
+        }
         return BrowserRoot(ROOT_ID, null)
     }
 
