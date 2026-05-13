@@ -70,6 +70,9 @@ class SettingsActivity : AppCompatActivity() {
         // Streaming cache views
         setupMediaCache()
 
+        // Version
+        findViewById<TextView>(R.id.versionText).text = "CloudAmp v${BuildConfig.VERSION_NAME}"
+
         // Handle OAuth redirect if activity was launched by deep link
         handleOAuthRedirect(intent)
     }
