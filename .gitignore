@@ -26,6 +26,8 @@ out/
 
 # Signing files
 .signing/
+*.keystore
+!android/app/keystore/debug.keystore
 
 # Firebase config (inject via CI)
 google-services.json

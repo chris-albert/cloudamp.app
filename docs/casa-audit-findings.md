@@ -9,7 +9,7 @@ Pre-publication security review based on OWASP ASVS 4.0 (the framework used by G
 | Severity | Count | Status |
 |----------|-------|--------|
 | HIGH     | 6 (Android) + 2 (Worker) = 8 | All Fixed |
-| MEDIUM   | 8 (Android) + 4 (Worker) = 12 | 1 Pending |
+| MEDIUM   | 8 (Android) + 4 (Worker) = 12 | All Fixed |
 | LOW      | 5 (Android) + 2 (Worker) = 7 | Informational |
 
 ---
@@ -102,7 +102,7 @@ Pre-publication security review based on OWASP ASVS 4.0 (the framework used by G
 - **Files:** `build.gradle:35-39,52-53`
 - **Issue:** `signingConfig signingConfigs.debug` is used for release builds. The debug keystore password is "android". An attacker can sign a modified APK with the same identity.
 - **Fix:** Generate a proper release keystore with strong passwords stored in CI secrets.
-- [ ] Fixed
+- [x] Fixed (release signing config reads from gradle properties; keystore decoded from GitHub Secrets in CI)
 
 ### A13. No code obfuscation (`minifyEnabled false`)
 - **ASVS:** V10.3.1
@@ -225,7 +225,7 @@ These will receive positive marks in the CASA assessment:
 14. ~~A10 - Verify MediaBrowser clients~~ **DONE**
 
 ### Nice to have (strengthens assessment):
-15. A12 - Proper release keystore
+15. ~~A12 - Proper release keystore~~ **DONE**
 16. ~~A13 - Enable ProGuard/R8~~ **DONE**
 17. ~~W7 - Sanitize error responses~~ **DONE**
 18. ~~A9 - Gate error logging behind BuildConfig.DEBUG~~ **DONE**
