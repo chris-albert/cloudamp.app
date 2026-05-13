@@ -18,6 +18,12 @@ const ALLOWED_ORIGINS = [
   "https://www.cloudamp.io",
 ];
 
+const ALLOWED_REDIRECT_URIS = [
+  "https://cloudamp.io/callback",
+  "https://www.cloudamp.io/callback",
+  "https://cloudamp.io/api/android-callback",
+];
+
 function isAllowedOrigin(origin: string | null): boolean {
   // No Origin header = non-browser client (e.g. Android app) — allow
   if (!origin) return true;
@@ -82,6 +88,12 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         { status: 400 },
       );
     }
+    if (!ALLOWED_REDIRECT_URIS.includes(body.redirect_uri)) {
+      return Response.json(
+        { error: "invalid_request", error_description: "Invalid redirect_uri" },
+        { status: 400 },
+      );
+    }
     params.set("code", body.code);
     params.set("code_verifier", body.code_verifier);
     params.set("redirect_uri", body.redirect_uri);
@@ -106,7 +118,6 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     body: params,
   });
 
-  const data = await googleResponse.json();
   const headers: Record<string, string> = {
     "Cache-Control": "no-store",
     "Pragma": "no-cache",
@@ -114,5 +125,21 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     "X-Frame-Options": "DENY",
   };
   if (origin) Object.assign(headers, corsHeaders(origin));
-  return Response.json(data, { status: googleResponse.status, headers });
+
+  if (googleResponse.ok) {
+    const data = await googleResponse.json();
+    return Response.json(data, { status: 200, headers });
+  }
+
+  // Sanitize error responses — don't proxy Google's internal error details
+  const status = googleResponse.status;
+  const errorMap: Record<number, string> = {
+    400: "invalid_grant",
+    401: "invalid_client",
+    403: "access_denied",
+  };
+  return Response.json(
+    { error: errorMap[status] ?? "server_error", error_description: "Token request failed" },
+    { status, headers },
+  );
 };

@@ -124,12 +124,28 @@ class GoogleDriveAuthManager(private val context: Context) {
 
     fun getAccessToken(): String? = prefs.getString("access_token", null)
 
-    fun saveAccessToken(token: String) {
-        prefs.edit().putString("access_token", token).apply()
+    /**
+     * Returns true if the stored access token has expired (or will expire within 60s).
+     * If no expiration is stored, assumes expired to trigger a refresh.
+     */
+    fun isAccessTokenExpired(): Boolean {
+        val expiresAt = prefs.getLong("expires_at", 0L)
+        if (expiresAt == 0L) return true
+        return System.currentTimeMillis() >= expiresAt - 60_000
+    }
+
+    private fun saveAccessToken(token: String, expiresInSeconds: Long? = null) {
+        prefs.edit().apply {
+            putString("access_token", token)
+            if (expiresInSeconds != null) {
+                putLong("expires_at", System.currentTimeMillis() + expiresInSeconds * 1000)
+            }
+            apply()
+        }
     }
 
     fun clearAccessToken() {
-        prefs.edit().remove("access_token").apply()
+        prefs.edit().remove("access_token").remove("expires_at").apply()
     }
 
     private fun generateCodeVerifier(): String {
@@ -220,8 +236,9 @@ class GoogleDriveAuthManager(private val context: Context) {
                 val json = JSONObject(responseBody)
                 val accessToken = json.getString("access_token")
                 val refreshToken = json.optString("refresh_token", null)
+                val expiresIn = if (json.has("expires_in")) json.getLong("expires_in") else null
 
-                saveAccessToken(accessToken)
+                saveAccessToken(accessToken, expiresIn)
                 if (refreshToken != null) {
                     prefs.edit().putString("refresh_token", refreshToken).apply()
                 }
@@ -231,8 +248,12 @@ class GoogleDriveAuthManager(private val context: Context) {
 
                 Result.success(accessToken)
             } else {
-                Log.e(TAG, "Token exchange failed: ${response.code} $responseBody")
-                Result.failure(Exception("Token exchange failed: ${response.code} - $responseBody"))
+                if (com.cloudamp.music.BuildConfig.DEBUG) {
+                    Log.e(TAG, "Token exchange failed: ${response.code} $responseBody")
+                } else {
+                    Log.e(TAG, "Token exchange failed: ${response.code}")
+                }
+                Result.failure(Exception("Token exchange failed: ${response.code}"))
             }
         } catch (e: Exception) {
             Log.e(TAG, "Token exchange error: ${e.message}", e)
@@ -265,8 +286,9 @@ class GoogleDriveAuthManager(private val context: Context) {
             if (response.isSuccessful) {
                 val json = JSONObject(responseBody)
                 val accessToken = json.getString("access_token")
+                val expiresIn = if (json.has("expires_in")) json.getLong("expires_in") else null
 
-                saveAccessToken(accessToken)
+                saveAccessToken(accessToken, expiresIn)
 
                 val newRefreshToken = json.optString("refresh_token", null)
                 if (newRefreshToken != null) {
@@ -275,8 +297,12 @@ class GoogleDriveAuthManager(private val context: Context) {
 
                 Result.success(accessToken)
             } else {
-                Log.e(TAG, "Token refresh failed: ${response.code} $responseBody")
-                Result.failure(Exception("Token refresh failed: ${response.code} - $responseBody"))
+                if (com.cloudamp.music.BuildConfig.DEBUG) {
+                    Log.e(TAG, "Token refresh failed: ${response.code} $responseBody")
+                } else {
+                    Log.e(TAG, "Token refresh failed: ${response.code}")
+                }
+                Result.failure(Exception("Token refresh failed: ${response.code}"))
             }
         } catch (e: Exception) {
             Log.e(TAG, "Token refresh error: ${e.message}", e)
