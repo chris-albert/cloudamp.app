@@ -2,12 +2,14 @@
 
 Pre-publication security review based on OWASP ASVS 4.0 (the framework used by Google's CASA assessment).
 
+> **Scope:** CASA applies to the Android app and the backend services it communicates with (Cloudflare Worker token proxy). Web-only issues (e.g. service worker token handling) are out of scope for CASA but tracked separately.
+
 ## Summary
 
 | Severity | Count | Status |
 |----------|-------|--------|
 | HIGH     | 6 (Android) + 2 (Worker) = 8 | All Fixed |
-| MEDIUM   | 8 (Android) + 6 (Worker) = 14 | Pending |
+| MEDIUM   | 8 (Android) + 4 (Worker) = 12 | 1 Pending |
 | LOW      | 5 (Android) + 2 (Worker) = 7 | Informational |
 
 ---
@@ -107,7 +109,7 @@ Pre-publication security review based on OWASP ASVS 4.0 (the framework used by G
 - **Files:** `build.gradle:50`
 - **Issue:** ProGuard/R8 is disabled. All class/method names and string constants are readable via decompilation.
 - **Fix:** Enable `minifyEnabled true` for release builds and add ProGuard rules.
-- [ ] Fixed
+- [x] Fixed
 
 ### A14. Firebase API key committed to version control
 - **ASVS:** V8.3.3
@@ -152,13 +154,6 @@ Pre-publication security review based on OWASP ASVS 4.0 (the framework used by G
 - **Fix:** Add explicit CORS with origin allowlist, or add a `_middleware.ts`.
 - [x] Fixed
 
-### W5. No rate limiting on any endpoint
-- **ASVS:** V11.1.1
-- **Files:** `web/functions/api/token.ts`, `web/functions/api/android-callback.ts`
-- **Issue:** Zero rate limiting. The token proxy could be abused to exhaust Google API quotas.
-- **Fix:** Add Cloudflare rate limiting rules or implement in-worker throttling.
-- [ ] Fixed
-
 ### W6. Missing security response headers
 - **ASVS:** V14.4.1-V14.4.7
 - **Files:** `web/functions/api/token.ts:74`, `web/functions/api/android-callback.ts:62`
@@ -172,6 +167,17 @@ Pre-publication security review based on OWASP ASVS 4.0 (the framework used by G
 - **Issue:** Full Google error responses are forwarded to the client, potentially leaking internal details.
 - **Fix:** Map Google errors to sanitized responses.
 - [x] Fixed
+
+---
+
+## Out of CASA Scope (Web-Only)
+
+### W5. No rate limiting on any endpoint
+- **ASVS:** V11.1.1
+- **Files:** `web/functions/api/token.ts`, `web/functions/api/android-callback.ts`
+- **Issue:** Zero rate limiting. The token proxy could be abused to exhaust Google API quotas.
+- **Fix:** Add Cloudflare rate limiting rules or implement in-worker throttling.
+- [ ] Fixed
 
 ### W8. Token passed in URL query string (service worker)
 - **ASVS:** V3.1.1
@@ -220,8 +226,11 @@ These will receive positive marks in the CASA assessment:
 
 ### Nice to have (strengthens assessment):
 15. A12 - Proper release keystore
-16. A13 - Enable ProGuard/R8
-17. W5 - Rate limiting
-18. ~~W7 - Sanitize error responses~~ **DONE**
-19. ~~A9 - Gate error logging behind BuildConfig.DEBUG~~ **DONE**
-20. ~~A14 - Add google-services.json to .gitignore~~ **DONE**
+16. ~~A13 - Enable ProGuard/R8~~ **DONE**
+17. ~~W7 - Sanitize error responses~~ **DONE**
+18. ~~A9 - Gate error logging behind BuildConfig.DEBUG~~ **DONE**
+19. ~~A14 - Add google-services.json to .gitignore~~ **DONE**
+
+### Out of CASA scope (web-only):
+20. W5 - Rate limiting on worker endpoints
+21. W8 - Service worker token in URL query string
