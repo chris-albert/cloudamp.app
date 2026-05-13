@@ -7,6 +7,16 @@
       "slots": [
         { "name": "WEB", "port": 3049 }
       ]
+    },
+    {
+      "name": "emulator",
+      "description": "Emulator",
+      "command": "ANDROID_HOME=/opt/homebrew/share/android-commandlinetools /opt/homebrew/share/android-commandlinetools/emulator/emulator -avd cloudamp"
+    },
+    {
+      "name": "deploy app",
+      "description": "Deploy app",
+      "command": "cd android && ./gradlew installDebug"
     }
   ]
 }
