@@ -46,8 +46,17 @@ jobs:
         curl -L -o gradle/wrapper/gradle-wrapper.jar \
           https://raw.githubusercontent.com/gradle/gradle/v8.2.1/gradle/wrapper/gradle-wrapper.jar
 
-    - name: Build Debug APK
-      run: ./gradlew assembleDebug --stacktrace --no-daemon -PGOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}"
+    - name: Decode release keystore
+      run: echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > app/keystore/release.keystore
+
+    - name: Build Release APK
+      run: |
+        ./gradlew assembleRelease --stacktrace --no-daemon \
+          -PGOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}" \
+          -PRELEASE_KEYSTORE_PATH=keystore/release.keystore \
+          -PRELEASE_KEYSTORE_PASSWORD="${{ secrets.RELEASE_KEYSTORE_PASSWORD }}" \
+          -PRELEASE_KEY_ALIAS="${{ secrets.RELEASE_KEY_ALIAS }}" \
+          -PRELEASE_KEY_PASSWORD="${{ secrets.RELEASE_KEY_PASSWORD }}"
 
     - name: Get version info
       id: version
@@ -61,13 +70,13 @@ jobs:
     - name: Rename APK with version
       run: |
         VERSION_CODE="${{ steps.version.outputs.code }}"
-        cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/CloudAmp-v${VERSION_CODE}.apk
+        cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/CloudAmp-v${VERSION_CODE}.apk
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: CloudAmp-v${{ steps.version.outputs.code }}
-        path: android/app/build/outputs/apk/debug/CloudAmp-v${{ steps.version.outputs.code }}.apk
+        path: android/app/build/outputs/apk/release/CloudAmp-v${{ steps.version.outputs.code }}.apk
         retention-days: 30
 
     - name: Authenticate to Google Cloud
@@ -88,7 +97,7 @@ jobs:
           NOTES="$NOTES - ${{ github.event.head_commit.message }}"
         fi
         firebase appdistribution:distribute \
-          android/app/build/outputs/apk/debug/CloudAmp-v${{ steps.version.outputs.code }}.apk \
+          android/app/build/outputs/apk/release/CloudAmp-v${{ steps.version.outputs.code }}.apk \
           --app "${{ secrets.FIREBASE_APP_ID }}" \
           --groups "testers" \
           --release-notes "$NOTES" \
@@ -104,6 +113,6 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "**Download your CloudAmp APK from the Artifacts section above.**" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "This version can be installed over previous versions without uninstalling!" >> $GITHUB_STEP_SUMMARY
+        echo "**Build type:** Release (signed, minified)" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        ls -lh app/build/outputs/apk/debug/CloudAmp-v${{ steps.version.outputs.code }}.apk >> $GITHUB_STEP_SUMMARY
+        ls -lh app/build/outputs/apk/release/CloudAmp-v${{ steps.version.outputs.code }}.apk >> $GITHUB_STEP_SUMMARY
