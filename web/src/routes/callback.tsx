@@ -23,7 +23,7 @@ export function CallbackPage() {
     }
 
     handleCallback(code, state)
-      .then(() => navigate({ to: "/" }))
+      .then(() => navigate({ to: "/app" }))
       .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }, [navigate]);
 
@@ -33,7 +33,7 @@ export function CallbackPage() {
         <div className="text-red-400 text-lg font-medium">Authentication Failed</div>
         <p className="text-sm text-zinc-400">{error}</p>
         <button
-          onClick={() => navigate({ to: "/settings" })}
+          onClick={() => navigate({ to: "/app/settings" })}
           className="px-4 py-2 rounded-md bg-zinc-800 text-sm hover:bg-zinc-700 transition-colors"
         >
           Back to Settings
