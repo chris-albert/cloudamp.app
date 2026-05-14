@@ -65,6 +65,13 @@ class SavedQueuesManager private constructor(context: Context) {
         return try {
             val type = object : TypeToken<List<SavedQueue>>() {}.type
             val queues: List<SavedQueue> = gson.fromJson(json, type)
+            // Force-access nested DriveFile fields to surface any ClassCastException
+            // from Gson type erasure (e.g. LinkedTreeMap instead of DriveFile)
+            for (q in queues) {
+                if (q.driveFiles.isNotEmpty()) {
+                    q.driveFiles[0].id
+                }
+            }
             queues.sortedByDescending { it.lastPlayedAt }
         } catch (e: Exception) {
             e.printStackTrace()
