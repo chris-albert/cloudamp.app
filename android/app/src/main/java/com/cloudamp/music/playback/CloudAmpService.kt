@@ -849,18 +849,23 @@ class CloudAmpService : MediaBrowserServiceCompat() {
      * Always restores paused — the user presses play when ready.
      */
     private fun restorePlaybackState() {
-        val state = playbackStateStore.load() ?: return
-        Log.d(TAG, "Restoring playback state: ${state.provider} index=${state.currentIndex} pos=${state.currentPositionMs}ms")
+        try {
+            val state = playbackStateStore.load() ?: return
+            Log.d(TAG, "Restoring playback state: ${state.provider} index=${state.currentIndex} pos=${state.currentPositionMs}ms")
 
-        when (state.provider) {
-            com.cloudamp.music.models.SavedQueue.PROVIDER_GDRIVE -> {
-                if (state.driveFiles.isEmpty()) return
-                gdrivePlaybackManager.restoreFiles(state.driveFiles, state.currentIndex, state.currentPositionMs)
+            when (state.provider) {
+                com.cloudamp.music.models.SavedQueue.PROVIDER_GDRIVE -> {
+                    if (state.driveFiles.isEmpty()) return
+                    gdrivePlaybackManager.restoreFiles(state.driveFiles, state.currentIndex, state.currentPositionMs)
+                }
             }
-        }
 
-        // Clear persisted state after restore to avoid double-restores
-        playbackStateStore.clear()
+            // Clear persisted state after restore to avoid double-restores
+            playbackStateStore.clear()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to restore playback state, clearing corrupt data: ${e.message}")
+            playbackStateStore.clear()
+        }
     }
 
     /** Force-save on pause — user might not come back for a while. */

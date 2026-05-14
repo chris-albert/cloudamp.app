@@ -87,6 +87,12 @@ class PlaybackStateStore private constructor(context: Context) {
         return try {
             val state = gson.fromJson(json, LastPlaybackState::class.java)
             if (state == null) return null
+            // Force-access driveFiles elements to surface any ClassCastException
+            // from Gson type erasure (e.g. LinkedTreeMap instead of DriveFile)
+            // before the caller tries to use them.
+            if (state.driveFiles.isNotEmpty()) {
+                state.driveFiles[0].id
+            }
             // Skip restore if state is older than 24 hours
             if (System.currentTimeMillis() - state.savedAt > MAX_AGE_MS) {
                 Log.d(TAG, "Playback state too old (${(System.currentTimeMillis() - state.savedAt) / 3600000}h), skipping restore")
