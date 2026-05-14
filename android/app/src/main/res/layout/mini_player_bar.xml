@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/miniPlayerBar"
+    android:layout_width="match_parent"
+    android:layout_height="48dp"
+    android:background="#1a1a1a"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingHorizontal="8dp"
+    android:visibility="gone">
+
+    <!-- Track info (clickable area to open Now Playing) -->
+    <LinearLayout
+        android:id="@+id/miniPlayerTrackInfo"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="center_vertical"
+        android:paddingEnd="8dp">
+
+        <TextView
+            android:id="@+id/miniPlayerTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="@color/winamp_text"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:maxLines="1"
+            android:ellipsize="marquee"
+            android:marqueeRepeatLimit="marquee_forever"
+            android:scrollHorizontally="true"
+            android:focusable="true"
+            android:focusableInTouchMode="true" />
+
+        <TextView
+            android:id="@+id/miniPlayerArtist"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="@color/winamp_display_text"
+            android:textSize="10sp"
+            android:fontFamily="monospace"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+    </LinearLayout>
+
+    <!-- Play/Pause Button -->
+    <ImageButton
+        android:id="@+id/miniPlayerPlayPause"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:src="@drawable/ic_play"
+        android:background="#2a2a2a"
+        android:scaleType="centerInside"
+        android:contentDescription="Play/Pause"
+        android:padding="8dp" />
+
+</LinearLayout>

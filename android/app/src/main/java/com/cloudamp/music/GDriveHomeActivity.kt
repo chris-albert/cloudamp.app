@@ -23,6 +23,7 @@ import com.cloudamp.music.cache.LibraryScanManager
 import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.ui.GDriveHomeAdapter
+import com.cloudamp.music.ui.MiniPlayerBar
 import com.google.android.material.navigation.NavigationView
 import com.google.firebase.appdistribution.FirebaseAppDistribution
 import kotlinx.coroutines.*
@@ -46,6 +47,7 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
     private lateinit var emptyTextView: TextView
     private lateinit var settingsButton: Button
     private var allAlbumsCache: List<GDriveAlbum> = emptyList()
+    private lateinit var miniPlayerBar: MiniPlayerBar
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,12 +61,21 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
         setupDrawer()
         setupRecyclerViews()
         setupEmptyState()
+
+        miniPlayerBar = MiniPlayerBar(this, scope)
+        miniPlayerBar.attach()
     }
 
     override fun onResume() {
         super.onResume()
         LibraryScanManager.resumePrefetchIfNeeded(this)
         checkAuthAndLoad()
+        miniPlayerBar.startUpdates()
+    }
+
+    override fun onPause() {
+        miniPlayerBar.stopUpdates()
+        super.onPause()
     }
 
     private fun setupDrawer() {

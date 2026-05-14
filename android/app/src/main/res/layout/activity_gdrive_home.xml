@@ -12,10 +12,16 @@
         android:layout_height="match_parent"
         android:background="@color/winamp_background">
 
-        <ScrollView
-            android:id="@+id/contentScrollView"
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent">
+            android:layout_height="match_parent"
+            android:orientation="vertical">
+
+            <ScrollView
+                android:id="@+id/contentScrollView"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -100,7 +106,11 @@
 
             </LinearLayout>
 
-        </ScrollView>
+            </ScrollView>
+
+            <include layout="@layout/mini_player_bar" />
+
+        </LinearLayout>
 
         <!-- Empty / Auth Required State -->
         <LinearLayout

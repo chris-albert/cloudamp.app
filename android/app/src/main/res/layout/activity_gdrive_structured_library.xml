@@ -121,6 +121,8 @@
 
             </FrameLayout>
 
+            <include layout="@layout/mini_player_bar" />
+
         </LinearLayout>
 
         <!-- Loading Overlay -->
