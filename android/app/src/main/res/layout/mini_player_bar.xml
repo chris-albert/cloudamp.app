@@ -2,11 +2,11 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/miniPlayerBar"
     android:layout_width="match_parent"
-    android:layout_height="48dp"
+    android:layout_height="56dp"
     android:background="#1a1a1a"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:paddingHorizontal="8dp"
+    android:paddingHorizontal="16dp"
     android:visibility="gone">
 
     <!-- Track info (clickable area to open Now Playing) -->
@@ -17,7 +17,7 @@
         android:layout_weight="1"
         android:orientation="vertical"
         android:gravity="center_vertical"
-        android:paddingEnd="8dp">
+        android:paddingEnd="12dp">
 
         <TextView
             android:id="@+id/miniPlayerTitle"
