@@ -19,6 +19,7 @@ import com.cloudamp.music.cache.SavedQueuesManager
 import com.cloudamp.music.models.SavedQueue
 import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.GDrivePlaybackManager
+import com.cloudamp.music.ui.MiniPlayerBar
 import com.cloudamp.music.ui.SavedQueuesAdapter
 import com.google.android.material.navigation.NavigationView
 import kotlinx.coroutines.*
@@ -35,6 +36,7 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: SavedQueuesAdapter
     private lateinit var emptyContainer: LinearLayout
+    private lateinit var miniPlayerBar: MiniPlayerBar
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,6 +46,9 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
 
         setupDrawer()
         setupRecyclerView()
+
+        miniPlayerBar = MiniPlayerBar(this, scope)
+        miniPlayerBar.attach()
     }
 
     override fun onResume() {
@@ -51,6 +56,12 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
         // Persist live playback position so the list shows the current track
         savedQueuesManager.saveActiveQueuePosition()
         loadSavedQueues()
+        miniPlayerBar.startUpdates()
+    }
+
+    override fun onPause() {
+        miniPlayerBar.stopUpdates()
+        super.onPause()
     }
 
     private fun setupDrawer() {

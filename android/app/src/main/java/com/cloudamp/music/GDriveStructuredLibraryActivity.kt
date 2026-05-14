@@ -34,6 +34,7 @@ import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.ui.AlphabetSidebarView
 import com.cloudamp.music.ui.GDriveStructuredLibraryAdapter
+import com.cloudamp.music.ui.MiniPlayerBar
 import com.google.android.material.navigation.NavigationView
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collect
@@ -65,6 +66,7 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
     private var isSearchVisible = false
 
     private var hasLoadedContent = false
+    private lateinit var miniPlayerBar: MiniPlayerBar
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -79,6 +81,9 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
         setupEmptyState()
         setupSearchBar()
         observeScanState()
+
+        miniPlayerBar = MiniPlayerBar(this, scope)
+        miniPlayerBar.attach()
     }
 
     private fun setupDrawer() {
@@ -156,6 +161,12 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
         // Kick a prefetch-only job here so any covers still missing get
         // filled in when the user returns to the library.
         LibraryScanManager.resumePrefetchIfNeeded(this)
+        miniPlayerBar.startUpdates()
+    }
+
+    override fun onPause() {
+        miniPlayerBar.stopUpdates()
+        super.onPause()
     }
 
     private fun checkAuthAndLoad() {

@@ -37,6 +37,8 @@
                 android:layout_weight="1"
                 android:background="@color/winamp_background"/>
 
+            <include layout="@layout/mini_player_bar" />
+
         </LinearLayout>
 
         <!-- Empty state -->

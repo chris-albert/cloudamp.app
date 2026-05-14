@@ -20,6 +20,7 @@ import com.cloudamp.music.cache.MediaCache
 import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.ui.CachedAlbumsAdapter
+import com.cloudamp.music.ui.MiniPlayerBar
 import com.google.android.material.navigation.NavigationView
 import kotlinx.coroutines.*
 
@@ -35,6 +36,7 @@ class CachedAlbumsActivity : AppCompatActivity(), NavigationView.OnNavigationIte
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: CachedAlbumsAdapter
     private lateinit var emptyContainer: LinearLayout
+    private lateinit var miniPlayerBar: MiniPlayerBar
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,6 +47,19 @@ class CachedAlbumsActivity : AppCompatActivity(), NavigationView.OnNavigationIte
         setupDrawer()
         setupRecyclerView()
         loadCachedAlbums()
+
+        miniPlayerBar = MiniPlayerBar(this, scope)
+        miniPlayerBar.attach()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        miniPlayerBar.startUpdates()
+    }
+
+    override fun onPause() {
+        miniPlayerBar.stopUpdates()
+        super.onPause()
     }
 
     private fun setupDrawer() {

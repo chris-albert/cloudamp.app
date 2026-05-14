@@ -27,6 +27,7 @@ import com.cloudamp.music.auth.GoogleDriveAuthManager
 import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.ui.GDriveAdapter
+import com.cloudamp.music.ui.MiniPlayerBar
 import com.cloudamp.music.util.MusicFilenameParser
 import com.google.android.material.navigation.NavigationView
 import kotlinx.coroutines.*
@@ -56,6 +57,7 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
 
     // Navigation stack: pairs of (folderId, folderName)
     private val folderStack = mutableListOf<Pair<String, String>>()
+    private lateinit var miniPlayerBar: MiniPlayerBar
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,6 +70,9 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
         setupRecyclerView()
         setupEmptyState()
         setupSearchBar()
+
+        miniPlayerBar = MiniPlayerBar(this, scope)
+        miniPlayerBar.attach()
     }
 
     private fun setupDrawer() {
@@ -125,6 +130,12 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
     override fun onResume() {
         super.onResume()
         checkAuthAndLoad()
+        miniPlayerBar.startUpdates()
+    }
+
+    override fun onPause() {
+        miniPlayerBar.stopUpdates()
+        super.onPause()
     }
 
     private fun checkAuthAndLoad() {
