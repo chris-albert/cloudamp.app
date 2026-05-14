@@ -16,7 +16,7 @@
     {
       "name": "deploy app",
       "description": "Deploy app",
-      "command": "cd android && ./gradlew installDebug"
+      "command": "ANDROID_HOME=/opt/homebrew/share/android-commandlinetools cd android && ./gradlew installDebug"
     }
   ]
 }
