@@ -5,7 +5,9 @@ import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
@@ -14,6 +16,7 @@ import androidx.drawerlayout.widget.DrawerLayout
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.cloudamp.music.api.GDriveAlbum
+import com.cloudamp.music.auth.GoogleDriveAuthManager
 import com.cloudamp.music.cache.GDriveLibraryCache
 import com.cloudamp.music.cache.GDrivePlaybackHistory
 import com.cloudamp.music.cache.LibraryScanManager
@@ -27,6 +30,7 @@ import kotlinx.coroutines.*
 class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelectedListener {
 
     private lateinit var libraryCache: GDriveLibraryCache
+    private lateinit var authManager: GoogleDriveAuthManager
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private lateinit var drawerLayout: DrawerLayout
@@ -37,6 +41,10 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
     private lateinit var recentAddedAdapter: GDriveHomeAdapter
     private lateinit var discoverAdapter: GDriveHomeAdapter
     private lateinit var loadingContainer: LinearLayout
+    private lateinit var contentScrollView: View
+    private lateinit var emptyContainer: LinearLayout
+    private lateinit var emptyTextView: TextView
+    private lateinit var settingsButton: Button
     private var allAlbumsCache: List<GDriveAlbum> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -44,17 +52,19 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
         setContentView(R.layout.activity_gdrive_home)
 
         libraryCache = GDriveLibraryCache.getInstance(this)
+        authManager = GoogleDriveAuthManager(this)
 
         FirebaseAppDistribution.getInstance().updateIfNewReleaseAvailable()
 
         setupDrawer()
         setupRecyclerViews()
-        loadContent()
+        setupEmptyState()
     }
 
     override fun onResume() {
         super.onResume()
         LibraryScanManager.resumePrefetchIfNeeded(this)
+        checkAuthAndLoad()
     }
 
     private fun setupDrawer() {
@@ -107,15 +117,46 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
         }
     }
 
+    private fun setupEmptyState() {
+        contentScrollView = findViewById(R.id.contentScrollView)
+        emptyContainer = findViewById(R.id.emptyContainer)
+        emptyTextView = findViewById(R.id.emptyTextView)
+        settingsButton = findViewById(R.id.settingsButton)
+
+        settingsButton.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
+    }
+
+    private fun checkAuthAndLoad() {
+        if (!authManager.hasAccessToken()) {
+            showEmptyState("Connect Google Drive in Settings\nto browse your music library")
+        } else if (libraryCache.getRootFolderId() == null) {
+            showEmptyState("Configure your music folder\nin Settings to get started")
+        } else if (!libraryCache.hasFullCache()) {
+            showEmptyState("Scan your music library\nin Settings to get started")
+        } else {
+            hideEmptyState()
+            loadContent()
+        }
+    }
+
+    private fun showEmptyState(message: String) {
+        emptyContainer.visibility = View.VISIBLE
+        emptyTextView.text = message
+        contentScrollView.visibility = View.GONE
+    }
+
+    private fun hideEmptyState() {
+        emptyContainer.visibility = View.GONE
+        contentScrollView.visibility = View.VISIBLE
+    }
+
     private fun showLoading(show: Boolean) {
         loadingContainer.visibility = if (show) View.VISIBLE else View.GONE
     }
 
     private fun loadContent() {
-        if (!libraryCache.hasFullCache()) {
-            // No cache available, nothing to show
-            return
-        }
 
         showLoading(true)
         scope.launch {

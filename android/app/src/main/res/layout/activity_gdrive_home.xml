@@ -13,6 +13,7 @@
         android:background="@color/winamp_background">
 
         <ScrollView
+            android:id="@+id/contentScrollView"
             android:layout_width="match_parent"
             android:layout_height="match_parent">
 
@@ -100,6 +101,47 @@
             </LinearLayout>
 
         </ScrollView>
+
+        <!-- Empty / Auth Required State -->
+        <LinearLayout
+            android:id="@+id/emptyContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@color/winamp_background"
+            android:visibility="gone"
+            android:padding="32dp">
+
+            <ImageView
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:src="@drawable/ic_gdrive"
+                app:tint="@color/winamp_display_text"
+                android:layout_marginBottom="16dp"/>
+
+            <TextView
+                android:id="@+id/emptyTextView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Connect Google Drive in Settings\nto browse your music library"
+                android:textColor="@color/winamp_display_text"
+                android:textSize="14sp"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:layout_marginBottom="24dp"/>
+
+            <Button
+                android:id="@+id/settingsButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="OPEN SETTINGS"
+                android:textColor="@color/winamp_text"
+                android:background="@color/winamp_button"
+                android:fontFamily="monospace"
+                android:paddingHorizontal="24dp"/>
+
+        </LinearLayout>
 
         <!-- Loading Overlay -->
         <LinearLayout
