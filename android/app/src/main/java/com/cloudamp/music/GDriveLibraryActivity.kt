@@ -58,8 +58,10 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
     // Navigation stack: pairs of (folderId, folderName)
     private val folderStack = mutableListOf<Pair<String, String>>()
     private lateinit var miniPlayerBar: MiniPlayerBar
+    private lateinit var appliedThemeId: String
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        appliedThemeId = ThemeManager.applyTheme(this)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_gdrive_library)
 
@@ -129,6 +131,7 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
 
     override fun onResume() {
         super.onResume()
+        ThemeManager.recreateIfThemeChanged(this, appliedThemeId)
         checkAuthAndLoad()
         miniPlayerBar.startUpdates()
     }

@@ -61,6 +61,7 @@ class NowPlayingActivity : AppCompatActivity() {
     private var currentPosition = 0L
     private var totalDuration = 0L
     private var lastScrolledIndex = -1
+    private lateinit var appliedThemeId: String
 
     private val updateHandler = Handler(Looper.getMainLooper())
     private val updateRunnable = object : Runnable {
@@ -71,6 +72,7 @@ class NowPlayingActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        appliedThemeId = ThemeManager.applyTheme(this)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_now_playing)
 
@@ -136,8 +138,8 @@ class NowPlayingActivity : AppCompatActivity() {
 
         val editText = EditText(this).apply {
             setText(defaultName)
-            setTextColor(resources.getColor(R.color.winamp_text, null))
-            setBackgroundColor(resources.getColor(R.color.winamp_background, null))
+            setTextColor(ThemeManager.resolveColor(this@NowPlayingActivity, R.attr.caText))
+            setBackgroundColor(ThemeManager.resolveColor(this@NowPlayingActivity, R.attr.caBackground))
             setPadding(48, 32, 48, 32)
             setSelection(text.length)
         }
@@ -349,6 +351,7 @@ class NowPlayingActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        ThemeManager.recreateIfThemeChanged(this, appliedThemeId)
         startMiniVisualizer()
     }
 

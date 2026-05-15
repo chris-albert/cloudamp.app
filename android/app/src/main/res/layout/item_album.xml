@@ -7,7 +7,7 @@
     android:paddingRight="8dp"
     android:paddingTop="8dp"
     android:paddingBottom="8dp"
-    android:background="@color/winamp_display"
+    android:background="?attr/caDisplay"
     android:clickable="true"
     android:focusable="true">
 
@@ -17,7 +17,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="center_vertical"
         android:text="▶"
-        android:textColor="@color/winamp_text"
+        android:textColor="?attr/caText"
         android:textSize="12sp"
         android:fontFamily="monospace"/>
 
@@ -41,7 +41,7 @@
             android:id="@+id/albumNameTextView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/winamp_text"
+            android:textColor="?attr/caText"
             android:textSize="14sp"
             android:fontFamily="monospace"
             android:textStyle="bold"
@@ -52,7 +52,7 @@
             android:id="@+id/albumArtistTextView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/winamp_display_text"
+            android:textColor="?attr/caDisplayText"
             android:textSize="12sp"
             android:fontFamily="monospace"
             android:maxLines="1"
@@ -72,7 +72,7 @@
             android:id="@+id/albumReleaseDateTextView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/winamp_display_text"
+            android:textColor="?attr/caDisplayText"
             android:textSize="12sp"
             android:fontFamily="monospace"
             android:gravity="end"/>
@@ -81,7 +81,7 @@
             android:id="@+id/albumTrackCountTextView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/winamp_display_text"
+            android:textColor="?attr/caDisplayText"
             android:textSize="10sp"
             android:fontFamily="monospace"
             android:layout_marginTop="2dp"

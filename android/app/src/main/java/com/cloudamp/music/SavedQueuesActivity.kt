@@ -37,8 +37,10 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
     private lateinit var adapter: SavedQueuesAdapter
     private lateinit var emptyContainer: LinearLayout
     private lateinit var miniPlayerBar: MiniPlayerBar
+    private lateinit var appliedThemeId: String
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        appliedThemeId = ThemeManager.applyTheme(this)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_saved_queues)
 
@@ -53,6 +55,7 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
 
     override fun onResume() {
         super.onResume()
+        ThemeManager.recreateIfThemeChanged(this, appliedThemeId)
         // Persist live playback position so the list shows the current track
         savedQueuesManager.saveActiveQueuePosition()
         loadSavedQueues()
@@ -153,8 +156,8 @@ class SavedQueuesActivity : AppCompatActivity(), NavigationView.OnNavigationItem
     private fun showRenameDialog(queue: SavedQueue) {
         val editText = EditText(this).apply {
             setText(queue.name)
-            setTextColor(resources.getColor(R.color.winamp_text, null))
-            setBackgroundColor(resources.getColor(R.color.winamp_background, null))
+            setTextColor(ThemeManager.resolveColor(this@SavedQueuesActivity, R.attr.caText))
+            setBackgroundColor(ThemeManager.resolveColor(this@SavedQueuesActivity, R.attr.caBackground))
             setPadding(48, 32, 48, 32)
             setSelection(text.length)
         }

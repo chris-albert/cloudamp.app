@@ -2,14 +2,14 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/winamp_background"
+    android:background="?attr/caBackground"
     android:orientation="vertical">
 
     <!-- Winamp Main Player Window -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#303030"
+        android:background="?attr/caPlayerFrame"
         android:orientation="vertical"
         android:padding="2dp">
 
@@ -17,11 +17,11 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#1a1a1a"
+            android:background="?attr/caHeader"
             android:padding="4dp"
             android:layout_margin="4dp"
             android:text="CLOUDAMP"
-            android:textColor="@color/winamp_text"
+            android:textColor="?attr/caText"
             android:textSize="10sp"
             android:fontFamily="monospace"
             android:textStyle="bold"/>
@@ -30,7 +30,7 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#000000"
+            android:background="?attr/caDisplay"
             android:orientation="vertical"
             android:padding="8dp"
             android:layout_margin="4dp">
@@ -47,7 +47,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="0:00"
-                    android:textColor="@color/winamp_text"
+                    android:textColor="?attr/caText"
                     android:textSize="32sp"
                     android:fontFamily="monospace"
                     android:textStyle="bold"
@@ -60,7 +60,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Crusher-P - Echo (3:58)"
-                android:textColor="@color/winamp_text"
+                android:textColor="?attr/caText"
                 android:textSize="12sp"
                 android:fontFamily="monospace"
                 android:layout_marginTop="8dp"
@@ -76,7 +76,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Artist: Crusher-P"
-                android:textColor="@color/winamp_display_text"
+                android:textColor="?attr/caDisplayText"
                 android:textSize="10sp"
                 android:fontFamily="monospace"
                 android:layout_marginTop="2dp"/>
@@ -86,7 +86,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Album: Echo"
-                android:textColor="@color/winamp_display_text"
+                android:textColor="?attr/caDisplayText"
                 android:textSize="10sp"
                 android:fontFamily="monospace"
                 android:layout_marginTop="2dp"/>
@@ -103,7 +103,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="320 kbps"
-                    android:textColor="@color/winamp_display_text"
+                    android:textColor="?attr/caDisplayText"
                     android:textSize="9sp"
                     android:fontFamily="monospace"/>
 
@@ -113,7 +113,7 @@
                     android:layout_weight="1"
                     android:gravity="center"
                     android:text="44.1 kHz"
-                    android:textColor="@color/winamp_display_text"
+                    android:textColor="?attr/caDisplayText"
                     android:textSize="9sp"
                     android:fontFamily="monospace"/>
 
@@ -124,7 +124,7 @@
                     android:layout_weight="1"
                     android:gravity="end"
                     android:text="3:58"
-                    android:textColor="@color/winamp_display_text"
+                    android:textColor="?attr/caDisplayText"
                     android:textSize="9sp"
                     android:fontFamily="monospace"/>
             </LinearLayout>
@@ -135,9 +135,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="20dp"
                 android:layout_marginTop="8dp"
-                android:progressTint="@color/winamp_text"
-                android:thumbTint="@color/winamp_text"
-                android:progressBackgroundTint="#003300"
+                android:progressTint="?attr/caText"
+                android:thumbTint="?attr/caText"
+                android:progressBackgroundTint="?attr/caSeekbarBackground"
                 android:max="100"/>
         </LinearLayout>
 
@@ -145,7 +145,7 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#1a1a1a"
+            android:background="?attr/caHeader"
             android:orientation="horizontal"
             android:gravity="center"
             android:padding="8dp"
@@ -156,7 +156,7 @@
                 android:layout_width="40dp"
                 android:layout_height="40dp"
                 android:src="@drawable/ic_previous"
-                android:background="#2a2a2a"
+                android:background="?attr/caButton"
                 android:scaleType="centerInside"
                 android:contentDescription="Previous"
                 android:layout_margin="2dp"
@@ -167,7 +167,7 @@
                 android:layout_width="48dp"
                 android:layout_height="40dp"
                 android:src="@drawable/ic_play"
-                android:background="#2a2a2a"
+                android:background="?attr/caButton"
                 android:scaleType="centerInside"
                 android:contentDescription="Play/Pause"
                 android:layout_margin="2dp"
@@ -178,7 +178,7 @@
                 android:layout_width="40dp"
                 android:layout_height="40dp"
                 android:src="@drawable/ic_stop"
-                android:background="#2a2a2a"
+                android:background="?attr/caButton"
                 android:scaleType="centerInside"
                 android:contentDescription="Stop"
                 android:layout_margin="2dp"
@@ -189,7 +189,7 @@
                 android:layout_width="40dp"
                 android:layout_height="40dp"
                 android:src="@drawable/ic_next"
-                android:background="#2a2a2a"
+                android:background="?attr/caButton"
                 android:scaleType="centerInside"
                 android:contentDescription="Next"
                 android:layout_margin="2dp"
@@ -200,7 +200,7 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#1a1a1a"
+            android:background="?attr/caHeader"
             android:orientation="horizontal"
             android:gravity="center_vertical"
             android:padding="4dp"
@@ -211,7 +211,7 @@
                 android:layout_width="32dp"
                 android:layout_height="32dp"
                 android:src="@drawable/ic_shuffle"
-                android:background="#2a2a2a"
+                android:background="?attr/caButton"
                 android:scaleType="centerInside"
                 android:contentDescription="Shuffle"
                 android:layout_margin="2dp"
@@ -222,7 +222,7 @@
                 android:layout_width="32dp"
                 android:layout_height="32dp"
                 android:src="@drawable/ic_repeat"
-                android:background="#2a2a2a"
+                android:background="?attr/caButton"
                 android:scaleType="centerInside"
                 android:contentDescription="Repeat"
                 android:layout_margin="2dp"
@@ -234,7 +234,7 @@
                 android:layout_weight="1"
                 android:gravity="center"
                 android:text="STEREO"
-                android:textColor="@color/winamp_text"
+                android:textColor="?attr/caText"
                 android:textSize="9sp"
                 android:fontFamily="monospace"/>
         </LinearLayout>
@@ -245,7 +245,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:background="#303030"
+        android:background="?attr/caPlayerFrame"
         android:orientation="vertical"
         android:padding="8dp"
         android:layout_marginTop="8dp">
@@ -254,7 +254,7 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#1a1a1a"
+            android:background="?attr/caHeader"
             android:orientation="horizontal"
             android:gravity="center_vertical"
             android:padding="4dp">
@@ -265,7 +265,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="PLAYLIST"
-                android:textColor="@color/winamp_text"
+                android:textColor="?attr/caText"
                 android:textSize="10sp"
                 android:fontFamily="monospace"
                 android:textStyle="bold"/>
@@ -275,7 +275,7 @@
                 android:layout_width="28dp"
                 android:layout_height="28dp"
                 android:src="@drawable/ic_save"
-                android:background="#2a2a2a"
+                android:background="?attr/caButton"
                 android:scaleType="centerInside"
                 android:contentDescription="Save Queue"
                 android:padding="4dp"/>
@@ -287,7 +287,7 @@
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:background="#000000"
+            android:background="?attr/caBackground"
             android:layout_marginTop="4dp"/>
     </LinearLayout>
 
@@ -295,7 +295,7 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="160dp"
-        android:background="#303030"
+        android:background="?attr/caPlayerFrame"
         android:orientation="vertical"
         android:padding="8dp"
         android:layout_marginTop="8dp">
@@ -304,7 +304,7 @@
             android:id="@+id/miniEqView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="#000000"
+            android:background="?attr/caDisplay"
             android:clickable="true"
             android:focusable="true"/>
     </LinearLayout>

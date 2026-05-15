@@ -67,8 +67,10 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
 
     private var hasLoadedContent = false
     private lateinit var miniPlayerBar: MiniPlayerBar
+    private lateinit var appliedThemeId: String
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        appliedThemeId = ThemeManager.applyTheme(this)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_gdrive_structured_library)
 
@@ -153,6 +155,7 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
 
     override fun onResume() {
         super.onResume()
+        ThemeManager.recreateIfThemeChanged(this, appliedThemeId)
         SettingsActivity.onGDriveLibraryReloadRequested = {
             reloadLibrary()
         }
@@ -503,7 +506,7 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
 
     private class LibraryDividerDecoration(context: Context) : RecyclerView.ItemDecoration() {
         private val paint = Paint().apply {
-            color = context.getColor(R.color.winamp_section_header)
+            color = ThemeManager.resolveColor(context, R.attr.caSectionHeader)
             strokeWidth = (context.resources.displayMetrics.density * 1f)
         }
 

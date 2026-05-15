@@ -4,13 +4,13 @@
     android:id="@+id/drawerLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/winamp_background">
+    android:background="?attr/caBackground">
 
     <!-- Main Content -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@color/winamp_background">
+        android:background="?attr/caBackground">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -22,11 +22,11 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="▶ SAVED QUEUES"
-                android:textColor="@color/winamp_text"
+                android:textColor="?attr/caText"
                 android:textSize="14sp"
                 android:fontFamily="monospace"
                 android:textStyle="bold"
-                android:background="@color/winamp_section_header"
+                android:background="?attr/caSectionHeader"
                 android:padding="8dp"/>
 
             <!-- RecyclerView for saved queues -->
@@ -35,7 +35,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1"
-                android:background="@color/winamp_background"/>
+                android:background="?attr/caBackground"/>
 
             <include layout="@layout/mini_player_bar" />
 
@@ -48,14 +48,14 @@
             android:layout_height="match_parent"
             android:orientation="vertical"
             android:gravity="center"
-            android:background="@color/winamp_background"
+            android:background="?attr/caBackground"
             android:visibility="gone">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="No saved queues"
-                android:textColor="@color/winamp_text"
+                android:textColor="?attr/caText"
                 android:textSize="16sp"
                 android:fontFamily="monospace" />
 
@@ -63,7 +63,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Play some music, then save the queue\nfrom the Now Playing screen."
-                android:textColor="@color/winamp_display_text"
+                android:textColor="?attr/caDisplayText"
                 android:textSize="12sp"
                 android:fontFamily="monospace"
                 android:gravity="center"
@@ -79,11 +79,11 @@
         android:layout_width="wrap_content"
         android:layout_height="match_parent"
         android:layout_gravity="start"
-        android:background="@color/winamp_header"
+        android:background="?attr/caHeader"
         app:headerLayout="@layout/nav_header"
         app:menu="@menu/nav_drawer_menu"
-        app:itemTextColor="@color/winamp_text"
-        app:itemIconTint="@color/winamp_text"
+        app:itemTextColor="?attr/caText"
+        app:itemIconTint="?attr/caText"
         app:subheaderTextAppearance="@style/CloudAmpNavSubheader"/>
 
 </androidx.drawerlayout.widget.DrawerLayout>

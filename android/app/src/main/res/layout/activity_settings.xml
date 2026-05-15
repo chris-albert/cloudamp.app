@@ -2,13 +2,50 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/winamp_background">
+    android:background="?attr/caBackground">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:padding="16dp">
+
+        <!-- Skin Section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="SKIN"
+            android:textColor="?attr/caText"
+            android:textSize="20sp"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:id="@+id/currentSkinText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Current: Classic Green"
+            android:textColor="?attr/caDisplayText"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="8dp"/>
+
+        <Button
+            android:id="@+id/changeSkinButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="CHANGE SKIN"
+            android:textColor="?attr/caText"
+            android:background="?attr/caButton"
+            android:fontFamily="monospace"/>
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="2dp"
+            android:background="?attr/caText"
+            android:layout_marginVertical="16dp"/>
 
         <!-- Google Drive Section Header -->
         <LinearLayout
@@ -28,7 +65,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="GOOGLE DRIVE"
-                android:textColor="@color/winamp_text"
+                android:textColor="?attr/caText"
                 android:textSize="20sp"
                 android:fontFamily="monospace"
                 android:textStyle="bold"/>
@@ -40,8 +77,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="LOGIN WITH GOOGLE DRIVE"
-            android:textColor="@color/winamp_text"
-            android:background="@color/winamp_button"
+            android:textColor="?attr/caText"
+            android:background="?attr/caButton"
             android:fontFamily="monospace"
             android:layout_marginBottom="8dp"/>
 
@@ -50,8 +87,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="CLEAR GOOGLE DRIVE"
-            android:textColor="@color/winamp_text"
-            android:background="@color/winamp_button"
+            android:textColor="?attr/caText"
+            android:background="?attr/caButton"
             android:fontFamily="monospace"
             android:layout_marginBottom="8dp"/>
 
@@ -68,7 +105,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="\nConnect your Google Drive to stream\nyour personal music library."
-            android:textColor="@color/winamp_display_text"
+            android:textColor="?attr/caDisplayText"
             android:textSize="12sp"
             android:fontFamily="monospace"
             android:layout_marginTop="16dp"/>
@@ -77,7 +114,7 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="2dp"
-            android:background="@color/winamp_text"
+            android:background="?attr/caText"
             android:layout_marginVertical="16dp"/>
 
         <!-- GDrive Music Library Section -->
@@ -85,7 +122,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="GDrive Music Library"
-            android:textColor="@color/winamp_text"
+            android:textColor="?attr/caText"
             android:textSize="18sp"
             android:fontFamily="monospace"
             android:textStyle="bold"
@@ -96,7 +133,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Music root: Not set"
-            android:textColor="@color/winamp_display_text"
+            android:textColor="?attr/caDisplayText"
             android:textSize="12sp"
             android:fontFamily="monospace"
             android:layout_marginBottom="8dp"/>
@@ -106,8 +143,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="BROWSE FOR MUSIC FOLDER"
-            android:textColor="@color/winamp_text"
-            android:background="@color/winamp_button"
+            android:textColor="?attr/caText"
+            android:background="?attr/caButton"
             android:fontFamily="monospace"
             android:layout_marginBottom="8dp"/>
 
@@ -116,7 +153,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Last loaded: Never"
-            android:textColor="@color/winamp_display_text"
+            android:textColor="?attr/caDisplayText"
             android:textSize="12sp"
             android:fontFamily="monospace"
             android:layout_marginBottom="4dp"/>
@@ -125,7 +162,7 @@
             android:id="@+id/gdriveLibraryStatsText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/winamp_display_text"
+            android:textColor="?attr/caDisplayText"
             android:textSize="12sp"
             android:fontFamily="monospace"
             android:layout_marginBottom="12dp"
@@ -136,15 +173,15 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="RELOAD GDRIVE LIBRARY"
-            android:textColor="@color/winamp_text"
-            android:background="@color/winamp_button"
+            android:textColor="?attr/caText"
+            android:background="?attr/caButton"
             android:fontFamily="monospace"/>
 
         <TextView
             android:id="@+id/gdriveScanStatusText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/winamp_display_text"
+            android:textColor="?attr/caDisplayText"
             android:textSize="12sp"
             android:fontFamily="monospace"
             android:layout_marginTop="8dp"
@@ -163,7 +200,7 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="2dp"
-            android:background="@color/winamp_text"
+            android:background="?attr/caText"
             android:layout_marginVertical="16dp"/>
 
         <!-- Streaming Cache Section -->
@@ -171,7 +208,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Streaming Cache"
-            android:textColor="@color/winamp_text"
+            android:textColor="?attr/caText"
             android:textSize="18sp"
             android:fontFamily="monospace"
             android:textStyle="bold"
@@ -182,7 +219,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="0 B / 1.00 GB"
-            android:textColor="@color/winamp_display_text"
+            android:textColor="?attr/caDisplayText"
             android:textSize="12sp"
             android:fontFamily="monospace"
             android:layout_marginBottom="4dp"/>
@@ -201,7 +238,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="0 tracks cached"
-            android:textColor="@color/winamp_display_text"
+            android:textColor="?attr/caDisplayText"
             android:textSize="12sp"
             android:fontFamily="monospace"
             android:layout_marginBottom="8dp"/>
@@ -211,7 +248,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Max size: 1 GB"
-            android:textColor="@color/winamp_display_text"
+            android:textColor="?attr/caDisplayText"
             android:textSize="12sp"
             android:fontFamily="monospace"
             android:layout_marginBottom="4dp"/>
@@ -221,8 +258,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="CHANGE MAX SIZE"
-            android:textColor="@color/winamp_text"
-            android:background="@color/winamp_button"
+            android:textColor="?attr/caText"
+            android:background="?attr/caButton"
             android:fontFamily="monospace"
             android:layout_marginBottom="8dp"/>
 
@@ -231,8 +268,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="CLEAR STREAMING CACHE"
-            android:textColor="@color/winamp_text"
-            android:background="@color/winamp_button"
+            android:textColor="?attr/caText"
+            android:background="?attr/caButton"
             android:fontFamily="monospace"/>
 
         <!-- Version -->
@@ -240,7 +277,7 @@
             android:id="@+id/versionText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/winamp_display_text"
+            android:textColor="?attr/caDisplayText"
             android:textSize="11sp"
             android:fontFamily="monospace"
             android:gravity="center"

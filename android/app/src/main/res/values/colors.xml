@@ -1,23 +1,61 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Classic Winamp-inspired colors -->
-    <color name="winamp_background">#000000</color>
-    <color name="winamp_header">#1a1a1a</color>
-    <color name="winamp_section_header">#2a2a2a</color>
-    <color name="winamp_list_background">#0a0a0a</color>
-    <color name="winamp_display">#0d0d0d</color>
-    <color name="winamp_button_section">#151515</color>
-    <color name="winamp_text">#00ff00</color>
-    <color name="winamp_display_text">#00cc00</color>
-    <color name="winamp_button">#3a3a3a</color>
-    <color name="winamp_button_pressed">#4a4a4a</color>
+    <!-- ========== Classic Green (default Winamp 2.x) ========== -->
+    <color name="classic_background">#000000</color>
+    <color name="classic_header">#1a1a1a</color>
+    <color name="classic_section_header">#2a2a2a</color>
+    <color name="classic_list_background">#0a0a0a</color>
+    <color name="classic_display">#0d0d0d</color>
+    <color name="classic_button_section">#151515</color>
+    <color name="classic_text">#00ff00</color>
+    <color name="classic_display_text">#00cc00</color>
+    <color name="classic_button">#3a3a3a</color>
+    <color name="classic_button_pressed">#4a4a4a</color>
+    <color name="classic_player_frame">#303030</color>
+    <color name="classic_seekbar_bg">#003300</color>
+
+    <!-- ========== Dark Side (icy blue, Winamp Modern dark skin) ========== -->
+    <color name="darkside_background">#0a0a12</color>
+    <color name="darkside_header">#12121e</color>
+    <color name="darkside_section_header">#1a1a2e</color>
+    <color name="darkside_list_background">#08080f</color>
+    <color name="darkside_display">#0c0c18</color>
+    <color name="darkside_button_section">#101020</color>
+    <color name="darkside_text">#4dc9f6</color>
+    <color name="darkside_display_text">#3a9fbf</color>
+    <color name="darkside_button">#252540</color>
+    <color name="darkside_button_pressed">#35355a</color>
+    <color name="darkside_player_frame">#1e1e36</color>
+    <color name="darkside_seekbar_bg">#0a2a3a</color>
+
+    <!-- ========== Vaporwave (pink/magenta, retro aesthetic) ========== -->
+    <color name="vapor_background">#0d0015</color>
+    <color name="vapor_header">#1a0828</color>
+    <color name="vapor_section_header">#2a1040</color>
+    <color name="vapor_list_background">#0a0010</color>
+    <color name="vapor_display">#100820</color>
+    <color name="vapor_button_section">#180a28</color>
+    <color name="vapor_text">#ff6ec7</color>
+    <color name="vapor_display_text">#cc58a0</color>
+    <color name="vapor_button">#3a1a50</color>
+    <color name="vapor_button_pressed">#4a2a60</color>
+    <color name="vapor_player_frame">#2a1040</color>
+    <color name="vapor_seekbar_bg">#330028</color>
+
+    <!-- ========== Nuclear (amber/orange, industrial skin) ========== -->
+    <color name="nuclear_background">#0a0800</color>
+    <color name="nuclear_header">#1a1508</color>
+    <color name="nuclear_section_header">#2a2210</color>
+    <color name="nuclear_list_background">#080600</color>
+    <color name="nuclear_display">#0d0b04</color>
+    <color name="nuclear_button_section">#151008</color>
+    <color name="nuclear_text">#ff9900</color>
+    <color name="nuclear_display_text">#cc7a00</color>
+    <color name="nuclear_button">#3a3020</color>
+    <color name="nuclear_button_pressed">#4a4030</color>
+    <color name="nuclear_player_frame">#302818</color>
+    <color name="nuclear_seekbar_bg">#332200</color>
 
     <!-- Standard Android colors -->
-    <color name="purple_200">#00ff00</color>
-    <color name="purple_500">#00cc00</color>
-    <color name="purple_700">#009900</color>
-    <color name="teal_200">#00ff00</color>
-    <color name="teal_700">#00cc00</color>
     <color name="black">#000000</color>
-    <color name="white">#00ff00</color>
 </resources>

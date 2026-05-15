@@ -8,6 +8,7 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
 import com.cloudamp.music.R
+import com.cloudamp.music.ThemeManager
 
 class AlphabetSidebarView @JvmOverloads constructor(
     context: Context,
@@ -22,13 +23,13 @@ class AlphabetSidebarView @JvmOverloads constructor(
     private val letters = listOf("#") + ('A'..'Z').map { it.toString() }
 
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = context.getColor(R.color.winamp_text)
+        color = ThemeManager.resolveColor(context, R.attr.caText)
         textAlign = Paint.Align.CENTER
         typeface = Typeface.MONOSPACE
     }
 
     private val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = context.getColor(R.color.winamp_text)
+        color = ThemeManager.resolveColor(context, R.attr.caText)
         textAlign = Paint.Align.CENTER
         typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
     }

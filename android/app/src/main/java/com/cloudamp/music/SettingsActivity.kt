@@ -52,7 +52,13 @@ class SettingsActivity : AppCompatActivity() {
         var onGDriveLibraryReloadRequested: (() -> Unit)? = null
     }
 
+    // Skin fields
+    private lateinit var currentSkinText: TextView
+    private lateinit var changeSkinButton: Button
+    private lateinit var appliedThemeId: String
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        appliedThemeId = ThemeManager.applyTheme(this)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
@@ -60,6 +66,9 @@ class SettingsActivity : AppCompatActivity() {
         supportActionBar?.title = "Settings"
 
         gdriveAuthManager = GoogleDriveAuthManager(this)
+
+        // Skin picker
+        setupSkinPicker()
 
         // Google Drive views
         setupGoogleDrive()
@@ -75,6 +84,33 @@ class SettingsActivity : AppCompatActivity() {
 
         // Handle OAuth redirect if activity was launched by deep link
         handleOAuthRedirect(intent)
+    }
+
+    private fun setupSkinPicker() {
+        currentSkinText = findViewById(R.id.currentSkinText)
+        changeSkinButton = findViewById(R.id.changeSkinButton)
+
+        val currentId = ThemeManager.getThemeId(this)
+        val currentLabel = ThemeManager.THEME_LABELS.firstOrNull { it.first == currentId }?.second ?: "Classic Green"
+        currentSkinText.text = "Current: $currentLabel"
+
+        changeSkinButton.setOnClickListener {
+            val labels = ThemeManager.THEME_LABELS.map { (id, label) ->
+                if (id == ThemeManager.getThemeId(this)) "$label  \u2713" else label
+            }.toTypedArray()
+
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Select Skin")
+                .setItems(labels) { _, which ->
+                    val (selectedId, _) = ThemeManager.THEME_LABELS[which]
+                    if (selectedId == ThemeManager.getThemeId(this)) return@setItems
+                    ThemeManager.setThemeId(this, selectedId)
+                    // Recreate to apply the new theme
+                    recreate()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
     }
 
     private fun setupGoogleDrive() {
