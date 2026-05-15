@@ -152,18 +152,25 @@ class GDriveImageProvider : ContentProvider() {
     override fun onCreate(): Boolean = true
 
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor? {
-        val fileId = uri.pathSegments?.firstOrNull() ?: return null
-        val ctx = context ?: return null
+        val fileId = uri.pathSegments?.firstOrNull() ?: run {
+            Log.w(TAG, "openFile: no fileId in URI: $uri")
+            return null
+        }
+        val ctx = context ?: run {
+            Log.w(TAG, "openFile: context is null")
+            return null
+        }
 
         // Validate: only serve files that are already cached (prefetched during
         // library scan). This prevents arbitrary Drive file downloads via the
         // content provider — the file ID must match a known cover image.
         val cacheFile = cacheFileFor(ctx, fileId)
         if (!cacheFile.exists() || cacheFile.length() <= 0) {
-            Log.w(TAG, "openFile: requested file ID not in cache, rejecting: $fileId")
+            Log.w(TAG, "openFile: requested file ID not in cache, rejecting: $fileId (exists=${cacheFile.exists()}, len=${if (cacheFile.exists()) cacheFile.length() else -1}, path=${cacheFile.absolutePath})")
             return null
         }
 
+        Log.d(TAG, "openFile: serving $fileId (${cacheFile.length()} bytes)")
         return ParcelFileDescriptor.open(
             cacheFile,
             ParcelFileDescriptor.MODE_READ_ONLY
