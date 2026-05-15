@@ -674,7 +674,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         val recentlyAdded = allAlbums.sortedByDescending { it.modifiedTime ?: "" }.take(9)
         for (album in recentlyAdded) {
             val imageUrl = album.coverFileId?.let { GDriveImageProvider.buildUri(it).toString() }
-            Log.d(TAG, "RecentlyAdded: '${album.name}' coverFileId=${album.coverFileId} imageUrl=$imageUrl")
             items.add(createBrowsableItemWithGroup(
                 "gdrive_music_album_${album.id}",
                 album.name,
