@@ -1,25 +1,136 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+
+    <!-- ============ Classic Green (default) ============ -->
     <style name="Theme.CloudAmp" parent="Theme.AppCompat.DayNight.DarkActionBar">
-        <item name="colorPrimary">@color/winamp_header</item>
+        <item name="colorPrimary">@color/classic_header</item>
         <item name="colorPrimaryDark">@color/black</item>
-        <item name="colorAccent">@color/winamp_text</item>
-        <item name="android:windowBackground">@color/winamp_background</item>
-        <item name="android:textColorPrimary">@color/winamp_text</item>
-        <item name="android:textColorSecondary">@color/winamp_display_text</item>
+        <item name="colorAccent">@color/classic_text</item>
+        <item name="android:windowBackground">@color/classic_background</item>
+        <item name="android:textColorPrimary">@color/classic_text</item>
+        <item name="android:textColorSecondary">@color/classic_display_text</item>
         <item name="actionBarStyle">@style/CloudAmpActionBar</item>
+        <!-- custom attrs -->
+        <item name="caBackground">@color/classic_background</item>
+        <item name="caHeader">@color/classic_header</item>
+        <item name="caSectionHeader">@color/classic_section_header</item>
+        <item name="caListBackground">@color/classic_list_background</item>
+        <item name="caDisplay">@color/classic_display</item>
+        <item name="caButtonSection">@color/classic_button_section</item>
+        <item name="caText">@color/classic_text</item>
+        <item name="caDisplayText">@color/classic_display_text</item>
+        <item name="caButton">@color/classic_button</item>
+        <item name="caButtonPressed">@color/classic_button_pressed</item>
+        <item name="caPlayerFrame">@color/classic_player_frame</item>
+        <item name="caSeekbarBackground">@color/classic_seekbar_bg</item>
     </style>
 
+    <!-- ============ Dark Side (icy blue) ============ -->
+    <style name="Theme.CloudAmp.DarkSide" parent="Theme.AppCompat.DayNight.DarkActionBar">
+        <item name="colorPrimary">@color/darkside_header</item>
+        <item name="colorPrimaryDark">@color/black</item>
+        <item name="colorAccent">@color/darkside_text</item>
+        <item name="android:windowBackground">@color/darkside_background</item>
+        <item name="android:textColorPrimary">@color/darkside_text</item>
+        <item name="android:textColorSecondary">@color/darkside_display_text</item>
+        <item name="actionBarStyle">@style/CloudAmpActionBar.DarkSide</item>
+        <item name="caBackground">@color/darkside_background</item>
+        <item name="caHeader">@color/darkside_header</item>
+        <item name="caSectionHeader">@color/darkside_section_header</item>
+        <item name="caListBackground">@color/darkside_list_background</item>
+        <item name="caDisplay">@color/darkside_display</item>
+        <item name="caButtonSection">@color/darkside_button_section</item>
+        <item name="caText">@color/darkside_text</item>
+        <item name="caDisplayText">@color/darkside_display_text</item>
+        <item name="caButton">@color/darkside_button</item>
+        <item name="caButtonPressed">@color/darkside_button_pressed</item>
+        <item name="caPlayerFrame">@color/darkside_player_frame</item>
+        <item name="caSeekbarBackground">@color/darkside_seekbar_bg</item>
+    </style>
+
+    <!-- ============ Vaporwave (pink/magenta) ============ -->
+    <style name="Theme.CloudAmp.Vapor" parent="Theme.AppCompat.DayNight.DarkActionBar">
+        <item name="colorPrimary">@color/vapor_header</item>
+        <item name="colorPrimaryDark">@color/black</item>
+        <item name="colorAccent">@color/vapor_text</item>
+        <item name="android:windowBackground">@color/vapor_background</item>
+        <item name="android:textColorPrimary">@color/vapor_text</item>
+        <item name="android:textColorSecondary">@color/vapor_display_text</item>
+        <item name="actionBarStyle">@style/CloudAmpActionBar.Vapor</item>
+        <item name="caBackground">@color/vapor_background</item>
+        <item name="caHeader">@color/vapor_header</item>
+        <item name="caSectionHeader">@color/vapor_section_header</item>
+        <item name="caListBackground">@color/vapor_list_background</item>
+        <item name="caDisplay">@color/vapor_display</item>
+        <item name="caButtonSection">@color/vapor_button_section</item>
+        <item name="caText">@color/vapor_text</item>
+        <item name="caDisplayText">@color/vapor_display_text</item>
+        <item name="caButton">@color/vapor_button</item>
+        <item name="caButtonPressed">@color/vapor_button_pressed</item>
+        <item name="caPlayerFrame">@color/vapor_player_frame</item>
+        <item name="caSeekbarBackground">@color/vapor_seekbar_bg</item>
+    </style>
+
+    <!-- ============ Nuclear (amber/orange) ============ -->
+    <style name="Theme.CloudAmp.Nuclear" parent="Theme.AppCompat.DayNight.DarkActionBar">
+        <item name="colorPrimary">@color/nuclear_header</item>
+        <item name="colorPrimaryDark">@color/black</item>
+        <item name="colorAccent">@color/nuclear_text</item>
+        <item name="android:windowBackground">@color/nuclear_background</item>
+        <item name="android:textColorPrimary">@color/nuclear_text</item>
+        <item name="android:textColorSecondary">@color/nuclear_display_text</item>
+        <item name="actionBarStyle">@style/CloudAmpActionBar.Nuclear</item>
+        <item name="caBackground">@color/nuclear_background</item>
+        <item name="caHeader">@color/nuclear_header</item>
+        <item name="caSectionHeader">@color/nuclear_section_header</item>
+        <item name="caListBackground">@color/nuclear_list_background</item>
+        <item name="caDisplay">@color/nuclear_display</item>
+        <item name="caButtonSection">@color/nuclear_button_section</item>
+        <item name="caText">@color/nuclear_text</item>
+        <item name="caDisplayText">@color/nuclear_display_text</item>
+        <item name="caButton">@color/nuclear_button</item>
+        <item name="caButtonPressed">@color/nuclear_button_pressed</item>
+        <item name="caPlayerFrame">@color/nuclear_player_frame</item>
+        <item name="caSeekbarBackground">@color/nuclear_seekbar_bg</item>
+    </style>
+
+    <!-- ============ ActionBar styles per theme ============ -->
     <style name="CloudAmpActionBar" parent="Widget.AppCompat.ActionBar">
-        <item name="background">@color/winamp_header</item>
+        <item name="background">@color/classic_header</item>
         <item name="titleTextStyle">@style/CloudAmpActionBarTitle</item>
     </style>
+    <style name="CloudAmpActionBar.DarkSide" parent="Widget.AppCompat.ActionBar">
+        <item name="background">@color/darkside_header</item>
+        <item name="titleTextStyle">@style/CloudAmpActionBarTitle.DarkSide</item>
+    </style>
+    <style name="CloudAmpActionBar.Vapor" parent="Widget.AppCompat.ActionBar">
+        <item name="background">@color/vapor_header</item>
+        <item name="titleTextStyle">@style/CloudAmpActionBarTitle.Vapor</item>
+    </style>
+    <style name="CloudAmpActionBar.Nuclear" parent="Widget.AppCompat.ActionBar">
+        <item name="background">@color/nuclear_header</item>
+        <item name="titleTextStyle">@style/CloudAmpActionBarTitle.Nuclear</item>
+    </style>
 
+    <!-- ============ ActionBar title styles ============ -->
     <style name="CloudAmpActionBarTitle" parent="TextAppearance.AppCompat.Widget.ActionBar.Title">
-        <item name="android:textColor">@color/winamp_text</item>
+        <item name="android:textColor">@color/classic_text</item>
+        <item name="android:fontFamily">monospace</item>
+    </style>
+    <style name="CloudAmpActionBarTitle.DarkSide" parent="TextAppearance.AppCompat.Widget.ActionBar.Title">
+        <item name="android:textColor">@color/darkside_text</item>
+        <item name="android:fontFamily">monospace</item>
+    </style>
+    <style name="CloudAmpActionBarTitle.Vapor" parent="TextAppearance.AppCompat.Widget.ActionBar.Title">
+        <item name="android:textColor">@color/vapor_text</item>
+        <item name="android:fontFamily">monospace</item>
+    </style>
+    <style name="CloudAmpActionBarTitle.Nuclear" parent="TextAppearance.AppCompat.Widget.ActionBar.Title">
+        <item name="android:textColor">@color/nuclear_text</item>
         <item name="android:fontFamily">monospace</item>
     </style>
 
+    <!-- ============ Shared styles ============ -->
     <style name="CloudAmpNavSubheader" parent="TextAppearance.AppCompat.Body2">
         <item name="android:textSize">0sp</item>
         <item name="android:minHeight">0dp</item>
@@ -33,9 +144,9 @@
     </style>
 
     <style name="Theme.CloudAmp.Dialog" parent="Theme.AppCompat.Dialog.Alert">
-        <item name="colorAccent">@color/winamp_text</item>
-        <item name="android:background">@color/winamp_header</item>
-        <item name="android:textColorPrimary">@color/winamp_text</item>
-        <item name="android:textColorSecondary">@color/winamp_display_text</item>
+        <item name="colorAccent">@color/classic_text</item>
+        <item name="android:background">@color/classic_header</item>
+        <item name="android:textColorPrimary">@color/classic_text</item>
+        <item name="android:textColorSecondary">@color/classic_display_text</item>
     </style>
 </resources>

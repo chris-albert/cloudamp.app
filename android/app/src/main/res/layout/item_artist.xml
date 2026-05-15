@@ -7,7 +7,7 @@
     android:paddingRight="12dp"
     android:paddingTop="12dp"
     android:paddingBottom="12dp"
-    android:background="@color/winamp_list_background"
+    android:background="?attr/caListBackground"
     android:clickable="true"
     android:focusable="true">
 
@@ -17,7 +17,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="center_vertical"
         android:text="▶"
-        android:textColor="@color/winamp_text"
+        android:textColor="?attr/caText"
         android:textSize="12sp"
         android:fontFamily="monospace"/>
 
@@ -58,7 +58,7 @@
             android:id="@+id/artistNameTextView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/winamp_text"
+            android:textColor="?attr/caText"
             android:textSize="14sp"
             android:fontFamily="monospace"
             android:maxLines="2"
@@ -68,7 +68,7 @@
             android:id="@+id/artistSubtitleTextView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/winamp_display_text"
+            android:textColor="?attr/caDisplayText"
             android:textSize="10sp"
             android:fontFamily="monospace"
             android:maxLines="1"

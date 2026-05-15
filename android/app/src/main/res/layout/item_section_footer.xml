@@ -3,5 +3,5 @@
     android:id="@+id/sectionFooterView"
     android:layout_width="match_parent"
     android:layout_height="28dp"
-    android:background="@color/winamp_section_header"
+    android:background="?attr/caSectionHeader"
     android:alpha="0.9"/>

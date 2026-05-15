@@ -12,14 +12,14 @@
     <FrameLayout
         android:layout_width="130dp"
         android:layout_height="130dp"
-        android:background="@color/winamp_section_header">
+        android:background="?attr/caSectionHeader">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:text="&#x21bb;"
-            android:textColor="@color/winamp_text"
+            android:textColor="?attr/caText"
             android:textSize="48sp" />
 
     </FrameLayout>
@@ -28,7 +28,7 @@
         android:layout_width="130dp"
         android:layout_height="wrap_content"
         android:text="Shuffle"
-        android:textColor="@color/winamp_text"
+        android:textColor="?attr/caText"
         android:textSize="12sp"
         android:fontFamily="monospace"
         android:maxLines="2"

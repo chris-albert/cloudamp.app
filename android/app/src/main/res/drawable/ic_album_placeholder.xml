@@ -5,12 +5,12 @@
     android:viewportWidth="60"
     android:viewportHeight="60">
     <path
-        android:fillColor="#00cc00"
+        android:fillColor="?attr/caText"
         android:pathData="M5,5h50v50h-50z"/>
     <path
         android:fillColor="#000000"
         android:pathData="M30,30m-12,0a12,12 0,1 1,24 0a12,12 0,1 1,-24 0"/>
     <path
-        android:fillColor="#00cc00"
+        android:fillColor="?attr/caText"
         android:pathData="M30,30m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0"/>
 </vector>

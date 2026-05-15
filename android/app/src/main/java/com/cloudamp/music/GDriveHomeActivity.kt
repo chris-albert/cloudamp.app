@@ -48,8 +48,10 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
     private lateinit var settingsButton: Button
     private var allAlbumsCache: List<GDriveAlbum> = emptyList()
     private lateinit var miniPlayerBar: MiniPlayerBar
+    private lateinit var appliedThemeId: String
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        appliedThemeId = ThemeManager.applyTheme(this)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_gdrive_home)
 
@@ -68,6 +70,7 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
 
     override fun onResume() {
         super.onResume()
+        ThemeManager.recreateIfThemeChanged(this, appliedThemeId)
         LibraryScanManager.resumePrefetchIfNeeded(this)
         checkAuthAndLoad()
         miniPlayerBar.startUpdates()

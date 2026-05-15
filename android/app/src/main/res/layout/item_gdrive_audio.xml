@@ -7,13 +7,13 @@
     android:gravity="center_vertical"
     android:paddingHorizontal="12dp"
     android:paddingVertical="10dp"
-    android:background="@color/winamp_background">
+    android:background="?attr/caBackground">
 
     <ImageView
         android:layout_width="24dp"
         android:layout_height="24dp"
         android:src="@drawable/ic_audio_file"
-        app:tint="@color/winamp_display_text"
+        app:tint="?attr/caDisplayText"
         android:layout_marginEnd="12dp"/>
 
     <LinearLayout
@@ -26,7 +26,7 @@
             android:id="@+id/audioNameTextView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/winamp_text"
+            android:textColor="?attr/caText"
             android:textSize="13sp"
             android:fontFamily="monospace"
             android:singleLine="true"
@@ -45,7 +45,7 @@
             android:id="@+id/audioSizeTextView"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="@color/winamp_display_text"
+            android:textColor="?attr/caDisplayText"
             android:textSize="11sp"
             android:fontFamily="monospace"
             android:layout_marginEnd="8dp"/>
@@ -54,7 +54,7 @@
             android:id="@+id/audioTypeTextView"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="@color/winamp_display_text"
+            android:textColor="?attr/caDisplayText"
             android:textSize="11sp"
             android:fontFamily="monospace"/>
 

@@ -37,8 +37,10 @@ class CachedAlbumsActivity : AppCompatActivity(), NavigationView.OnNavigationIte
     private lateinit var adapter: CachedAlbumsAdapter
     private lateinit var emptyContainer: LinearLayout
     private lateinit var miniPlayerBar: MiniPlayerBar
+    private lateinit var appliedThemeId: String
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        appliedThemeId = ThemeManager.applyTheme(this)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_cached_albums)
 
@@ -54,6 +56,7 @@ class CachedAlbumsActivity : AppCompatActivity(), NavigationView.OnNavigationIte
 
     override fun onResume() {
         super.onResume()
+        ThemeManager.recreateIfThemeChanged(this, appliedThemeId)
         miniPlayerBar.startUpdates()
     }
 

@@ -4,13 +4,13 @@
     android:id="@+id/drawerLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/winamp_background">
+    android:background="?attr/caBackground">
 
     <!-- Main Content -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@color/winamp_background">
+        android:background="?attr/caBackground">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -23,7 +23,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:background="@color/winamp_section_header"
+                android:background="?attr/caSectionHeader"
                 android:padding="8dp">
 
                 <ImageView
@@ -31,7 +31,7 @@
                     android:layout_height="16dp"
                     android:src="@drawable/ic_gdrive"
                     android:layout_marginEnd="8dp"
-                    app:tint="@color/winamp_text"/>
+                    app:tint="?attr/caText"/>
 
                 <TextView
                     android:id="@+id/pathTextView"
@@ -39,7 +39,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="GDRIVE MUSIC"
-                    android:textColor="@color/winamp_text"
+                    android:textColor="?attr/caText"
                     android:textSize="14sp"
                     android:fontFamily="monospace"
                     android:textStyle="bold"
@@ -55,7 +55,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:background="@color/winamp_header"
+                android:background="?attr/caHeader"
                 android:paddingHorizontal="8dp"
                 android:paddingVertical="4dp"
                 android:visibility="gone">
@@ -64,7 +64,7 @@
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:src="@android:drawable/ic_menu_search"
-                    app:tint="@color/winamp_display_text"
+                    app:tint="?attr/caDisplayText"
                     android:layout_marginEnd="8dp"/>
 
                 <EditText
@@ -73,11 +73,11 @@
                     android:layout_height="40dp"
                     android:layout_weight="1"
                     android:hint="Filter items..."
-                    android:textColor="@color/winamp_text"
-                    android:textColorHint="@color/winamp_display_text"
+                    android:textColor="?attr/caText"
+                    android:textColorHint="?attr/caDisplayText"
                     android:textSize="14sp"
                     android:fontFamily="monospace"
-                    android:background="@color/winamp_section_header"
+                    android:background="?attr/caSectionHeader"
                     android:paddingHorizontal="12dp"
                     android:singleLine="true"
                     android:imeOptions="actionSearch"
@@ -88,7 +88,7 @@
                     android:layout_width="32dp"
                     android:layout_height="32dp"
                     android:src="@android:drawable/ic_menu_close_clear_cancel"
-                    app:tint="@color/winamp_display_text"
+                    app:tint="?attr/caDisplayText"
                     android:layout_marginStart="8dp"
                     android:padding="4dp"/>
 
@@ -104,7 +104,7 @@
                     android:id="@+id/gdriveRecyclerView"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:background="@color/winamp_background"
+                    android:background="?attr/caBackground"
                     android:clipToPadding="false"
                     android:paddingEnd="24dp"/>
 
@@ -114,7 +114,7 @@
                     android:layout_width="24dp"
                     android:layout_height="match_parent"
                     android:layout_gravity="end"
-                    android:background="@color/winamp_section_header"
+                    android:background="?attr/caSectionHeader"
                     android:paddingTop="4dp"
                     android:paddingBottom="4dp"
                     android:visibility="gone"/>
@@ -132,7 +132,7 @@
             android:layout_height="match_parent"
             android:orientation="vertical"
             android:gravity="center"
-            android:background="@color/winamp_background"
+            android:background="?attr/caBackground"
             android:visibility="gone">
 
             <ProgressBar
@@ -145,7 +145,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Loading..."
-                android:textColor="@color/winamp_text"
+                android:textColor="?attr/caText"
                 android:textSize="14sp"
                 android:fontFamily="monospace"
                 android:layout_marginTop="16dp"/>
@@ -159,7 +159,7 @@
             android:layout_height="match_parent"
             android:orientation="vertical"
             android:gravity="center"
-            android:background="@color/winamp_background"
+            android:background="?attr/caBackground"
             android:visibility="gone"
             android:padding="32dp">
 
@@ -167,7 +167,7 @@
                 android:layout_width="64dp"
                 android:layout_height="64dp"
                 android:src="@drawable/ic_gdrive"
-                app:tint="@color/winamp_display_text"
+                app:tint="?attr/caDisplayText"
                 android:layout_marginBottom="16dp"/>
 
             <TextView
@@ -175,7 +175,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Configure GDrive Music Root in Settings"
-                android:textColor="@color/winamp_display_text"
+                android:textColor="?attr/caDisplayText"
                 android:textSize="14sp"
                 android:fontFamily="monospace"
                 android:gravity="center"
@@ -186,8 +186,8 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="OPEN SETTINGS"
-                android:textColor="@color/winamp_text"
-                android:background="@color/winamp_button"
+                android:textColor="?attr/caText"
+                android:background="?attr/caButton"
                 android:fontFamily="monospace"
                 android:paddingHorizontal="24dp"/>
 
@@ -201,11 +201,11 @@
         android:layout_width="wrap_content"
         android:layout_height="match_parent"
         android:layout_gravity="start"
-        android:background="@color/winamp_header"
+        android:background="?attr/caHeader"
         app:headerLayout="@layout/nav_header"
         app:menu="@menu/nav_drawer_menu"
-        app:itemTextColor="@color/winamp_text"
-        app:itemIconTint="@color/winamp_text"
+        app:itemTextColor="?attr/caText"
+        app:itemIconTint="?attr/caText"
         app:subheaderTextAppearance="@style/CloudAmpNavSubheader"/>
 
 </androidx.drawerlayout.widget.DrawerLayout>
