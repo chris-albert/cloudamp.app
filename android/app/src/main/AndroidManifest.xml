@@ -8,11 +8,6 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- Signature-level permission for the GDrive image ContentProvider.
-         Only apps signed with the same key (i.e. this app) can read from it. -->
-    <permission
-        android:name="com.cloudamp.music.permission.READ_GDRIVE_IMAGES"
-        android:protectionLevel="signature" />
 
     <application
         android:allowBackup="false"
@@ -104,12 +99,13 @@
         </service>
 
         <!-- GDrive Image Provider for Android Auto.
-             Protected by signature-level permission so only this app can access it. -->
+             Exported without a read permission so Android Auto (a separate process/app)
+             can load content:// artwork URIs. Security: openFile() only serves files
+             already present in the prefetch cache — no arbitrary Drive downloads. -->
         <provider
             android:name=".playback.GDriveImageProvider"
             android:authorities="com.cloudamp.music.gdriveimages"
             android:exported="true"
-            android:readPermission="com.cloudamp.music.permission.READ_GDRIVE_IMAGES"
             android:grantUriPermissions="true" />
 
         <!-- Media Button Receiver -->
