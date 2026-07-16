@@ -240,7 +240,10 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
                         wasSyncing = false
                     }
                     is LibraryScanManager.State.Active -> {
-                        wasSyncing = false
+                        // Do NOT clear wasSyncing here: an incremental sync
+                        // emits Active while prefetching new album art, and
+                        // clearing the flag would skip the Idle refresh that
+                        // shows the synced albums and their covers.
                         val text = formatScanProgress(state.progress)
                         if (!state.metadataReady) {
                             // Fresh scan in progress — drop any stale view
