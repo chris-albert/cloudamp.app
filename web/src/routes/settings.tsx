@@ -196,6 +196,18 @@ function ScanDashboard() {
     }
   }, []);
 
+  // Incremental sync — fetches only what changed since the last scan
+  // (falls back to a full scan if the change token is missing/expired)
+  const startSync = useCallback(async () => {
+    setSyncOutcome(null);
+    try {
+      const outcome = await syncLibrary();
+      setSyncOutcome(outcome);
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
   // Clear cached library metadata and start fresh
   const handleClearCache = useCallback(() => {
     resetScan();
@@ -358,8 +370,17 @@ function ScanDashboard() {
             onClick={startScan}
             disabled={isSyncing}
             className="px-4 py-2 rounded-md bg-zinc-800 text-sm font-medium hover:bg-zinc-700 disabled:opacity-50 transition-colors"
+            title="Re-fetch the entire library from Drive"
           >
-            Rescan
+            Full Rescan
+          </button>
+          <button
+            onClick={startSync}
+            disabled={isSyncing}
+            className="px-4 py-2 rounded-md bg-blue-600 text-sm font-medium hover:bg-blue-500 disabled:opacity-50 transition-colors"
+            title="Fetch only what changed since the last scan"
+          >
+            Sync
           </button>
         </div>
       </div>
