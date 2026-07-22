@@ -191,6 +191,43 @@ export async function uploadFile(
 }
 
 /**
+ * Create a folder in Google Drive. Returns the created folder's ID.
+ */
+export async function createFolder(name: string, parentId: string): Promise<string> {
+  const url = `${BASE_URL}/files?fields=id`;
+  const res = await fetchWithAuthMutate(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name,
+      parents: [parentId],
+      mimeType: "application/vnd.google-apps.folder",
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Failed to create folder: ${res.status} ${body}`);
+  }
+  const data: { id: string } = await res.json();
+  return data.id;
+}
+
+/**
+ * Replace the content of an existing file in Google Drive.
+ */
+export async function updateFileContent(fileId: string, blob: Blob): Promise<void> {
+  const url = `https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(fileId)}?uploadType=media`;
+  const res = await fetchWithAuthMutate(url, {
+    method: "PATCH",
+    body: blob,
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Failed to update file content: ${res.status} ${body}`);
+  }
+}
+
+/**
  * Fetch a file's content as a blob URL (for displaying images with auth).
  * Caller must revoke the URL when done via URL.revokeObjectURL().
  */
