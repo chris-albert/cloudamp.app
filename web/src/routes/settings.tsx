@@ -20,6 +20,7 @@ import {
   renameFileInState,
 } from "@/lib/scan-store";
 import { resetHistory } from "@/lib/history-store";
+import { resetFavorites } from "@/lib/favorites-store";
 import { syncLibrary, doFullScan, type SyncOutcome } from "@/lib/incremental-sync";
 
 const FOLDER_NAME_KEY = "cloudamp_root_folder_name";
@@ -212,6 +213,7 @@ function ScanDashboard() {
   const handleClearCache = useCallback(() => {
     resetScan();
     resetHistory();
+    resetFavorites();
     setSyncOutcome(null);
     didAutoSync.current = false;
   }, []);
