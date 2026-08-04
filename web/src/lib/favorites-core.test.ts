@@ -5,6 +5,7 @@ import {
   isFavorite,
   parseFavoritesFile,
   resolveFavoriteAlbums,
+  resolveFavoriteArtistIds,
   serializeFavoritesFile,
   type FavoritesFile,
 } from "./favorites-core";
@@ -131,6 +132,48 @@ describe("resolveFavoriteAlbums", () => {
     expect(resolveFavoriteAlbums(favorites, albums)).toEqual([]);
     const restored = new Map(albums).set("gone-album", { id: "gone-album", name: "Back" });
     expect(resolveFavoriteAlbums(favorites, restored).map((a) => a.id)).toEqual(["gone-album"]);
+  });
+});
+
+describe("resolveFavoriteArtistIds", () => {
+  const albums = new Map([
+    ["album-1", { id: "album-1", artistId: "artist-a" }],
+    ["album-2", { id: "album-2", artistId: "artist-a" }],
+    ["album-3", { id: "album-3", artistId: "artist-b" }],
+  ]);
+
+  it("derives artists with at least one favorite album", () => {
+    const result = resolveFavoriteArtistIds(
+      [
+        { albumId: "album-1", favoritedAt: "2026-07-01T00:00:00Z" },
+        { albumId: "album-3", favoritedAt: "2026-07-20T00:00:00Z" },
+      ],
+      albums,
+    );
+    expect(result).toEqual(new Set(["artist-a", "artist-b"]));
+  });
+
+  it("counts an artist once even with multiple favorite albums", () => {
+    const result = resolveFavoriteArtistIds(
+      [
+        { albumId: "album-1", favoritedAt: "2026-07-01T00:00:00Z" },
+        { albumId: "album-2", favoritedAt: "2026-07-20T00:00:00Z" },
+      ],
+      albums,
+    );
+    expect(result).toEqual(new Set(["artist-a"]));
+  });
+
+  it("excludes orphaned favorites so they produce no phantom artists", () => {
+    const result = resolveFavoriteArtistIds(
+      [{ albumId: "gone-album", favoritedAt: "2026-07-21T00:00:00Z" }],
+      albums,
+    );
+    expect(result).toEqual(new Set());
+  });
+
+  it("returns an empty set when there are no favorites", () => {
+    expect(resolveFavoriteArtistIds([], albums)).toEqual(new Set());
   });
 });
 

@@ -103,6 +103,24 @@ export function resolveFavoriteAlbums<A>(
 }
 
 /**
+ * Derive the set of Favorite Artists — artists with ≥ 1 Favorite Album — at
+ * read time. Nothing artist-level is ever stored. Entries whose album is
+ * missing from the current library are excluded, so orphaned favorites never
+ * produce phantom Favorite Artists (ADR-0001 hide-orphans rule).
+ */
+export function resolveFavoriteArtistIds<A extends { artistId: string }>(
+  favorites: FavoriteEntry[],
+  albumById: Map<string, A>,
+): Set<string> {
+  return new Set(
+    favorites.flatMap((f) => {
+      const album = albumById.get(f.albumId);
+      return album === undefined ? [] : [album.artistId];
+    }),
+  );
+}
+
+/**
  * Serialize the full list — never a view-filtered one.
  */
 export function serializeFavoritesFile(file: FavoritesFile): string {
