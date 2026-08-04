@@ -198,11 +198,15 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
     private fun loadFavorites() {
         hasLoadedFavorites = true
         scope.launch {
+            // Cached hearts render immediately; the Drive read then reconciles
+            // (pushing any dirty toggles from a previous session).
+            val cached = withContext(Dispatchers.IO) { favoritesRepository.hydrateFromCache() }
+            adapter.setFavoriteAlbumIds(cached.map { it.albumId })
             try {
                 val favorites = withContext(Dispatchers.IO) { favoritesRepository.load() }
                 adapter.setFavoriteAlbumIds(favorites.map { it.albumId })
             } catch (e: Exception) {
-                // Hearts stay unfilled; the next toggle or relaunch retries.
+                // Cached hearts stay; the next toggle or relaunch retries.
                 hasLoadedFavorites = false
             }
         }
@@ -218,7 +222,8 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
                 }
                 adapter.setFavoriteAlbumIds(merged.map { it.albumId })
             } catch (e: Exception) {
-                // Revert the optimistic flip; keep-and-retry is a follow-up slice.
+                // Only a schema refusal reaches here — network failures keep
+                // the toggled state locally and retry at the next launch/sync.
                 adapter.setAlbumFavorite(album.id, !favorite)
                 Toast.makeText(
                     this@GDriveStructuredLibraryActivity,
