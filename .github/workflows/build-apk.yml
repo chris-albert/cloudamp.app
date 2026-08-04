@@ -119,7 +119,6 @@ jobs:
     - name: Bump patch version
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       run: |
-        cd ..
         PATCH=$(grep '^patch=' android/version.properties | cut -d= -f2)
         NEW_PATCH=$((PATCH + 1))
         sed -i "s/^patch=.*/patch=$NEW_PATCH/" android/version.properties
