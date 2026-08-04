@@ -10,6 +10,7 @@ import type { LibraryIssue } from "@/lib/library-validator";
 import { searchAlbumYear, extractYear, searchCoverArt, fetchImageBlob, type MusicBrainzRelease, type CoverArtResult } from "@/lib/musicbrainz";
 import { DriveImage, ArtistImage } from "@/lib/drive-image";
 import { playAlbum } from "@/lib/player-store";
+import { getFavoritesState, subscribeFavoritesState, ensureFavoritesLoaded, toggleFavorite } from "@/lib/favorites-store";
 
 export function LibraryPage() {
   const scanState = useSyncExternalStore(subscribeScanState, getScanState);
@@ -132,6 +133,11 @@ function LibraryBrowser() {
   const [showDeleteArtistConfirm, setShowDeleteArtistConfirm] = useState(false);
   const [isDeletingArtist, setIsDeletingArtist] = useState(false);
   const [deleteArtistError, setDeleteArtistError] = useState<string | null>(null);
+
+  // Load favorites so album detail hearts reflect Drive state
+  useEffect(() => {
+    ensureFavoritesLoaded();
+  }, []);
 
   // Resolve initial selection from search params
   useEffect(() => {
@@ -450,7 +456,10 @@ function LibraryBrowser() {
                 className="w-32 h-32 object-cover rounded-lg border border-zinc-700 shrink-0"
               />
               <div className="text-sm text-zinc-400 space-y-1 min-w-0">
-                <div className="text-lg font-medium text-zinc-200">{selectedAlbum.name}</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-lg font-medium text-zinc-200">{selectedAlbum.name}</div>
+                  <FavoriteHeartButton albumId={selectedAlbum.id} />
+                </div>
                 <div className="text-zinc-500">{selectedAlbum.artistName}</div>
                 {selectedAlbum.year && <div className="text-zinc-500">{selectedAlbum.year}</div>}
                 <div className="text-zinc-600 text-xs">{tracks.length} track{tracks.length !== 1 ? "s" : ""}</div>
@@ -468,15 +477,18 @@ function LibraryBrowser() {
           ) : (
             <div className="space-y-2">
               <AlbumCoverArt album={selectedAlbum} />
-              {tracks.length > 0 && (
-                <button
-                  onClick={() => playAlbum(selectedAlbum, tracks)}
-                  className="px-4 py-1.5 rounded-full bg-white text-black text-xs font-semibold hover:bg-zinc-200 transition-colors inline-flex items-center gap-1.5"
-                >
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5L4 2.5z" /></svg>
-                  Play Album
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {tracks.length > 0 && (
+                  <button
+                    onClick={() => playAlbum(selectedAlbum, tracks)}
+                    className="px-4 py-1.5 rounded-full bg-white text-black text-xs font-semibold hover:bg-zinc-200 transition-colors inline-flex items-center gap-1.5"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5L4 2.5z" /></svg>
+                    Play Album
+                  </button>
+                )}
+                <FavoriteHeartButton albumId={selectedAlbum.id} />
+              </div>
             </div>
           )}
 
@@ -673,6 +685,28 @@ function ArtistFolderName({ artist, onRenamed }: { artist: Artist; onRenamed: (u
         Rename
       </button>
     </div>
+  );
+}
+
+function FavoriteHeartButton({ albumId }: { albumId: string }) {
+  const favoritesState = useSyncExternalStore(subscribeFavoritesState, getFavoritesState);
+  const isFavorite = favoritesState.favorites.some((f) => f.albumId === albumId);
+
+  return (
+    <button
+      onClick={() => {
+        toggleFavorite(albumId).catch(() => {
+          // Optimistic state is reverted by the store; error lives in favorites state
+        });
+      }}
+      title={isFavorite ? "Remove from favorites" : "Add to favorites"}
+      aria-pressed={isFavorite}
+      className={`p-1 transition-colors ${isFavorite ? "text-red-500 hover:text-red-400" : "text-zinc-500 hover:text-zinc-300"}`}
+    >
+      <svg width="18" height="18" viewBox="0 0 16 16" fill={isFavorite ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5">
+        <path d="M8 13.5C5 11.5 1.5 8.8 1.5 5.5a3.3 3.3 0 0 1 6.5-.8A3.3 3.3 0 0 1 14.5 5.5c0 3.3-3.5 6-6.5 8z" />
+      </svg>
+    </button>
   );
 }
 
