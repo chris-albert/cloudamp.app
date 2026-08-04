@@ -85,6 +85,24 @@ export function isFavorite(file: FavoritesFile, albumId: string): boolean {
 }
 
 /**
+ * Resolve favorite entries against the current library for display.
+ * Entries whose albumId doesn't resolve are hidden — not removed — so they
+ * reappear automatically when the album returns to the library (ADR-0001).
+ * Most recently favorited first.
+ */
+export function resolveFavoriteAlbums<A>(
+  favorites: FavoriteEntry[],
+  albumById: Map<string, A>,
+): A[] {
+  return [...favorites]
+    .sort((a, b) => b.favoritedAt.localeCompare(a.favoritedAt))
+    .flatMap((f) => {
+      const album = albumById.get(f.albumId);
+      return album === undefined ? [] : [album];
+    });
+}
+
+/**
  * Serialize the full list — never a view-filtered one.
  */
 export function serializeFavoritesFile(file: FavoritesFile): string {
