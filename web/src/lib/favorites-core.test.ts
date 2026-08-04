@@ -4,6 +4,7 @@ import {
   emptyFavoritesFile,
   isFavorite,
   parseFavoritesFile,
+  resolveFavoriteAlbums,
   serializeFavoritesFile,
   type FavoritesFile,
 } from "./favorites-core";
@@ -94,6 +95,42 @@ describe("parseFavoritesFile", () => {
       ok: true,
       file: file({ albumId: "album-1", favoritedAt: "2026-07-21T10:00:00Z" }),
     });
+  });
+});
+
+describe("resolveFavoriteAlbums", () => {
+  const albums = new Map([
+    ["album-1", { id: "album-1", name: "First" }],
+    ["album-2", { id: "album-2", name: "Second" }],
+  ]);
+
+  it("returns favorite albums most recently favorited first", () => {
+    const result = resolveFavoriteAlbums(
+      [
+        { albumId: "album-1", favoritedAt: "2026-07-01T00:00:00Z" },
+        { albumId: "album-2", favoritedAt: "2026-07-20T00:00:00Z" },
+      ],
+      albums,
+    );
+    expect(result.map((a) => a.id)).toEqual(["album-2", "album-1"]);
+  });
+
+  it("hides entries whose album is missing from the library", () => {
+    const result = resolveFavoriteAlbums(
+      [
+        { albumId: "gone-album", favoritedAt: "2026-07-21T00:00:00Z" },
+        { albumId: "album-1", favoritedAt: "2026-07-01T00:00:00Z" },
+      ],
+      albums,
+    );
+    expect(result.map((a) => a.id)).toEqual(["album-1"]);
+  });
+
+  it("resolves a previously hidden entry once its album returns to the library", () => {
+    const favorites = [{ albumId: "gone-album", favoritedAt: "2026-07-21T00:00:00Z" }];
+    expect(resolveFavoriteAlbums(favorites, albums)).toEqual([]);
+    const restored = new Map(albums).set("gone-album", { id: "gone-album", name: "Back" });
+    expect(resolveFavoriteAlbums(favorites, restored).map((a) => a.id)).toEqual(["gone-album"]);
   });
 });
 

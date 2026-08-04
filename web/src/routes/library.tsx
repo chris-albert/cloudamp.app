@@ -11,6 +11,7 @@ import { searchAlbumYear, extractYear, searchCoverArt, fetchImageBlob, type Musi
 import { DriveImage, ArtistImage } from "@/lib/drive-image";
 import { playAlbum } from "@/lib/player-store";
 import { getFavoritesState, subscribeFavoritesState, ensureFavoritesLoaded, toggleFavorite } from "@/lib/favorites-store";
+import { resolveFavoriteAlbums } from "@/lib/favorites-core";
 
 export function LibraryPage() {
   const scanState = useSyncExternalStore(subscribeScanState, getScanState);
@@ -126,6 +127,7 @@ function LibraryBrowser() {
 
   const [selectedArtist, setSelectedArtist] = useState<Artist | null>(null);
   const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null);
+  const [viewMode, setViewMode] = useState<"artists" | "favorites">("artists");
   const [search, setSearch] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -180,6 +182,19 @@ function LibraryBrowser() {
         replace: true,
       });
     }
+  }
+
+  // Opening an album from the Favorites grid also selects its artist so the
+  // detail pane (breadcrumb, delete, URL params) behaves like the drill-down
+  function selectFavoriteAlbum(album: Album) {
+    const artist = result.artists.find((a) => a.id === album.artistId) ?? null;
+    setSelectedArtist(artist);
+    setSelectedAlbum(album);
+    navigate({
+      to: "/app/library",
+      search: { artistId: album.artistId, albumId: album.id },
+      replace: true,
+    });
   }
 
   const handleDeleteAlbum = useCallback(async () => {
@@ -271,7 +286,7 @@ function LibraryBrowser() {
           onClick={() => { selectArtist(null); }}
           className="text-zinc-400 hover:text-white"
         >
-          All Artists
+          {viewMode === "favorites" ? "Favorites" : "All Artists"}
         </button>
         {selectedArtist && (
           <>
@@ -292,19 +307,50 @@ function LibraryBrowser() {
         )}
       </div>
 
-      {/* Search */}
+      {/* View mode tabs + search */}
       {!selectedArtist && (
-        <input
-          type="text"
-          placeholder="Search artists..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="rounded-md bg-zinc-900 border border-zinc-700 px-3 py-1.5 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full max-w-sm"
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex rounded-md border border-zinc-700 overflow-hidden">
+            <button
+              onClick={() => setViewMode("artists")}
+              className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                viewMode === "artists"
+                  ? "bg-zinc-700 text-white"
+                  : "bg-zinc-900 text-zinc-400 hover:text-white"
+              }`}
+            >
+              Artists
+            </button>
+            <button
+              onClick={() => setViewMode("favorites")}
+              className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                viewMode === "favorites"
+                  ? "bg-zinc-700 text-white"
+                  : "bg-zinc-900 text-zinc-400 hover:text-white"
+              }`}
+            >
+              Favorites
+            </button>
+          </div>
+          {viewMode === "artists" && (
+            <input
+              type="text"
+              placeholder="Search artists..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="rounded-md bg-zinc-900 border border-zinc-700 px-3 py-1.5 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full max-w-sm"
+            />
+          )}
+        </div>
+      )}
+
+      {/* Favorites grid */}
+      {!selectedArtist && viewMode === "favorites" && (
+        <FavoritesGridView albumsByArtist={result.albumsByArtist} onSelect={selectFavoriteAlbum} />
       )}
 
       {/* Artist list */}
-      {!selectedArtist && (
+      {!selectedArtist && viewMode === "artists" && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
           {filteredArtists.map((artist) => {
             const artistAlbums = result.albumsByArtist[artist.id] ?? [];
@@ -684,6 +730,65 @@ function ArtistFolderName({ artist, onRenamed }: { artist: Artist; onRenamed: (u
       >
         Rename
       </button>
+    </div>
+  );
+}
+
+function FavoritesGridView({
+  albumsByArtist,
+  onSelect,
+}: {
+  albumsByArtist: Record<string, Album[]>;
+  onSelect: (album: Album) => void;
+}) {
+  const favoritesState = useSyncExternalStore(subscribeFavoritesState, getFavoritesState);
+
+  if (favoritesState.status === "idle" || favoritesState.status === "loading") {
+    return <p className="text-sm text-zinc-500">Loading favorites...</p>;
+  }
+  if (favoritesState.status === "error") {
+    return <p className="text-sm text-red-400">Failed to load favorites: {favoritesState.error}</p>;
+  }
+
+  const albumById = new Map(
+    Object.values(albumsByArtist).flat().map((album) => [album.id, album]),
+  );
+  const favoriteAlbums = resolveFavoriteAlbums(favoritesState.favorites, albumById);
+
+  if (favoriteAlbums.length === 0) {
+    return (
+      <p className="text-sm text-zinc-500">
+        No favorites yet. Open an album and tap the heart to add it here.
+      </p>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      {favoriteAlbums.map((album) => (
+        <button
+          key={album.id}
+          type="button"
+          onClick={() => onSelect(album)}
+          className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3 text-left hover:bg-zinc-800/60 hover:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+        >
+          {album.coverFileId ? (
+            <DriveImage
+              fileId={album.coverFileId}
+              alt={`${album.name} cover`}
+              className="w-10 h-10 object-cover rounded border border-zinc-700 shrink-0"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded border border-zinc-700 bg-zinc-800 shrink-0 flex items-center justify-center">
+              <span className="text-zinc-600 text-lg">&#9835;</span>
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium text-zinc-200 truncate">{album.name}</div>
+            <div className="text-xs text-zinc-500 truncate">{album.artistName}</div>
+          </div>
+        </button>
+      ))}
     </div>
   );
 }
