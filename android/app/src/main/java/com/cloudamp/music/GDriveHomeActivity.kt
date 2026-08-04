@@ -213,22 +213,22 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
                 recentAddedAdapter.setAlbums(recentlyAdded)
 
                 // Favorites: most recently favorited first, orphans hidden
-                // (ADR-0001), capped at 10. A Drive failure just leaves the
-                // row hidden; the next resume retries.
+                // (ADR-0001), capped at 10. The cached list renders the row
+                // immediately; a Drive read then reconciles (pushing any dirty
+                // toggles). A Drive failure keeps the cached row; the next
+                // resume retries.
+                val cachedFavorites = withContext(Dispatchers.IO) {
+                    favoritesRepository.hydrateFromCache()
+                }
+                showFavoritesRow(cachedFavorites, albumById)
                 val favoriteEntries = withContext(Dispatchers.IO) {
                     try {
                         favoritesRepository.load()
                     } catch (e: Exception) {
-                        emptyList()
+                        cachedFavorites
                     }
                 }
-                val favoriteAlbums = FavoritesCore
-                    .resolveFavoriteAlbums(favoriteEntries, albumById)
-                    .take(10)
-                val favoritesVisibility = if (favoriteAlbums.isEmpty()) View.GONE else View.VISIBLE
-                favoritesAdapter.setAlbums(favoriteAlbums)
-                findViewById<View>(R.id.favoritesHeader).visibility = favoritesVisibility
-                findViewById<View>(R.id.favoritesRecyclerView).visibility = favoritesVisibility
+                showFavoritesRow(favoriteEntries, albumById)
 
                 // Discover: random 9 albums + shuffle button
                 allAlbumsCache = allAlbums
@@ -247,6 +247,17 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
                 showLoading(false)
             }
         }
+    }
+
+    private fun showFavoritesRow(
+        entries: List<FavoritesCore.FavoriteEntry>,
+        albumById: Map<String, GDriveAlbum>
+    ) {
+        val favoriteAlbums = FavoritesCore.resolveFavoriteAlbums(entries, albumById).take(10)
+        val visibility = if (favoriteAlbums.isEmpty()) View.GONE else View.VISIBLE
+        favoritesAdapter.setAlbums(favoriteAlbums)
+        findViewById<View>(R.id.favoritesHeader).visibility = visibility
+        findViewById<View>(R.id.favoritesRecyclerView).visibility = visibility
     }
 
     private fun playAlbum(album: GDriveAlbum) {

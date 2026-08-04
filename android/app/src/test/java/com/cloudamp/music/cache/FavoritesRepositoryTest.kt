@@ -24,9 +24,9 @@ import java.io.IOException
 
 /**
  * Repository tests against a fake Drive client: GET→merge→PUT sequencing on
- * toggle, find-or-create of the .cloudamp folder and Favorites File, and
- * never overwriting an unknown schemaVersion. Mirrors
- * web/src/lib/favorites-store.test.ts.
+ * toggle, find-or-create of the .cloudamp folder and Favorites File, never
+ * overwriting an unknown schemaVersion, cache hydration at startup, and
+ * dirty-retry of failed toggles. Mirrors web/src/lib/favorites-store.test.ts.
  */
 class FavoritesRepositoryTest {
 
@@ -48,11 +48,22 @@ class FavoritesRepositoryTest {
                 .map { it.asJsonObject.get("albumId").asString }
     }
 
+    private class FakeCacheStore : FavoritesCacheStore {
+        var persisted: PersistedFavorites? = null
+
+        override fun load(): PersistedFavorites? = persisted
+
+        override fun save(persisted: PersistedFavorites) {
+            this.persisted = persisted
+        }
+    }
+
     private class FakeDriveApi : GoogleDriveApiService {
         var folderId: String? = null
         var fileId: String? = null
         var fileContent: String = ""
         var failUpdate: Boolean = false
+        var offline: Boolean = false
 
         val calls = mutableListOf<String>()
         var createdFolderMetadata: String? = null
@@ -70,6 +81,7 @@ class FavoritesRepositoryTest {
             query: String, fields: String, orderBy: String, pageSize: Int, pageToken: String?
         ): Response<DriveFileListResponse> {
             calls.add("listFiles")
+            if (offline) throw IOException("offline")
             val files = when {
                 query.contains("'.cloudamp'") -> listOfNotNull(
                     folderId?.let { DriveFile(it, ".cloudamp", "application/vnd.google-apps.folder") }
@@ -132,7 +144,8 @@ class FavoritesRepositoryTest {
         ): Response<DriveChangeListResponse> = throw UnsupportedOperationException()
     }
 
-    private fun repository(api: FakeDriveApi) = FavoritesRepository(api) { ROOT_ID }
+    private fun repository(api: FakeDriveApi, store: FavoritesCacheStore = FakeCacheStore()) =
+        FavoritesRepository(api, store) { ROOT_ID }
 
     // ── toggle with an existing Favorites File ──────────────────────────
 
@@ -196,24 +209,60 @@ class FavoritesRepositoryTest {
     }
 
     @Test
-    fun `toggle throws on a failed PUT and keeps prior state`() = runTest {
+    fun `toggle keeps the toggled state and marks it dirty when the PUT fails`() = runTest {
         val api = FakeDriveApi().apply {
             folderId = FOLDER_ID
             fileId = FILE_ID
             fileContent = remoteFile("album-a")
             failUpdate = true
         }
-        val repo = repository(api)
+        val store = FakeCacheStore()
+        val repo = repository(api, store)
         repo.load()
 
-        try {
-            repo.toggle("album-b", favorite = true)
-            fail("Expected toggle to throw on failed PUT")
-        } catch (e: IOException) {
-            // expected
+        repo.toggle("album-b", favorite = true)
+
+        assertTrue(repo.isFavorite("album-b"))
+        assertEquals(listOf("album-b"), store.persisted!!.pending.map { it.albumId })
+    }
+
+    @Test
+    fun `a later successful toggle pushes an earlier dirty toggle along`() = runTest {
+        val api = FakeDriveApi().apply {
+            folderId = FOLDER_ID
+            fileId = FILE_ID
+            fileContent = remoteFile("album-a")
+            failUpdate = true
         }
-        assertEquals(listOf("album-a"), repo.listFavorites().map { it.albumId })
-        assertFalse(repo.isFavorite("album-b"))
+        val store = FakeCacheStore()
+        val repo = repository(api, store)
+
+        repo.toggle("album-b", favorite = true)
+        api.failUpdate = false
+        repo.toggle("album-c", favorite = true)
+
+        assertEquals(listOf("album-a", "album-b", "album-c"), writtenAlbumIds(api.updatedContent!!))
+        assertTrue(store.persisted!!.pending.isEmpty())
+    }
+
+    @Test
+    fun `toggle does not queue a dirty toggle on an unknown schemaVersion`() = runTest {
+        val api = FakeDriveApi().apply {
+            folderId = FOLDER_ID
+            fileId = FILE_ID
+            fileContent = """{"schemaVersion":2,"favorites":[]}"""
+        }
+        val store = FakeCacheStore()
+        val repo = repository(api, store)
+
+        try {
+            repo.toggle("album-a", favorite = true)
+            fail("Expected toggle to throw on unknown schemaVersion")
+        } catch (e: UnsupportedSchemaException) {
+            // expected — a refusal, not a deferrable failure
+        }
+        assertFalse(repo.isFavorite("album-a"))
+        assertTrue(store.persisted?.pending.orEmpty().isEmpty())
     }
 
     // ── find-or-create on first write ───────────────────────────────────
@@ -271,5 +320,117 @@ class FavoritesRepositoryTest {
 
         assertTrue(repo.isFavorite("album-a"))
         assertFalse(repo.isFavorite("album-b"))
+    }
+
+    // ── cache hydration at startup ──────────────────────────────────────
+
+    @Test
+    fun `hydrate renders cached favorites before any Drive request completes`() {
+        val api = FakeDriveApi()
+        val store = FakeCacheStore().apply {
+            persisted = PersistedFavorites(
+                favorites = listOf(FavoritesCore.FavoriteEntry("album-a", "2026-07-01T00:00:00Z")),
+                pending = emptyList()
+            )
+        }
+        val repo = repository(api, store)
+
+        val cached = repo.hydrateFromCache()
+
+        assertEquals(listOf("album-a"), cached.map { it.albumId })
+        assertTrue(repo.isFavorite("album-a"))
+        assertTrue(api.calls.isEmpty())
+    }
+
+    @Test
+    fun `load keeps the cached list when Drive is unreachable at launch`() = runTest {
+        val api = FakeDriveApi().apply { offline = true }
+        val store = FakeCacheStore().apply {
+            persisted = PersistedFavorites(
+                favorites = listOf(FavoritesCore.FavoriteEntry("album-a", "2026-07-01T00:00:00Z")),
+                pending = emptyList()
+            )
+        }
+        val repo = repository(api, store)
+
+        try {
+            repo.load()
+            fail("Expected load to throw when Drive is unreachable")
+        } catch (e: IOException) {
+            // expected
+        }
+        assertEquals(listOf("album-a"), repo.listFavorites().map { it.albumId })
+        assertEquals(listOf("album-a"), store.persisted!!.favorites.map { it.albumId })
+    }
+
+    @Test
+    fun `load caches the loaded list for the next start`() = runTest {
+        val api = FakeDriveApi().apply {
+            folderId = FOLDER_ID
+            fileId = FILE_ID
+            fileContent = remoteFile("album-a")
+        }
+        val store = FakeCacheStore()
+        val repo = repository(api, store)
+
+        repo.load()
+
+        assertEquals(listOf("album-a"), store.persisted!!.favorites.map { it.albumId })
+        assertTrue(store.persisted!!.pending.isEmpty())
+    }
+
+    // ── dirty-retry at next launch ──────────────────────────────────────
+
+    @Test
+    fun `load pushes the dirty toggle via read-merge-write so remote changes survive`() = runTest {
+        val api = FakeDriveApi().apply {
+            folderId = FOLDER_ID
+            fileId = FILE_ID
+            // Another client favorited album-x while we were offline
+            fileContent = remoteFile("album-a", "album-x")
+        }
+        val store = FakeCacheStore().apply {
+            persisted = PersistedFavorites(
+                favorites = listOf(FavoritesCore.FavoriteEntry("album-a", "2026-07-01T00:00:00Z")),
+                pending = listOf(PendingToggle("album-b", favorite = true, "2026-07-02T00:00:00Z"))
+            )
+        }
+        val repo = repository(api, store)
+
+        val favorites = repo.load()
+
+        assertTrue(api.calls.indexOf("downloadFile") < api.calls.indexOf("updateFileContent"))
+        assertEquals(listOf("album-a", "album-x", "album-b"), writtenAlbumIds(api.updatedContent!!))
+        assertEquals(listOf("album-a", "album-x", "album-b"), favorites.map { it.albumId })
+        assertTrue(store.persisted!!.pending.isEmpty())
+    }
+
+    @Test
+    fun `load keeps the dirty toggle for the next launch when the retry also fails`() = runTest {
+        val api = FakeDriveApi().apply {
+            folderId = FOLDER_ID
+            fileId = FILE_ID
+            fileContent = remoteFile("album-a")
+            failUpdate = true
+        }
+        val store = FakeCacheStore().apply {
+            persisted = PersistedFavorites(
+                favorites = listOf(
+                    FavoritesCore.FavoriteEntry("album-a", "2026-07-01T00:00:00Z"),
+                    FavoritesCore.FavoriteEntry("album-b", "2026-07-02T00:00:00Z")
+                ),
+                pending = listOf(PendingToggle("album-b", favorite = true, "2026-07-02T00:00:00Z"))
+            )
+        }
+        val repo = repository(api, store)
+
+        try {
+            repo.load()
+            fail("Expected load to throw when the dirty flush fails")
+        } catch (e: IOException) {
+            // expected
+        }
+        assertTrue(repo.isFavorite("album-b"))
+        assertEquals(listOf("album-b"), store.persisted!!.pending.map { it.albumId })
     }
 }
