@@ -111,6 +111,10 @@ dependencies {
     implementation 'com.google.firebase:firebase-crashlytics-ktx'
     implementation 'com.google.firebase:firebase-appdistribution-api-ktx:16.0.0-beta12'
     implementation 'com.google.firebase:firebase-appdistribution:16.0.0-beta12'
+
+    // Unit testing (JVM tests in app/src/test)
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3'
 }
 
 // Task to print version code for CI/CD

@@ -27,6 +27,7 @@ import com.cloudamp.music.api.GDriveAlbum
 import com.cloudamp.music.api.GDriveTrack
 import com.cloudamp.music.api.GoogleDriveApiClient
 import com.cloudamp.music.auth.GoogleDriveAuthManager
+import com.cloudamp.music.cache.FavoritesRepository
 import com.cloudamp.music.cache.GDriveLibraryCache
 import com.cloudamp.music.cache.GDriveLibraryScanner
 import com.cloudamp.music.cache.LibraryScanManager
@@ -44,6 +45,8 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
     private lateinit var driveClient: GoogleDriveApiClient
     private lateinit var authManager: GoogleDriveAuthManager
     private lateinit var libraryCache: GDriveLibraryCache
+    private lateinit var favoritesRepository: FavoritesRepository
+    private var hasLoadedFavorites = false
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private lateinit var drawerLayout: DrawerLayout
@@ -77,6 +80,7 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
         driveClient = GoogleDriveApiClient.getInstance(this)
         authManager = GoogleDriveAuthManager(this)
         libraryCache = GDriveLibraryCache.getInstance(this)
+        favoritesRepository = FavoritesRepository.getInstance(this)
 
         setupDrawer()
         setupRecyclerView()
@@ -126,6 +130,9 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
             },
             onTrackClick = { track, allTracks, position ->
                 onTrackClicked(track, allTracks, position)
+            },
+            onFavoriteToggle = { album ->
+                toggleAlbumFavorite(album)
             }
         )
 
@@ -181,6 +188,43 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
             hideEmptyState()
             if (!hasLoadedContent) {
                 loadMyLibrary()
+            }
+            if (!hasLoadedFavorites) {
+                loadFavorites()
+            }
+        }
+    }
+
+    private fun loadFavorites() {
+        hasLoadedFavorites = true
+        scope.launch {
+            try {
+                val favorites = withContext(Dispatchers.IO) { favoritesRepository.load() }
+                adapter.setFavoriteAlbumIds(favorites.map { it.albumId })
+            } catch (e: Exception) {
+                // Hearts stay unfilled; the next toggle or relaunch retries.
+                hasLoadedFavorites = false
+            }
+        }
+    }
+
+    private fun toggleAlbumFavorite(album: GDriveAlbum) {
+        val favorite = !adapter.isAlbumFavorite(album.id)
+        adapter.setAlbumFavorite(album.id, favorite)
+        scope.launch {
+            try {
+                val merged = withContext(Dispatchers.IO) {
+                    favoritesRepository.toggle(album.id, favorite)
+                }
+                adapter.setFavoriteAlbumIds(merged.map { it.albumId })
+            } catch (e: Exception) {
+                // Revert the optimistic flip; keep-and-retry is a follow-up slice.
+                adapter.setAlbumFavorite(album.id, !favorite)
+                Toast.makeText(
+                    this@GDriveStructuredLibraryActivity,
+                    "Couldn't update favorite: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
