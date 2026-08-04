@@ -79,6 +79,33 @@
                     android:nestedScrollingEnabled="false"
                     android:background="?attr/caBackground" />
 
+                <!-- Favorites Section -->
+                <TextView
+                    android:id="@+id/favoritesHeader"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="&#x25b6; FAVORITES"
+                    android:textColor="?attr/caText"
+                    android:textSize="14sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:background="?attr/caSectionHeader"
+                    android:padding="8dp"
+                    android:visibility="gone" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/favoritesRecyclerView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:clipToPadding="false"
+                    android:nestedScrollingEnabled="false"
+                    android:background="?attr/caBackground"
+                    android:visibility="gone" />
+
                 <!-- Discover Section -->
                 <TextView
                     android:layout_width="match_parent"

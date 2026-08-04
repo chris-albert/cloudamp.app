@@ -17,6 +17,8 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.cloudamp.music.api.GDriveAlbum
 import com.cloudamp.music.auth.GoogleDriveAuthManager
+import com.cloudamp.music.cache.FavoritesCore
+import com.cloudamp.music.cache.FavoritesRepository
 import com.cloudamp.music.cache.GDriveLibraryCache
 import com.cloudamp.music.cache.GDrivePlaybackHistory
 import com.cloudamp.music.cache.LibraryScanManager
@@ -32,6 +34,7 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
 
     private lateinit var libraryCache: GDriveLibraryCache
     private lateinit var authManager: GoogleDriveAuthManager
+    private lateinit var favoritesRepository: FavoritesRepository
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private lateinit var drawerLayout: DrawerLayout
@@ -40,6 +43,7 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
 
     private lateinit var recentPlayedAdapter: GDriveHomeAdapter
     private lateinit var recentAddedAdapter: GDriveHomeAdapter
+    private lateinit var favoritesAdapter: GDriveHomeAdapter
     private lateinit var discoverAdapter: GDriveHomeAdapter
     private lateinit var loadingContainer: LinearLayout
     private lateinit var contentScrollView: View
@@ -57,6 +61,7 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
 
         libraryCache = GDriveLibraryCache.getInstance(this)
         authManager = GoogleDriveAuthManager(this)
+        favoritesRepository = FavoritesRepository.getInstance(this)
 
         FirebaseAppDistribution.getInstance().updateIfNewReleaseAvailable()
 
@@ -114,6 +119,7 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
         loadingContainer = findViewById(R.id.loadingContainer)
         recentPlayedAdapter = setupHorizontalRecyclerView(findViewById(R.id.recentPlayedRecyclerView))
         recentAddedAdapter = setupHorizontalRecyclerView(findViewById(R.id.recentAddedRecyclerView))
+        favoritesAdapter = setupHorizontalRecyclerView(findViewById(R.id.favoritesRecyclerView))
 
         val discoverRv = findViewById<RecyclerView>(R.id.discoverRecyclerView)
         discoverRv.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
@@ -181,6 +187,7 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
                         libraryCache.getArtistAlbums(artist.id) ?: emptyList()
                     }.filter { it.trackCount > 0 }
                 }
+                val albumById = allAlbums.associateBy { it.id }
 
                 // Recently Played: from NDJSON history (falls back to SharedPreferences)
                 val recentlyPlayed = withContext(Dispatchers.IO) {
@@ -191,7 +198,6 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
                         libraryCache.getRecentlyPlayedIds().take(10)
                     }
                     // Resolve IDs to album objects
-                    val albumById = allAlbums.associateBy { it.id }
                     albumIds.mapNotNull { albumById[it] }
                 }
                 if (recentlyPlayed.isNotEmpty()) {
@@ -205,6 +211,24 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
                     .sortedByDescending { it.modifiedTime ?: "" }
                     .take(10)
                 recentAddedAdapter.setAlbums(recentlyAdded)
+
+                // Favorites: most recently favorited first, orphans hidden
+                // (ADR-0001), capped at 10. A Drive failure just leaves the
+                // row hidden; the next resume retries.
+                val favoriteEntries = withContext(Dispatchers.IO) {
+                    try {
+                        favoritesRepository.load()
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+                }
+                val favoriteAlbums = FavoritesCore
+                    .resolveFavoriteAlbums(favoriteEntries, albumById)
+                    .take(10)
+                val favoritesVisibility = if (favoriteAlbums.isEmpty()) View.GONE else View.VISIBLE
+                favoritesAdapter.setAlbums(favoriteAlbums)
+                findViewById<View>(R.id.favoritesHeader).visibility = favoritesVisibility
+                findViewById<View>(R.id.favoritesRecyclerView).visibility = favoritesVisibility
 
                 // Discover: random 9 albums + shuffle button
                 allAlbumsCache = allAlbums

@@ -120,6 +120,45 @@ class FavoritesCoreTest {
         )
     }
 
+    // ── resolveFavoriteAlbums ───────────────────────────────────────────
+
+    private val albums = mapOf(
+        "album-1" to "First",
+        "album-2" to "Second"
+    )
+
+    @Test
+    fun `returns favorite albums most recently favorited first`() {
+        val result = FavoritesCore.resolveFavoriteAlbums(
+            listOf(
+                FavoriteEntry("album-1", "2026-07-01T00:00:00Z"),
+                FavoriteEntry("album-2", "2026-07-20T00:00:00Z")
+            ),
+            albums
+        )
+        assertEquals(listOf("Second", "First"), result)
+    }
+
+    @Test
+    fun `hides entries whose album is missing from the library`() {
+        val result = FavoritesCore.resolveFavoriteAlbums(
+            listOf(
+                FavoriteEntry("gone-album", "2026-07-21T00:00:00Z"),
+                FavoriteEntry("album-1", "2026-07-01T00:00:00Z")
+            ),
+            albums
+        )
+        assertEquals(listOf("First"), result)
+    }
+
+    @Test
+    fun `resolves a previously hidden entry once its album returns to the library`() {
+        val favorites = listOf(FavoriteEntry("gone-album", "2026-07-21T00:00:00Z"))
+        assertEquals(emptyList<String>(), FavoritesCore.resolveFavoriteAlbums(favorites, albums))
+        val restored = albums + ("gone-album" to "Back")
+        assertEquals(listOf("Back"), FavoritesCore.resolveFavoriteAlbums(favorites, restored))
+    }
+
     // ── serialize ───────────────────────────────────────────────────────
 
     @Test

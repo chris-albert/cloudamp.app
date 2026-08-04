@@ -95,6 +95,20 @@ object FavoritesCore {
         file.favorites.any { it.albumId == albumId }
 
     /**
+     * Resolve favorite entries against the current library for display.
+     * Entries whose albumId doesn't resolve are hidden — not removed — so they
+     * reappear automatically when the album returns to the library (ADR-0001).
+     * Most recently favorited first.
+     */
+    fun <A> resolveFavoriteAlbums(
+        favorites: List<FavoriteEntry>,
+        albumById: Map<String, A>
+    ): List<A> =
+        favorites
+            .sortedByDescending { it.favoritedAt }
+            .mapNotNull { albumById[it.albumId] }
+
+    /**
      * Serialize the full loaded list — never a view-filtered one — with
      * exactly the documented fields, 2-space pretty-printed like the web
      * client's JSON.stringify(obj, null, 2).
