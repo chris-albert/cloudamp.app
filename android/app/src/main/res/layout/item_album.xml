@@ -87,4 +87,17 @@
             android:layout_marginTop="2dp"
             android:gravity="end"/>
     </LinearLayout>
+
+    <TextView
+        android:id="@+id/albumFavoriteButton"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_gravity="center_vertical"
+        android:layout_marginStart="4dp"
+        android:gravity="center"
+        android:text="♡"
+        android:textColor="?attr/caText"
+        android:textSize="20sp"
+        android:visibility="gone"
+        android:contentDescription="Favorite album"/>
 </LinearLayout>

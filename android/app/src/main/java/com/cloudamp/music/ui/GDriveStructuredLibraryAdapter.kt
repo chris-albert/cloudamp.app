@@ -39,12 +39,14 @@ sealed class GDriveLibraryItem {
 class GDriveStructuredLibraryAdapter(
     private val onArtistExpand: (GDriveArtist, Int) -> Unit,
     private val onAlbumExpand: (GDriveAlbum, Int) -> Unit,
-    private val onTrackClick: (GDriveTrack, List<GDriveTrack>, Int) -> Unit
+    private val onTrackClick: (GDriveTrack, List<GDriveTrack>, Int) -> Unit,
+    private val onFavoriteToggle: (GDriveAlbum) -> Unit = {}
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private val items = mutableListOf<GDriveLibraryItem>()
     private var allArtists: List<GDriveArtist> = emptyList()
     private var currentFilter: String = ""
+    private val favoriteAlbumIds = mutableSetOf<String>()
 
     companion object {
         private const val TYPE_HEADER = 0
@@ -256,6 +258,22 @@ class GDriveStructuredLibraryAdapter(
         }
     }
 
+    // ── Favorites ───────────────────────────────────────────────────────
+
+    fun isAlbumFavorite(albumId: String): Boolean = favoriteAlbumIds.contains(albumId)
+
+    fun setFavoriteAlbumIds(albumIds: Collection<String>) {
+        favoriteAlbumIds.clear()
+        favoriteAlbumIds.addAll(albumIds)
+        notifyDataSetChanged()
+    }
+
+    fun setAlbumFavorite(albumId: String, favorite: Boolean) {
+        if (favorite) favoriteAlbumIds.add(albumId) else favoriteAlbumIds.remove(albumId)
+        val index = items.indexOfFirst { it is GDriveLibraryItem.AlbumItem && it.album.id == albumId }
+        if (index >= 0) notifyItemChanged(index)
+    }
+
     // ── ViewHolders ─────────────────────────────────────────────────────
 
     inner class HeaderViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -334,11 +352,19 @@ class GDriveStructuredLibraryAdapter(
         private val releaseDateTextView: TextView = itemView.findViewById(R.id.albumReleaseDateTextView)
         private val trackCountTextView: TextView = itemView.findViewById(R.id.albumTrackCountTextView)
         private val expandIcon: TextView = itemView.findViewById(R.id.expandIcon)
+        private val favoriteButton: TextView = itemView.findViewById(R.id.albumFavoriteButton)
 
         fun bind(item: GDriveLibraryItem.AlbumItem) {
             nameTextView.text = item.album.name
             releaseDateTextView.text = item.album.year?.toString() ?: ""
             expandIcon.text = if (item.isExpanded) "▼" else "▶"
+
+            // Heart lives on the expanded album header only (see issue #127)
+            favoriteButton.visibility = if (item.isExpanded) View.VISIBLE else View.GONE
+            favoriteButton.text = if (favoriteAlbumIds.contains(item.album.id)) "♥" else "♡"
+            favoriteButton.setOnClickListener {
+                onFavoriteToggle(item.album)
+            }
 
             val trackCount = if (item.tracks.isNotEmpty()) item.tracks.size else item.album.trackCount
             artistTextView.text = "$trackCount Track${if (trackCount != 1) "s" else ""}"
