@@ -11,7 +11,7 @@ import { searchAlbumYear, extractYear, searchCoverArt, fetchImageBlob, type Musi
 import { DriveImage, ArtistImage } from "@/lib/drive-image";
 import { playAlbum } from "@/lib/player-store";
 import { getFavoritesState, subscribeFavoritesState, ensureFavoritesLoaded, toggleFavorite } from "@/lib/favorites-store";
-import { resolveFavoriteAlbums } from "@/lib/favorites-core";
+import { resolveFavoriteAlbums, resolveFavoriteArtistIds } from "@/lib/favorites-core";
 
 export function LibraryPage() {
   const scanState = useSyncExternalStore(subscribeScanState, getScanState);
@@ -128,7 +128,9 @@ function LibraryBrowser() {
   const [selectedArtist, setSelectedArtist] = useState<Artist | null>(null);
   const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null);
   const [viewMode, setViewMode] = useState<"artists" | "favorites">("artists");
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [search, setSearch] = useState("");
+  const favoritesState = useSyncExternalStore(subscribeFavoritesState, getFavoritesState);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -250,8 +252,18 @@ function LibraryBrowser() {
     }
   }
 
-  const filteredArtists = result.artists.filter((a) =>
-    a.name.toLowerCase().includes(search.toLowerCase()),
+  // Favorite Artists are derived at read time from Favorite Albums (never stored)
+  const favoriteArtistIds = favoritesOnly
+    ? resolveFavoriteArtistIds(
+        favoritesState.favorites,
+        new Map(Object.values(result.albumsByArtist).flat().map((album) => [album.id, album])),
+      )
+    : null;
+
+  const filteredArtists = result.artists.filter(
+    (a) =>
+      a.name.toLowerCase().includes(search.toLowerCase()) &&
+      (favoriteArtistIds === null || favoriteArtistIds.has(a.id)),
   );
 
   const albums = selectedArtist ? result.albumsByArtist[selectedArtist.id] ?? [] : [];
@@ -333,6 +345,22 @@ function LibraryBrowser() {
             </button>
           </div>
           {viewMode === "artists" && (
+            <button
+              onClick={() => setFavoritesOnly((v) => !v)}
+              aria-pressed={favoritesOnly}
+              className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
+                favoritesOnly
+                  ? "border-red-900/50 bg-red-950/30 text-red-400"
+                  : "border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-white"
+              }`}
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill={favoritesOnly ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5">
+                <path d="M8 13.5C5 11.5 1.5 8.8 1.5 5.5a3.3 3.3 0 0 1 6.5-.8A3.3 3.3 0 0 1 14.5 5.5c0 3.3-3.5 6-6.5 8z" />
+              </svg>
+              Favorites only
+            </button>
+          )}
+          {viewMode === "artists" && (
             <input
               type="text"
               placeholder="Search artists..."
@@ -351,6 +379,17 @@ function LibraryBrowser() {
 
       {/* Artist list */}
       {!selectedArtist && viewMode === "artists" && (
+        favoritesOnly && favoritesState.status !== "done" ? (
+          favoritesState.status === "error" ? (
+            <p className="text-sm text-red-400">Failed to load favorites: {favoritesState.error}</p>
+          ) : (
+            <p className="text-sm text-zinc-500">Loading favorites...</p>
+          )
+        ) : favoriteArtistIds !== null && favoriteArtistIds.size === 0 ? (
+          <p className="text-sm text-zinc-500">
+            No favorite artists yet. Open an album and tap the heart — its artist will appear here.
+          </p>
+        ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
           {filteredArtists.map((artist) => {
             const artistAlbums = result.albumsByArtist[artist.id] ?? [];
@@ -382,6 +421,7 @@ function LibraryBrowser() {
             );
           })}
         </div>
+        )
       )}
 
       {/* Album list */}
