@@ -19,6 +19,9 @@
 -keep class com.cloudamp.music.api.GDriveAlbum { *; }
 -keep class com.cloudamp.music.api.GDriveTrack { *; }
 -keep class com.cloudamp.music.cache.PlaybackStateStore$LastPlaybackState { *; }
+-keep class com.cloudamp.music.cache.PersistedFavorites { *; }
+-keep class com.cloudamp.music.cache.PendingToggle { *; }
+-keep class com.cloudamp.music.cache.FavoritesCore$FavoriteEntry { *; }
 
 # Gson TypeToken requires generic signature preservation
 -keep class com.google.gson.reflect.TypeToken { *; }
