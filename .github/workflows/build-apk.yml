@@ -100,13 +100,18 @@ jobs:
         token_format: access_token
 
     - name: Upload to Firebase App Distribution
+      env:
+        # Passed via env, not inline ${{ }}, so quotes/backticks in a PR
+        # title or commit message can't break out of the shell script
+        PR_TITLE: ${{ github.event.pull_request.title }}
+        COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
       run: |
         npm install -g firebase-tools
         NOTES="Version ${{ steps.version.outputs.name }}"
         if [ "${{ github.event_name }}" = "pull_request" ]; then
-          NOTES="$NOTES (PR #${{ github.event.number }}: ${{ github.event.pull_request.title }})"
+          NOTES="$NOTES (PR #${{ github.event.number }}: $PR_TITLE)"
         else
-          NOTES="$NOTES - ${{ github.event.head_commit.message }}"
+          NOTES="$NOTES - $COMMIT_MESSAGE"
         fi
         firebase appdistribution:distribute \
           android/app/build/outputs/apk/release/CloudAmp-v${{ steps.version.outputs.name }}.apk \
