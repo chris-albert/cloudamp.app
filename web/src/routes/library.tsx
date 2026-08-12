@@ -263,6 +263,8 @@ function LibraryBrowser() {
       )
     : null;
 
+  const favoriteAlbumIds = new Set(favoritesState.favorites.map((f) => f.albumId));
+
   const filteredArtists = result.artists.filter(
     (a) =>
       a.name.toLowerCase().includes(search.toLowerCase()) &&
@@ -393,34 +395,61 @@ function LibraryBrowser() {
             No favorite artists yet. Open an album and tap the heart — its artist will appear here.
           </p>
         ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          {filteredArtists.map((artist) => {
-            const artistAlbums = result.albumsByArtist[artist.id] ?? [];
-            const fallbackFileId = artistAlbums.find((a) => a.coverFileId)?.coverFileId ?? null;
+        <div className="space-y-6">
+          {groupArtistsByLetter(filteredArtists).map(({ letter, artists }) => {
+            let albumCount = 0;
+            let trackCount = 0;
+            let favoriteCount = 0;
+            for (const artist of artists) {
+              for (const album of result.albumsByArtist[artist.id] ?? []) {
+                albumCount++;
+                trackCount += album.trackCount;
+                if (favoriteAlbumIds.has(album.id)) favoriteCount++;
+              }
+            }
             return (
-              <button
-                key={artist.id}
-                onClick={() => selectArtist(artist)}
-                className={`flex items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors hover:bg-zinc-800 ${
-                  issueArtistIds.has(artist.id)
-                    ? "border-amber-900/50 bg-amber-950/20"
-                    : "border-zinc-800 bg-zinc-900/50"
-                }`}
-              >
-                <ArtistImage
-                  imageFileId={artist.imageFileId}
-                  fallbackFileId={fallbackFileId}
-                  name={artist.name}
-                  className="w-10 h-10 shrink-0 rounded border border-zinc-700"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-zinc-200 truncate">{artist.name}</div>
-                  <div className="text-xs text-zinc-500">{artist.albumCount} album{artist.albumCount !== 1 ? "s" : ""}</div>
+              <div key={letter} className="space-y-2">
+                <div className="flex items-baseline gap-3 border-b border-zinc-800 pb-1">
+                  <div className="text-lg font-bold text-zinc-200">{letter}</div>
+                  <div className="text-xs text-zinc-500">
+                    {artists.length} artist{artists.length !== 1 ? "s" : ""}
+                    {" · "}{albumCount} album{albumCount !== 1 ? "s" : ""}
+                    {" · "}{trackCount} track{trackCount !== 1 ? "s" : ""}
+                    {" · "}{favoriteCount} favorite{favoriteCount !== 1 ? "s" : ""}
+                  </div>
                 </div>
-                {issueArtistIds.has(artist.id) && (
-                  <div className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
-                )}
-              </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {artists.map((artist) => {
+                    const artistAlbums = result.albumsByArtist[artist.id] ?? [];
+                    const fallbackFileId = artistAlbums.find((a) => a.coverFileId)?.coverFileId ?? null;
+                    return (
+                      <button
+                        key={artist.id}
+                        onClick={() => selectArtist(artist)}
+                        className={`flex items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors hover:bg-zinc-800 ${
+                          issueArtistIds.has(artist.id)
+                            ? "border-amber-900/50 bg-amber-950/20"
+                            : "border-zinc-800 bg-zinc-900/50"
+                        }`}
+                      >
+                        <ArtistImage
+                          imageFileId={artist.imageFileId}
+                          fallbackFileId={fallbackFileId}
+                          name={artist.name}
+                          className="w-10 h-10 shrink-0 rounded border border-zinc-700"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-zinc-200 truncate">{artist.name}</div>
+                          <div className="text-xs text-zinc-500">{artist.albumCount} album{artist.albumCount !== 1 ? "s" : ""}</div>
+                        </div>
+                        {issueArtistIds.has(artist.id) && (
+                          <div className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             );
           })}
         </div>
@@ -677,6 +706,23 @@ function LibraryBrowser() {
       )}
     </div>
   );
+}
+
+/** A–Z from the first letter (diacritics stripped); anything else groups under "#". */
+function sectionLetter(name: string): string {
+  const first = name.trim().charAt(0).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+  return first >= "A" && first <= "Z" ? first : "#";
+}
+
+function groupArtistsByLetter(artists: Artist[]): { letter: string; artists: Artist[] }[] {
+  const groups = new Map<string, Artist[]>();
+  for (const artist of artists) {
+    const letter = sectionLetter(artist.name);
+    const group = groups.get(letter);
+    if (group) group.push(artist);
+    else groups.set(letter, [artist]);
+  }
+  return [...groups.entries()].map(([letter, grouped]) => ({ letter, artists: grouped }));
 }
 
 function ArtistFolderName({ artist, onRenamed }: { artist: Artist; onRenamed: (updated: Artist) => void }) {
