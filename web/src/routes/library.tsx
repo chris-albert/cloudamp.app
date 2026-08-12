@@ -1,6 +1,6 @@
 import { useSyncExternalStore, useState, useEffect, useCallback, useRef } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { getScanState, subscribeScanState, setScanProgress, setScanError, removeArtistFromState, removeAlbumFromState, flattenSubfolderInState, removeSubfolderFromState, renameFileInState, removeTrackFromState, renameAlbumFolderInState, renameArtistFolderInState, setCoverInState } from "@/lib/scan-store";
+import { getScanState, subscribeScanState, setScanProgress, setScanError, decideAutoScan, removeArtistFromState, removeAlbumFromState, flattenSubfolderInState, removeSubfolderFromState, renameFileInState, removeTrackFromState, renameAlbumFolderInState, renameArtistFolderInState, setCoverInState } from "@/lib/scan-store";
 import { formatFileSize, trashFile, moveFile, renameFile, uploadFile } from "@/lib/drive-api";
 import { isAuthenticated, getRootFolderId } from "@/lib/google-auth";
 import { syncLibrary, doFullScan } from "@/lib/incremental-sync";
@@ -17,7 +17,9 @@ export function LibraryPage() {
   const scanState = useSyncExternalStore(subscribeScanState, getScanState);
   const didAutoScan = useRef(false);
 
-  // Auto-trigger scan/sync when library page loads with no data
+  // Auto-trigger scan/sync when library page loads with no data.
+  // Waits for the IndexedDB cache hydration to settle first — otherwise
+  // the cached library would be ignored and every load would full-rescan.
   useEffect(() => {
     if (didAutoScan.current) return;
     if (!isAuthenticated()) return;
@@ -25,18 +27,19 @@ export function LibraryPage() {
     if (!rootId) return;
 
     const s = getScanState();
-    if (s.status === "idle") {
+    const action = decideAutoScan(s);
+    if (action === "full-scan") {
       didAutoScan.current = true;
       doFullScan(rootId, setScanProgress).catch((err) => {
         setScanError(err instanceof Error ? err.message : String(err));
       });
-    } else if (s.status === "done" && s.changePageToken) {
+    } else if (action === "sync") {
       didAutoScan.current = true;
       syncLibrary().catch((err) => {
         setScanError(err instanceof Error ? err.message : String(err));
       });
     }
-  }, [scanState.status]);
+  }, [scanState.status, scanState.hydrated]);
 
   if (!isAuthenticated()) {
     return (
