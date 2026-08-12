@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Bundle
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import com.cloudamp.music.cache.FavoritesRepository
 import kotlinx.coroutines.*
 
 /**
@@ -145,19 +146,24 @@ class PlaybackManager private constructor(
             when (action) {
                 "previous" -> onSkipToPrevious()
                 "next" -> onSkipToNext()
-                CloudAmpService.CUSTOM_ACTION_SAVE_QUEUE -> {
-                    val saved = service?.saveCurrentQueue() ?: false
-                    if (saved) {
-                        service?.updateStatusMetadata("Queue saved!")
-                        scope.launch {
-                            delay(2000)
+                CloudAmpService.CUSTOM_ACTION_TOGGLE_FAVORITE -> {
+                    scope.launch {
+                        try {
                             val active = ActivePlayback.provider ?: return@launch
                             val queue = active.getQueueAsTracks()
                             val idx = active.getCurrentIndex()
-                            if (idx in queue.indices) {
-                                val track = queue[idx]
-                                service?.updateMetadata(track, track.album?.images?.firstOrNull()?.url)
+                            val albumId = queue.getOrNull(idx)?.album?.id ?: return@launch
+                            val repository = FavoritesRepository.getInstance(context)
+                            repository.toggle(albumId, !repository.isFavorite(albumId))
+                            // Refresh the playback state so the heart icon flips
+                            val state = if (active.isPlaying()) {
+                                PlaybackStateCompat.STATE_PLAYING
+                            } else {
+                                PlaybackStateCompat.STATE_PAUSED
                             }
+                            service?.updatePlaybackState(state, active.getCurrentPosition())
+                        } catch (e: Exception) {
+                            e.printStackTrace()
                         }
                     }
                 }
