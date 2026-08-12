@@ -422,6 +422,7 @@ function LibraryBrowser() {
                   {artists.map((artist) => {
                     const artistAlbums = result.albumsByArtist[artist.id] ?? [];
                     const fallbackFileId = artistAlbums.find((a) => a.coverFileId)?.coverFileId ?? null;
+                    const artistFavoriteCount = artistAlbums.filter((a) => favoriteAlbumIds.has(a.id)).length;
                     return (
                       <button
                         key={artist.id}
@@ -440,7 +441,17 @@ function LibraryBrowser() {
                         />
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium text-zinc-200 truncate">{artist.name}</div>
-                          <div className="text-xs text-zinc-500">{artist.albumCount} album{artist.albumCount !== 1 ? "s" : ""}</div>
+                          <div className="text-xs text-zinc-500">
+                            {artist.albumCount} album{artist.albumCount !== 1 ? "s" : ""}
+                            {artistFavoriteCount > 0 && (
+                              <span className="ml-2 text-red-400">
+                                <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="inline -mt-0.5 mr-0.5">
+                                  <path d="M8 13.5C5 11.5 1.5 8.8 1.5 5.5a3.3 3.3 0 0 1 6.5-.8A3.3 3.3 0 0 1 14.5 5.5c0 3.3-3.5 6-6.5 8z" />
+                                </svg>
+                                {artistFavoriteCount}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         {issueArtistIds.has(artist.id) && (
                           <div className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
@@ -496,6 +507,9 @@ function LibraryBrowser() {
                   Folder: {album.folderName}
                 </div>
               </div>
+              <span onClick={(e) => e.stopPropagation()} className="shrink-0">
+                <FavoriteHeartButton albumId={album.id} />
+              </span>
               {(result.tracksByAlbum[album.id] ?? []).length > 0 && (
                 <button
                   onClick={(e) => {
