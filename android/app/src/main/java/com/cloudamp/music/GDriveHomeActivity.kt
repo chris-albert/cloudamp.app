@@ -51,6 +51,7 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
     private lateinit var emptyTextView: TextView
     private lateinit var settingsButton: Button
     private var allAlbumsCache: List<GDriveAlbum> = emptyList()
+    private var favoriteAlbumsCache: List<GDriveAlbum> = emptyList()
     private lateinit var miniPlayerBar: MiniPlayerBar
     private lateinit var appliedThemeId: String
 
@@ -106,10 +107,14 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
         navigationView.setCheckedItem(R.id.nav_gdrive_home)
     }
 
-    private fun setupHorizontalRecyclerView(recyclerView: RecyclerView): GDriveHomeAdapter {
+    private fun setupHorizontalRecyclerView(
+        recyclerView: RecyclerView,
+        onShuffleClick: (() -> Unit)? = null
+    ): GDriveHomeAdapter {
         recyclerView.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         val adapter = GDriveHomeAdapter(
-            onAlbumClick = { album -> playAlbum(album) }
+            onAlbumClick = { album -> playAlbum(album) },
+            onShuffleClick = onShuffleClick
         )
         recyclerView.adapter = adapter
         return adapter
@@ -119,7 +124,10 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
         loadingContainer = findViewById(R.id.loadingContainer)
         recentPlayedAdapter = setupHorizontalRecyclerView(findViewById(R.id.recentPlayedRecyclerView))
         recentAddedAdapter = setupHorizontalRecyclerView(findViewById(R.id.recentAddedRecyclerView))
-        favoritesAdapter = setupHorizontalRecyclerView(findViewById(R.id.favoritesRecyclerView))
+        favoritesAdapter = setupHorizontalRecyclerView(
+            findViewById(R.id.favoritesRecyclerView),
+            onShuffleClick = { reshuffleFavorites() }
+        )
 
         val discoverRv = findViewById<RecyclerView>(R.id.discoverRecyclerView)
         discoverRv.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
@@ -180,6 +188,8 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
 
         showLoading(true)
         scope.launch {
+            val albumById: Map<String, GDriveAlbum>
+            val cachedFavorites: List<FavoritesCore.FavoriteEntry>
             try {
                 val allAlbums = withContext(Dispatchers.IO) {
                     val artists = libraryCache.getArtists() ?: emptyList()
@@ -187,7 +197,7 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
                         libraryCache.getArtistAlbums(artist.id) ?: emptyList()
                     }.filter { it.trackCount > 0 }
                 }
-                val albumById = allAlbums.associateBy { it.id }
+                albumById = allAlbums.associateBy { it.id }
 
                 // Recently Played: from NDJSON history (falls back to SharedPreferences)
                 val recentlyPlayed = withContext(Dispatchers.IO) {
@@ -212,23 +222,13 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
                     .take(10)
                 recentAddedAdapter.setAlbums(recentlyAdded)
 
-                // Favorites: most recently favorited first, orphans hidden
-                // (ADR-0001), capped at 10. The cached list renders the row
-                // immediately; a Drive read then reconciles (pushing any dirty
-                // toggles). A Drive failure keeps the cached row; the next
-                // resume retries.
-                val cachedFavorites = withContext(Dispatchers.IO) {
+                // Favorites: random selection like Discover, orphans hidden
+                // (ADR-0001). Rendered from the local cache so the home screen
+                // never waits on Drive.
+                cachedFavorites = withContext(Dispatchers.IO) {
                     favoritesRepository.hydrateFromCache()
                 }
                 showFavoritesRow(cachedFavorites, albumById)
-                val favoriteEntries = withContext(Dispatchers.IO) {
-                    try {
-                        favoritesRepository.load()
-                    } catch (e: Exception) {
-                        cachedFavorites
-                    }
-                }
-                showFavoritesRow(favoriteEntries, albumById)
 
                 // Discover: random 9 albums + shuffle button
                 allAlbumsCache = allAlbums
@@ -243,8 +243,25 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
                     "Error loading content: ${e.message}",
                     Toast.LENGTH_LONG
                 ).show()
+                return@launch
             } finally {
                 showLoading(false)
+            }
+
+            // Reconcile favorites with Drive (pushing any dirty toggles) after
+            // the loading overlay is gone, so the network round trips never
+            // block the cached render. A failure keeps the cached row; the
+            // next resume retries. Skip the re-render when nothing changed so
+            // the row doesn't visibly reshuffle.
+            val remoteFavorites = withContext(Dispatchers.IO) {
+                try {
+                    favoritesRepository.load()
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            if (remoteFavorites != null && remoteFavorites != cachedFavorites) {
+                showFavoritesRow(remoteFavorites, albumById)
             }
         }
     }
@@ -253,9 +270,14 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
         entries: List<FavoritesCore.FavoriteEntry>,
         albumById: Map<String, GDriveAlbum>
     ) {
-        val favoriteAlbums = FavoritesCore.resolveFavoriteAlbums(entries, albumById).take(10)
+        favoriteAlbumsCache = FavoritesCore.resolveFavoriteAlbums(entries, albumById)
+        reshuffleFavorites()
+    }
+
+    private fun reshuffleFavorites() {
+        val favoriteAlbums = favoriteAlbumsCache.shuffled().take(9)
         val visibility = if (favoriteAlbums.isEmpty()) View.GONE else View.VISIBLE
-        favoritesAdapter.setAlbums(favoriteAlbums)
+        favoritesAdapter.setAlbums(favoriteAlbums, showShuffleButton = true)
         findViewById<View>(R.id.favoritesHeader).visibility = visibility
         findViewById<View>(R.id.favoritesRecyclerView).visibility = visibility
     }
