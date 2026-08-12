@@ -31,6 +31,11 @@ export interface ScanState {
   scannedAt: number | null;
   /** Token for the Drive Changes API to detect incremental changes */
   changePageToken: string | null;
+  /**
+   * True once the IndexedDB cache lookup has settled (hit or miss).
+   * Until then, "idle" only means "not hydrated yet" — don't auto-scan.
+   */
+  hydrated: boolean;
 }
 
 // ── IndexedDB helpers ─────────────────────────────────────────────────
@@ -90,6 +95,7 @@ let state: ScanState = {
   error: null,
   scannedAt: null,
   changePageToken: null,
+  hydrated: false,
 };
 
 const listeners = new Set<() => void>();
@@ -100,7 +106,9 @@ function emit() {
 
 // Hydrate from IndexedDB on startup
 loadFromDB().then((data) => {
-  if (data?.result && data.validation) {
+  // Only apply cached data if nothing else (e.g. a manual scan) has
+  // started in the meantime.
+  if (data?.result && data.validation && state.status === "idle") {
     state = {
       ...state,
       status: "done",
@@ -108,9 +116,12 @@ loadFromDB().then((data) => {
       validation: data.validation,
       scannedAt: data.scannedAt,
       changePageToken: data.changePageToken ?? null,
+      hydrated: true,
     };
-    emit();
+  } else {
+    state = { ...state, hydrated: true };
   }
+  emit();
 });
 
 export function getScanState(): ScanState {
@@ -519,7 +530,20 @@ export function renameArtistFolderInState(artistId: string, newFolderName: strin
 }
 
 export function resetScan() {
-  state = { status: "idle", progress: null, result: null, validation: null, error: null, scannedAt: null, changePageToken: null };
+  state = { status: "idle", progress: null, result: null, validation: null, error: null, scannedAt: null, changePageToken: null, hydrated: true };
   clearDB();
   emit();
+}
+
+/**
+ * What the library page should do on load, given the current scan state.
+ * Returns "wait" until the cache hydration attempt has settled — kicking
+ * off a scan before then would ignore a perfectly good cache (the bug
+ * where every page load did a full rescan).
+ */
+export function decideAutoScan(s: ScanState): "full-scan" | "sync" | "wait" | "none" {
+  if (!s.hydrated) return "wait";
+  if (s.status === "idle") return "full-scan";
+  if (s.status === "done" && s.changePageToken) return "sync";
+  return "none";
 }
