@@ -29,6 +29,7 @@ import com.cloudamp.music.R
 import com.cloudamp.music.api.DriveFile
 import com.cloudamp.music.api.GDriveTrack
 import com.cloudamp.music.api.GoogleDriveApiClient
+import com.cloudamp.music.cache.FavoritesRepository
 import com.cloudamp.music.cache.GDriveLibraryCache
 import com.cloudamp.music.cache.GDrivePlaybackHistory
 import com.cloudamp.music.cache.MediaCache
@@ -52,6 +53,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     private var playbackPollingJob: Job? = null
 
     private lateinit var gdriveLibraryCache: GDriveLibraryCache
+    private lateinit var favoritesRepository: FavoritesRepository
 
     // Cache of audio files per GDrive folder for building playback queues
     private val gdriveAudioFilesByFolder = mutableMapOf<String, List<DriveFile>>()
@@ -71,7 +73,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         const val GDRIVE_PLAYLISTS_ID = "gdrive_playlists"
         const val SAVED_QUEUES_ID = "saved_queues"
         const val SEARCH_ID = "search"
-        const val CUSTOM_ACTION_SAVE_QUEUE = "save_queue"
+        const val CUSTOM_ACTION_TOGGLE_FAVORITE = "toggle_favorite"
 
         private const val CHANNEL_ID = "cloudamp_playback"
         private const val NOTIFICATION_ID = 1
@@ -105,6 +107,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         savedQueuesManager = SavedQueuesManager.getInstance(this)
         playbackStateStore = PlaybackStateStore.getInstance(this)
         gdriveLibraryCache = GDriveLibraryCache.getInstance(this)
+        favoritesRepository = FavoritesRepository.getInstance(this)
+        favoritesRepository.hydrateFromCache()
 
         // Create MediaSession
         mediaSession = MediaSessionCompat(this, "CloudAmpService").apply {
@@ -365,13 +369,16 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             )
         }
 
-        // Add save queue action when there's an active queue
-        if (queue.isNotEmpty()) {
+        // Add favorite toggle for the current track's album (absent for raw
+        // folder playback, where no library album id is known)
+        val albumId = queue.getOrNull(currentIndex)?.album?.id
+        if (albumId != null) {
+            val isFavorite = favoritesRepository.isFavorite(albumId)
             stateBuilder.addCustomAction(
                 PlaybackStateCompat.CustomAction.Builder(
-                    CUSTOM_ACTION_SAVE_QUEUE,
-                    "Save Queue",
-                    R.drawable.ic_save
+                    CUSTOM_ACTION_TOGGLE_FAVORITE,
+                    if (isFavorite) "Remove from Favorites" else "Add to Favorites",
+                    if (isFavorite) R.drawable.ic_favorite else R.drawable.ic_favorite_border
                 ).build()
             )
         }
@@ -941,25 +948,6 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         savedQueuesManager.updateQueuePosition(
             queueId, queue.currentIndex, queue.currentPositionMs
         )
-    }
-
-    /**
-     * Saves the current playback queue with an auto-generated name.
-     * Called from the save_queue custom action.
-     */
-    fun saveCurrentQueue(): Boolean {
-        val name = buildAutoSaveName()
-        val positionMs = ActivePlayback.provider?.getCurrentPosition() ?: 0L
-        return savedQueuesManager.saveCurrentQueue(name, positionMs) != null
-    }
-
-    private fun buildAutoSaveName(): String {
-        val active = ActivePlayback.provider ?: return "Queue"
-        val queue = active.getQueueAsTracks()
-        val idx = active.getCurrentIndex()
-        if (idx !in queue.indices) return "Queue"
-        val track = queue[idx]
-        return track.album?.name ?: track.name
     }
 
     override fun onSearch(query: String, extras: Bundle?, result: Result<MutableList<MediaBrowserCompat.MediaItem>>) {
