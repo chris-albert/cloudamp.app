@@ -1,4 +1,4 @@
-import { useSyncExternalStore, useState, useEffect, useCallback, useRef } from "react";
+import { Fragment, useSyncExternalStore, useState, useEffect, useCallback, useRef } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { getScanState, subscribeScanState, setScanProgress, setScanError, decideAutoScan, removeArtistFromState, removeAlbumFromState, flattenSubfolderInState, removeSubfolderFromState, renameFileInState, removeTrackFromState, renameAlbumFolderInState, renameArtistFolderInState, setCoverInState } from "@/lib/scan-store";
 import { formatFileSize, trashFile, moveFile, renameFile, uploadFile } from "@/lib/drive-api";
@@ -132,6 +132,7 @@ function LibraryBrowser() {
   const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null);
   const [viewMode, setViewMode] = useState<"artists" | "favorites">("artists");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [expandedArtistId, setExpandedArtistId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const favoritesState = useSyncExternalStore(subscribeFavoritesState, getFavoritesState);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -146,20 +147,18 @@ function LibraryBrowser() {
     ensureFavoritesLoaded();
   }, []);
 
-  // Resolve initial selection from search params
+  // Derive selection from URL search params so browser back/forward and
+  // links opened in a new tab show the right view
   useEffect(() => {
-    if (initialArtistId && !selectedArtist) {
-      const artist = result.artists.find((a) => a.id === initialArtistId);
-      if (artist) {
-        setSelectedArtist(artist);
-        if (initialAlbumId) {
-          const albums = result.albumsByArtist[artist.id] ?? [];
-          const album = albums.find((a) => a.id === initialAlbumId);
-          if (album) setSelectedAlbum(album);
-        }
-      }
-    }
-  }, [initialArtistId, initialAlbumId, result, selectedArtist]);
+    const artist = initialArtistId
+      ? result.artists.find((a) => a.id === initialArtistId) ?? null
+      : null;
+    const album = artist && initialAlbumId
+      ? (result.albumsByArtist[artist.id] ?? []).find((a) => a.id === initialAlbumId) ?? null
+      : null;
+    setSelectedArtist(artist);
+    setSelectedAlbum(album);
+  }, [initialArtistId, initialAlbumId, result]);
 
   // Update URL search params when selection changes (without re-triggering the effect)
   function selectArtist(artist: Artist | null) {
@@ -175,10 +174,10 @@ function LibraryBrowser() {
   function selectAlbum(album: Album | null) {
     setSelectedAlbum(album);
     if (album && selectedArtist) {
+      // Drill-down pushes a history entry so the browser back button returns here
       navigate({
         to: "/app/library",
         search: { artistId: selectedArtist.id, albumId: album.id },
-        replace: true,
       });
     } else if (selectedArtist) {
       navigate({
@@ -189,16 +188,16 @@ function LibraryBrowser() {
     }
   }
 
-  // Opening an album from the Favorites grid also selects its artist so the
-  // detail pane (breadcrumb, delete, URL params) behaves like the drill-down
-  function selectFavoriteAlbum(album: Album) {
+  // Opening an album directly (Favorites grid, inline artist expansion) also
+  // selects its artist so the detail pane (breadcrumb, delete, URL params)
+  // behaves like the drill-down
+  function openAlbum(album: Album) {
     const artist = result.artists.find((a) => a.id === album.artistId) ?? null;
     setSelectedArtist(artist);
     setSelectedAlbum(album);
     navigate({
       to: "/app/library",
       search: { artistId: album.artistId, albumId: album.id },
-      replace: true,
     });
   }
 
@@ -272,14 +271,6 @@ function LibraryBrowser() {
   );
 
   const albums = selectedArtist ? result.albumsByArtist[selectedArtist.id] ?? [] : [];
-
-  // Keep selectedAlbum in sync with state (e.g. after flatten updates subfolders/trackCount)
-  useEffect(() => {
-    if (selectedAlbum && selectedArtist) {
-      const fresh = (result.albumsByArtist[selectedArtist.id] ?? []).find((a) => a.id === selectedAlbum.id);
-      if (fresh && fresh !== selectedAlbum) setSelectedAlbum(fresh);
-    }
-  }, [result, selectedArtist, selectedAlbum]);
 
   const tracks = selectedAlbum ? result.tracksByAlbum[selectedAlbum.id] ?? [] : [];
 
@@ -379,7 +370,7 @@ function LibraryBrowser() {
 
       {/* Favorites grid */}
       {!selectedArtist && viewMode === "favorites" && (
-        <FavoritesGridView albumsByArtist={result.albumsByArtist} onSelect={selectFavoriteAlbum} />
+        <FavoritesGridView albumsByArtist={result.albumsByArtist} onSelect={openAlbum} />
       )}
 
       {/* Artist list */}
@@ -423,40 +414,90 @@ function LibraryBrowser() {
                     const artistAlbums = result.albumsByArtist[artist.id] ?? [];
                     const fallbackFileId = artistAlbums.find((a) => a.coverFileId)?.coverFileId ?? null;
                     const artistFavoriteCount = artistAlbums.filter((a) => favoriteAlbumIds.has(a.id)).length;
+                    const expanded = expandedArtistId === artist.id;
                     return (
-                      <button
-                        key={artist.id}
-                        onClick={() => selectArtist(artist)}
-                        className={`flex items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors hover:bg-zinc-800 ${
-                          issueArtistIds.has(artist.id)
-                            ? "border-amber-900/50 bg-amber-950/20"
-                            : "border-zinc-800 bg-zinc-900/50"
-                        }`}
-                      >
-                        <ArtistImage
-                          imageFileId={artist.imageFileId}
-                          fallbackFileId={fallbackFileId}
-                          name={artist.name}
-                          className="w-10 h-10 shrink-0 rounded border border-zinc-700"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-zinc-200 truncate">{artist.name}</div>
-                          <div className="text-xs text-zinc-500">
-                            {artist.albumCount} album{artist.albumCount !== 1 ? "s" : ""}
-                            {artistFavoriteCount > 0 && (
-                              <span className="ml-2 text-red-400">
-                                <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="inline -mt-0.5 mr-0.5">
-                                  <path d="M8 13.5C5 11.5 1.5 8.8 1.5 5.5a3.3 3.3 0 0 1 6.5-.8A3.3 3.3 0 0 1 14.5 5.5c0 3.3-3.5 6-6.5 8z" />
-                                </svg>
-                                {artistFavoriteCount}
-                              </span>
+                      <Fragment key={artist.id}>
+                        <Link
+                          to="/app/library"
+                          search={{ artistId: artist.id, albumId: undefined }}
+                          className={`flex items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors hover:bg-zinc-800 ${
+                            issueArtistIds.has(artist.id)
+                              ? "border-amber-900/50 bg-amber-950/20"
+                              : "border-zinc-800 bg-zinc-900/50"
+                          }`}
+                        >
+                          <ArtistImage
+                            imageFileId={artist.imageFileId}
+                            fallbackFileId={fallbackFileId}
+                            name={artist.name}
+                            className="w-10 h-10 shrink-0 rounded border border-zinc-700"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-zinc-200 truncate">{artist.name}</div>
+                            <div className="text-xs text-zinc-500">
+                              {artist.albumCount} album{artist.albumCount !== 1 ? "s" : ""}
+                              {artistFavoriteCount > 0 && (
+                                <span className="ml-2 text-red-400">
+                                  <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="inline -mt-0.5 mr-0.5">
+                                    <path d="M8 13.5C5 11.5 1.5 8.8 1.5 5.5a3.3 3.3 0 0 1 6.5-.8A3.3 3.3 0 0 1 14.5 5.5c0 3.3-3.5 6-6.5 8z" />
+                                  </svg>
+                                  {artistFavoriteCount}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {issueArtistIds.has(artist.id) && (
+                            <div className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setExpandedArtistId(expanded ? null : artist.id);
+                            }}
+                            title={expanded ? "Hide albums" : "Show albums"}
+                            aria-expanded={expanded}
+                            className="shrink-0 p-1 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className={`transition-transform ${expanded ? "rotate-180" : ""}`}>
+                              <path d="M4 6l4 4 4-4" />
+                            </svg>
+                          </button>
+                        </Link>
+                        {expanded && (
+                          <div className="col-span-full rounded-lg border border-zinc-800 bg-zinc-900/30 p-2 space-y-1">
+                            {artistAlbums.map((album) => (
+                              <div
+                                key={album.id}
+                                className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-zinc-800/60 transition-colors"
+                              >
+                                {album.coverFileId ? (
+                                  <DriveImage
+                                    fileId={album.coverFileId}
+                                    alt=""
+                                    className="w-8 h-8 object-cover rounded border border-zinc-700 shrink-0"
+                                  />
+                                ) : (
+                                  <div className="w-8 h-8 rounded border border-zinc-700 bg-zinc-800 shrink-0 flex items-center justify-center">
+                                    <span className="text-zinc-600 text-sm">♪</span>
+                                  </div>
+                                )}
+                                <button
+                                  onClick={() => openAlbum(album)}
+                                  className="flex-1 min-w-0 text-left text-sm text-zinc-200 truncate hover:text-white"
+                                >
+                                  {album.year && <span className="text-zinc-500 mr-2">{album.year}</span>}
+                                  {album.name}
+                                </button>
+                                <FavoriteHeartButton albumId={album.id} />
+                              </div>
+                            ))}
+                            {artistAlbums.length === 0 && (
+                              <p className="px-2 py-1 text-xs text-zinc-500">No albums found for this artist.</p>
                             )}
                           </div>
-                        </div>
-                        {issueArtistIds.has(artist.id) && (
-                          <div className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
                         )}
-                      </button>
+                      </Fragment>
                     );
                   })}
                 </div>
