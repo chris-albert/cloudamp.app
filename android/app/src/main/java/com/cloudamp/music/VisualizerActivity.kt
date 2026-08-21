@@ -87,12 +87,13 @@ class VisualizerActivity : AppCompatActivity() {
         val container = findViewById<FrameLayout>(R.id.vizContainer)
         container.setOnTouchListener { _, event -> gestureDetector.onTouchEvent(event) }
 
-        // Check permission and start visualizer
+        // Tapping the mode label cycles visualizations instead of closing
+        modeLabel.setOnClickListener { switchType(currentType.next()) }
+
+        // Check permission; onResume starts the visualizer once granted
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-            == PackageManager.PERMISSION_GRANTED
+            != PackageManager.PERMISSION_GRANTED
         ) {
-            startVisualizer()
-        } else {
             ActivityCompat.requestPermissions(
                 this,
                 arrayOf(Manifest.permission.RECORD_AUDIO),
@@ -104,6 +105,22 @@ class VisualizerActivity : AppCompatActivity() {
         showModeLabel(currentType.label)
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
+            startVisualizer()
+        }
+    }
+
+    override fun onPause() {
+        // Release before NowPlayingActivity resumes, so its mini visualizer
+        // can claim the audio session (only one Visualizer per session works)
+        stopVisualizer()
+        super.onPause()
+    }
+
     private fun switchType(type: VisType) {
         currentType = type
         eqView.visibility = if (type == VisType.EQ_BARS) View.VISIBLE else View.GONE
@@ -112,6 +129,7 @@ class VisualizerActivity : AppCompatActivity() {
     }
 
     private fun showModeLabel(text: String) {
+        modeLabel.animate().cancel()
         modeLabel.text = text
         modeLabel.visibility = View.VISIBLE
         modeLabel.alpha = 1f
@@ -149,6 +167,8 @@ class VisualizerActivity : AppCompatActivity() {
     }
 
     private fun startVisualizer() {
+        if (visualizer != null) return
+
         val sessionId = ActivePlayback.provider?.getAudioSessionId() ?: 0
         if (sessionId == 0) {
             Toast.makeText(this, "No audio playing", Toast.LENGTH_SHORT).show()
@@ -210,13 +230,17 @@ class VisualizerActivity : AppCompatActivity() {
         }
     }
 
-    override fun onDestroy() {
-        modeLabelHandler.removeCallbacksAndMessages(null)
+    private fun stopVisualizer() {
         visualizer?.apply {
             enabled = false
             release()
         }
         visualizer = null
+    }
+
+    override fun onDestroy() {
+        modeLabelHandler.removeCallbacksAndMessages(null)
+        stopVisualizer()
         super.onDestroy()
     }
 }
