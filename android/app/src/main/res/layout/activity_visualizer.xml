@@ -11,8 +11,20 @@
         android:layout_height="match_parent"
         android:visibility="visible" />
 
-    <com.cloudamp.music.ui.WarpGridView
-        android:id="@+id/warpGridView"
+    <com.cloudamp.music.ui.OscilloscopeView
+        android:id="@+id/oscilloscopeView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
+    <com.cloudamp.music.ui.RadialSpectrumView
+        android:id="@+id/radialSpectrumView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
+    <com.cloudamp.music.ui.ShaderVisualizerView
+        android:id="@+id/shaderVisualizerView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:visibility="gone" />
@@ -28,7 +40,6 @@
         android:textSize="11sp"
         android:fontFamily="monospace"
         android:background="#33000000"
-        android:padding="6dp"
-        android:visibility="gone" />
+        android:padding="8dp" />
 
 </FrameLayout>
