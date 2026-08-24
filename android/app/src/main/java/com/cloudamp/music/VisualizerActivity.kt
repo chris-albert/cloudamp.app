@@ -5,8 +5,6 @@ import android.content.pm.PackageManager
 import android.media.audiofx.Visualizer
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
@@ -22,12 +20,30 @@ import androidx.core.view.GestureDetectorCompat
 import com.cloudamp.music.playback.ActivePlayback
 import com.cloudamp.music.ui.AudioVisualizerView
 import com.cloudamp.music.ui.EqVisualizerView
-import com.cloudamp.music.ui.WarpGridView
+import com.cloudamp.music.ui.GlShaders
+import com.cloudamp.music.ui.OscilloscopeView
+import com.cloudamp.music.ui.RadialSpectrumView
+import com.cloudamp.music.ui.ShaderVisualizerView
 import kotlin.math.abs
 
-enum class VisType(val label: String) {
+/**
+ * Visualization modes, matching the web app's set and order. Modes with a
+ * [fragmentShader] render on the shared ShaderVisualizerView; the rest have
+ * dedicated Canvas views.
+ */
+enum class VisType(val label: String, val fragmentShader: String? = null) {
     EQ_BARS("EQ BARS"),
-    WARP_GRID("WARP GRID");
+    OSCILLOSCOPE("OSCILLOSCOPE"),
+    RADIAL("RADIAL"),
+    TUNNEL("TUNNEL", GlShaders.TUNNEL_FS),
+    KALEIDOSCOPE("KALEIDOSCOPE", GlShaders.KALEIDOSCOPE_FS),
+    WARP_GRID("WARP GRID", GlShaders.WARPGRID_FS),
+    HONEYCOMB("HONEYCOMB", GlShaders.HONEYCOMB_FS),
+    DIAMOND("DIAMOND", GlShaders.DIAMOND_FS),
+    STARBURST("STARBURST", GlShaders.STARBURST_FS),
+    SPIRAL("SPIRAL", GlShaders.SPIRAL_FS),
+    LIQUID("LIQUID", GlShaders.LIQUID_FS),
+    FRACTAL("FRACTAL", GlShaders.FRACTAL_FS);
 
     fun next(): VisType = entries[(ordinal + 1) % entries.size]
     fun prev(): VisType = entries[(ordinal - 1 + entries.size) % entries.size]
@@ -40,11 +56,12 @@ class VisualizerActivity : AppCompatActivity() {
     }
 
     private lateinit var eqView: EqVisualizerView
-    private lateinit var warpGridView: WarpGridView
+    private lateinit var oscilloscopeView: OscilloscopeView
+    private lateinit var radialView: RadialSpectrumView
+    private lateinit var shaderView: ShaderVisualizerView
     private lateinit var modeLabel: TextView
     private var visualizer: Visualizer? = null
     private var currentType = VisType.EQ_BARS
-    private val modeLabelHandler = Handler(Looper.getMainLooper())
 
     private val gestureDetector by lazy {
         GestureDetectorCompat(this, object : GestureDetector.SimpleOnGestureListener() {
@@ -78,7 +95,9 @@ class VisualizerActivity : AppCompatActivity() {
         setContentView(R.layout.activity_visualizer)
 
         eqView = findViewById(R.id.eqVisualizerView)
-        warpGridView = findViewById(R.id.warpGridView)
+        oscilloscopeView = findViewById(R.id.oscilloscopeView)
+        radialView = findViewById(R.id.radialSpectrumView)
+        shaderView = findViewById(R.id.shaderVisualizerView)
         modeLabel = findViewById(R.id.modeLabelView)
 
         hideSystemUI()
@@ -89,6 +108,7 @@ class VisualizerActivity : AppCompatActivity() {
 
         // Tapping the mode label cycles visualizations instead of closing
         modeLabel.setOnClickListener { switchType(currentType.next()) }
+        modeLabel.text = currentType.label
 
         // Check permission; onResume starts the visualizer once granted
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
@@ -100,13 +120,11 @@ class VisualizerActivity : AppCompatActivity() {
                 PERMISSION_REQUEST_RECORD_AUDIO
             )
         }
-
-        // Show mode label briefly on open
-        showModeLabel(currentType.label)
     }
 
     override fun onResume() {
         super.onResume()
+        shaderView.onResume()
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             == PackageManager.PERMISSION_GRANTED
         ) {
@@ -118,31 +136,28 @@ class VisualizerActivity : AppCompatActivity() {
         // Release before NowPlayingActivity resumes, so its mini visualizer
         // can claim the audio session (only one Visualizer per session works)
         stopVisualizer()
+        shaderView.onPause()
         super.onPause()
     }
 
     private fun switchType(type: VisType) {
         currentType = type
+        val shader = type.fragmentShader
+        if (shader != null) shaderView.setFragmentShader(shader)
         eqView.visibility = if (type == VisType.EQ_BARS) View.VISIBLE else View.GONE
-        warpGridView.visibility = if (type == VisType.WARP_GRID) View.VISIBLE else View.GONE
-        showModeLabel(type.label)
-    }
-
-    private fun showModeLabel(text: String) {
-        modeLabel.animate().cancel()
-        modeLabel.text = text
-        modeLabel.visibility = View.VISIBLE
-        modeLabel.alpha = 1f
-        modeLabelHandler.removeCallbacksAndMessages(null)
-        modeLabelHandler.postDelayed({
-            modeLabel.animate().alpha(0f).setDuration(500).withEndAction {
-                modeLabel.visibility = View.GONE
-            }.start()
-        }, 1500)
+        oscilloscopeView.visibility = if (type == VisType.OSCILLOSCOPE) View.VISIBLE else View.GONE
+        radialView.visibility = if (type == VisType.RADIAL) View.VISIBLE else View.GONE
+        shaderView.visibility = if (shader != null) View.VISIBLE else View.GONE
+        modeLabel.text = type.label
     }
 
     private fun activeView(): AudioVisualizerView {
-        return if (currentType == VisType.EQ_BARS) eqView else warpGridView
+        return when (currentType) {
+            VisType.EQ_BARS -> eqView
+            VisType.OSCILLOSCOPE -> oscilloscopeView
+            VisType.RADIAL -> radialView
+            else -> shaderView
+        }
     }
 
     private fun hideSystemUI() {
@@ -186,7 +201,12 @@ class VisualizerActivity : AppCompatActivity() {
                             waveform: ByteArray?,
                             samplingRate: Int
                         ) {
-                            // Not used
+                            waveform?.let { data ->
+                                val view = activeView() as View
+                                view.post {
+                                    activeView().updateWaveform(data)
+                                }
+                            }
                         }
 
                         override fun onFftDataCapture(
@@ -203,7 +223,7 @@ class VisualizerActivity : AppCompatActivity() {
                         }
                     },
                     Visualizer.getMaxCaptureRate(),
-                    false, // waveform
+                    true,  // waveform
                     true   // fft
                 )
                 enabled = true
@@ -239,7 +259,6 @@ class VisualizerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        modeLabelHandler.removeCallbacksAndMessages(null)
         stopVisualizer()
         super.onDestroy()
     }
