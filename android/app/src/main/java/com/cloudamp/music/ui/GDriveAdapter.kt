@@ -13,17 +13,22 @@ sealed class GDriveItem {
     data class FolderItem(val file: DriveFile) : GDriveItem()
     data class AudioItem(val file: DriveFile) : GDriveItem()
     data class BackItem(val parentId: String?) : GDriveItem()
+    data class EntryItem(val key: String, val label: String) : GDriveItem()
 }
 
 class GDriveAdapter(
     private val onFolderClick: (DriveFile) -> Unit,
     private val onAudioClick: (DriveFile, List<DriveFile>, Int) -> Unit,
-    private val onBackClick: () -> Unit
+    private val onBackClick: () -> Unit,
+    private val onEntryClick: (String) -> Unit = {},
+    private val onEntryLongClick: (String) -> Boolean = { false }
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private val items = mutableListOf<GDriveItem>()
     private var showBackItem = false
     private var allFiles: List<DriveFile> = emptyList()
+    private var allEntries: List<GDriveItem.EntryItem> = emptyList()
+    private var entriesMode = false
     private var hasParentStored = false
     private var currentFilter: String = ""
 
@@ -31,6 +36,7 @@ class GDriveAdapter(
         private const val TYPE_BACK = 0
         private const val TYPE_FOLDER = 1
         private const val TYPE_AUDIO = 2
+        private const val TYPE_ENTRY = 3
     }
 
     override fun getItemViewType(position: Int): Int {
@@ -38,6 +44,7 @@ class GDriveAdapter(
             is GDriveItem.BackItem -> TYPE_BACK
             is GDriveItem.FolderItem -> TYPE_FOLDER
             is GDriveItem.AudioItem -> TYPE_AUDIO
+            is GDriveItem.EntryItem -> TYPE_ENTRY
         }
     }
 
@@ -47,6 +54,7 @@ class GDriveAdapter(
             TYPE_BACK -> BackViewHolder(inflater.inflate(R.layout.item_gdrive_folder, parent, false))
             TYPE_FOLDER -> FolderViewHolder(inflater.inflate(R.layout.item_gdrive_folder, parent, false))
             TYPE_AUDIO -> AudioViewHolder(inflater.inflate(R.layout.item_gdrive_audio, parent, false))
+            TYPE_ENTRY -> EntryViewHolder(inflater.inflate(R.layout.item_gdrive_folder, parent, false))
             else -> throw IllegalArgumentException("Unknown view type: $viewType")
         }
     }
@@ -56,16 +64,41 @@ class GDriveAdapter(
             is GDriveItem.BackItem -> (holder as BackViewHolder).bind()
             is GDriveItem.FolderItem -> (holder as FolderViewHolder).bind(item)
             is GDriveItem.AudioItem -> (holder as AudioViewHolder).bind(item)
+            is GDriveItem.EntryItem -> (holder as EntryViewHolder).bind(item)
         }
     }
 
     override fun getItemCount() = items.size
 
     fun setFiles(files: List<DriveFile>, hasParent: Boolean) {
+        entriesMode = false
         allFiles = files
+        allEntries = emptyList()
         hasParentStored = hasParent
         currentFilter = ""
         rebuildItems(files, hasParent)
+    }
+
+    fun setEntries(entries: List<Pair<String, String>>, hasParent: Boolean) {
+        entriesMode = true
+        allEntries = entries.map { GDriveItem.EntryItem(it.first, it.second) }
+        allFiles = emptyList()
+        hasParentStored = hasParent
+        currentFilter = ""
+        rebuildEntryItems(allEntries, hasParent)
+    }
+
+    private fun rebuildEntryItems(entries: List<GDriveItem.EntryItem>, hasParent: Boolean) {
+        items.clear()
+        showBackItem = hasParent
+
+        if (hasParent) {
+            items.add(GDriveItem.BackItem(null))
+        }
+
+        items.addAll(entries)
+
+        notifyDataSetChanged()
     }
 
     private fun rebuildItems(files: List<DriveFile>, hasParent: Boolean) {
@@ -88,6 +121,12 @@ class GDriveAdapter(
 
     fun filterFiles(query: String) {
         currentFilter = query
+        if (entriesMode) {
+            val filtered = if (query.isEmpty()) allEntries
+                           else allEntries.filter { fuzzyMatch(it.label, query) }
+            rebuildEntryItems(filtered, hasParentStored)
+            return
+        }
         if (query.isEmpty()) {
             rebuildItems(allFiles, hasParentStored)
             return
@@ -98,7 +137,11 @@ class GDriveAdapter(
 
     fun clearFilter() {
         currentFilter = ""
-        rebuildItems(allFiles, hasParentStored)
+        if (entriesMode) {
+            rebuildEntryItems(allEntries, hasParentStored)
+        } else {
+            rebuildItems(allFiles, hasParentStored)
+        }
     }
 
     private fun fuzzyMatch(text: String, query: String): Boolean {
@@ -140,6 +183,20 @@ class GDriveAdapter(
             nameTextView.text = item.file.name
             itemView.setOnClickListener {
                 onFolderClick(item.file)
+            }
+        }
+    }
+
+    inner class EntryViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val nameTextView: TextView = itemView.findViewById(R.id.folderNameTextView)
+
+        fun bind(item: GDriveItem.EntryItem) {
+            nameTextView.text = item.label
+            itemView.setOnClickListener {
+                onEntryClick(item.key)
+            }
+            itemView.setOnLongClickListener {
+                onEntryLongClick(item.key)
             }
         }
     }

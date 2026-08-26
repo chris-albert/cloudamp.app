@@ -35,6 +35,7 @@ import com.cloudamp.music.cache.GDriveLibraryCache
 import com.cloudamp.music.cache.GDrivePlaybackHistory
 import com.cloudamp.music.cache.MediaCache
 import com.cloudamp.music.cache.PlaybackStateStore
+import com.cloudamp.music.cache.SavedLocationsManager
 import com.cloudamp.music.cache.SavedQueuesManager
 import com.cloudamp.music.models.Track
 import com.cloudamp.music.util.MusicFilenameParser
@@ -48,6 +49,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     private lateinit var gdrivePlaybackManager: GDrivePlaybackManager
     private lateinit var gdriveClient: GoogleDriveApiClient
     private lateinit var savedQueuesManager: SavedQueuesManager
+    private lateinit var savedLocationsManager: SavedLocationsManager
     private lateinit var playbackStateStore: PlaybackStateStore
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var currentAlbumArt: Bitmap? = null
@@ -68,6 +70,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         const val ROOT_ID = "root"
         const val GDRIVE_ID = "gdrive"
 
+        const val GDRIVE_SAVED_ID = "gdrive_saved"
+        const val GDRIVE_BROWSE_ID = "gdrive_browse"
         const val GDRIVE_MUSIC_ID = "gdrive_music"
         const val GDRIVE_MUSIC_HOME_ID = "gdrive_music_home"
         const val GDRIVE_LIBRARY_ID = "gdrive_library"
@@ -106,6 +110,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         gdrivePlaybackManager = GDrivePlaybackManager.getInstance(this)
         gdriveClient = GoogleDriveApiClient.getInstance(this)
         savedQueuesManager = SavedQueuesManager.getInstance(this)
+        savedLocationsManager = SavedLocationsManager.getInstance(this)
         playbackStateStore = PlaybackStateStore.getInstance(this)
         gdriveLibraryCache = GDriveLibraryCache.getInstance(this)
         favoritesRepository = FavoritesRepository.getInstance(this)
@@ -528,6 +533,15 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 }
 
                 GDRIVE_ID -> {
+                    mediaItems.add(createBrowsableItem(GDRIVE_SAVED_ID, "Saved", "Your saved folders"))
+                    mediaItems.add(createBrowsableItem(GDRIVE_BROWSE_ID, "Drive", "Browse your Drive folders"))
+                }
+
+                GDRIVE_SAVED_ID -> {
+                    loadSavedLocations(mediaItems)
+                }
+
+                GDRIVE_BROWSE_ID -> {
                     loadGDriveFolder("root", mediaItems)
                 }
 
@@ -538,7 +552,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 else -> {
                     // Handle dynamic IDs
                     when {
-                        parentId == "gdrive_no_auth" || parentId == "saved_queues_empty" || parentId == "gdrive_playlists_empty" -> {
+                        parentId == "gdrive_no_auth" || parentId == "saved_queues_empty" || parentId == "gdrive_playlists_empty" || parentId == "gdrive_saved_empty" -> {
                             // No-op: placeholder items
                         }
                         parentId.startsWith("gdrive_music_artist_") -> {
@@ -562,6 +576,25 @@ class CloudAmpService : MediaBrowserServiceCompat() {
     }
 
     // ── Google Drive browsing ─────────────────────────────────────────
+
+    private fun loadSavedLocations(items: MutableList<MediaBrowserCompat.MediaItem>) {
+        val locations = savedLocationsManager.getSavedLocations()
+        if (locations.isEmpty()) {
+            items.add(createBrowsableItem(
+                "gdrive_saved_empty",
+                "No Saved Folders",
+                "Save folders in the CloudAmp app"
+            ))
+            return
+        }
+        for (location in locations) {
+            items.add(createBrowsableItem(
+                "gdrive_folder_${location.folderId}",
+                location.name,
+                "Saved folder"
+            ))
+        }
+    }
 
     private suspend fun loadGDriveFolder(folderId: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
         try {
