@@ -29,6 +29,7 @@ import com.cloudamp.music.R
 import com.cloudamp.music.api.DriveFile
 import com.cloudamp.music.api.GDriveTrack
 import com.cloudamp.music.api.GoogleDriveApiClient
+import com.cloudamp.music.cache.FavoritesCore
 import com.cloudamp.music.cache.FavoritesRepository
 import com.cloudamp.music.cache.GDriveLibraryCache
 import com.cloudamp.music.cache.GDrivePlaybackHistory
@@ -645,6 +646,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         val allAlbums = artists.flatMap { artist ->
             gdriveLibraryCache.getArtistAlbums(artist.id) ?: emptyList()
         }
+        val albumById = allAlbums.associateBy { it.id }
 
         // Discover: random 9 (re-randomised each time the user navigates here)
         val discover = allAlbums.shuffled().take(9)
@@ -659,12 +661,27 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             ))
         }
 
+        // Favorites: random 9, like the phone home row (orphans hidden)
+        val favoriteAlbums = FavoritesCore.resolveFavoriteAlbums(
+            favoritesRepository.listFavorites(),
+            albumById
+        ).shuffled().take(9)
+        for (album in favoriteAlbums) {
+            val imageUrl = album.coverFileId?.let { GDriveImageProvider.buildUri(it).toString() }
+            items.add(createBrowsableItemWithGroup(
+                "gdrive_music_album_${album.id}",
+                album.name,
+                album.artistName,
+                "Favorites",
+                imageUrl ?: placeholderUri
+            ))
+        }
+
         // Recently Played: from NDJSON history (falls back to SharedPreferences)
         val history = GDrivePlaybackHistory.getInstance(this)
         val recentlyPlayedIds = history.getRecentlyPlayedAlbumIds(9).ifEmpty {
             gdriveLibraryCache.getRecentlyPlayedIds().take(9)
         }
-        val albumById = allAlbums.associateBy { it.id }
         val recentlyPlayed = recentlyPlayedIds.mapNotNull { albumById[it] }
         for (album in recentlyPlayed) {
             val imageUrl = album.coverFileId?.let { GDriveImageProvider.buildUri(it).toString() }
