@@ -16,6 +16,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.ActionBarDrawerToggle
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
@@ -24,6 +25,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.cloudamp.music.api.DriveFile
 import com.cloudamp.music.api.GoogleDriveApiClient
 import com.cloudamp.music.auth.GoogleDriveAuthManager
+import com.cloudamp.music.cache.SavedLocationsManager
+import com.cloudamp.music.models.SavedLocation
 import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.ui.GDriveAdapter
@@ -59,6 +62,16 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
     private val folderStack = mutableListOf<Pair<String, String>>()
     private lateinit var miniPlayerBar: MiniPlayerBar
     private lateinit var appliedThemeId: String
+    private lateinit var savedLocationsManager: SavedLocationsManager
+
+    private enum class Mode { TOP, SAVED, BROWSE }
+    private var mode = Mode.TOP
+
+    companion object {
+        private const val ENTRY_SAVED = "__saved__"
+        private const val ENTRY_DRIVE = "__drive__"
+        private const val ENTRY_EMPTY = "__empty__"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         appliedThemeId = ThemeManager.applyTheme(this)
@@ -67,6 +80,7 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
 
         driveClient = GoogleDriveApiClient.getInstance(this)
         authManager = GoogleDriveAuthManager(this)
+        savedLocationsManager = SavedLocationsManager.getInstance(this)
 
         setupDrawer()
         setupRecyclerView()
@@ -112,7 +126,13 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
                 onAudioFileClicked(file, allAudioFiles, position)
             },
             onBackClick = {
-                navigateBack()
+                if (mode == Mode.SAVED) showTopMenu() else navigateBack()
+            },
+            onEntryClick = { key ->
+                onEntryClicked(key)
+            },
+            onEntryLongClick = { key ->
+                onEntryLongClicked(key)
             }
         )
 
@@ -146,8 +166,12 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
             showEmptyState("Connect Google Drive in Settings\nto browse your music files")
         } else {
             hideEmptyState()
-            if (folderStack.isEmpty()) {
-                loadRootFolder()
+            when (mode) {
+                Mode.TOP -> showTopMenu()
+                Mode.SAVED -> showSavedLocations()
+                Mode.BROWSE -> {
+                    // Keep the current folder state across resume
+                }
             }
         }
     }
@@ -176,8 +200,80 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
         }
     }
 
-    private fun loadRootFolder() {
+    private fun showTopMenu() {
+        if (isSearchVisible) hideSearchBar()
+        mode = Mode.TOP
+        folderStack.clear()
+        hideEmptyState()
+        pathTextView.text = "GDRIVE"
+        gdriveAdapter.setEntries(
+            listOf(ENTRY_SAVED to "Saved", ENTRY_DRIVE to "Drive"),
+            hasParent = false
+        )
+        invalidateOptionsMenu()
+    }
+
+    private fun showSavedLocations() {
+        if (isSearchVisible) hideSearchBar()
+        mode = Mode.SAVED
+        folderStack.clear()
+        pathTextView.text = "GDRIVE / Saved"
+        val locations = savedLocationsManager.getSavedLocations()
+        val entries = if (locations.isEmpty()) {
+            listOf(ENTRY_EMPTY to "No saved folders yet")
+        } else {
+            locations.map { it.folderId to it.name }
+        }
+        gdriveAdapter.setEntries(entries, hasParent = true)
+        invalidateOptionsMenu()
+    }
+
+    private fun enterDriveBrowse() {
+        mode = Mode.BROWSE
+        updatePath()
         loadFolder("root")
+        invalidateOptionsMenu()
+    }
+
+    private fun openSavedLocation(location: SavedLocation) {
+        mode = Mode.BROWSE
+        folderStack.clear()
+        folderStack.addAll(location.path.map { Pair(it.id, it.name) })
+        updatePath()
+        loadFolder(location.folderId)
+        invalidateOptionsMenu()
+    }
+
+    private fun onEntryClicked(key: String) {
+        when (mode) {
+            Mode.TOP -> when (key) {
+                ENTRY_SAVED -> showSavedLocations()
+                ENTRY_DRIVE -> enterDriveBrowse()
+            }
+            Mode.SAVED -> {
+                if (key == ENTRY_EMPTY) return
+                val location = savedLocationsManager.getSavedLocations()
+                    .firstOrNull { it.folderId == key } ?: return
+                openSavedLocation(location)
+            }
+            Mode.BROWSE -> {}
+        }
+    }
+
+    private fun onEntryLongClicked(key: String): Boolean {
+        if (mode != Mode.SAVED || key == ENTRY_EMPTY) return false
+        val location = savedLocationsManager.getSavedLocations()
+            .firstOrNull { it.folderId == key } ?: return false
+        AlertDialog.Builder(this)
+            .setTitle("Remove saved folder")
+            .setMessage("Remove \"${location.name}\" from saved folders?")
+            .setPositiveButton("Remove") { _, _ ->
+                savedLocationsManager.removeLocation(location.folderId)
+                showSavedLocations()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+        return true
     }
 
     private fun navigateToFolder(folderId: String, folderName: String) {
@@ -185,6 +281,7 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
         folderStack.add(Pair(folderId, folderName))
         updatePath()
         loadFolder(folderId)
+        invalidateOptionsMenu()
     }
 
     private fun navigateBack() {
@@ -199,6 +296,9 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
                 "root"
             }
             loadFolder(parentId)
+            invalidateOptionsMenu()
+        } else {
+            showTopMenu()
         }
     }
 
@@ -231,14 +331,12 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
                     }
                 } while (pageToken != null)
 
-                val hasParent = folderStack.isNotEmpty()
-                gdriveAdapter.setFiles(allFiles, hasParent)
+                // Always show the back item: it walks up the folder stack, or
+                // returns to the Saved/Drive chooser from the Drive root.
+                gdriveAdapter.setFiles(allFiles, hasParent = true)
 
-                if (allFiles.isEmpty() && !hasParent) {
+                if (allFiles.isEmpty() && folderStack.isEmpty()) {
                     showEmptyState("No audio files or folders found\nin your Google Drive")
-                } else if (allFiles.isEmpty()) {
-                    // Empty folder but we have navigation, show empty list with back
-                    gdriveAdapter.setFiles(emptyList(), true)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -321,6 +419,10 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
                 toggleSearchBar()
                 true
             }
+            R.id.action_save_location -> {
+                toggleSaveCurrentFolder()
+                true
+            }
             else -> super.onOptionsItemSelected(item)
         }
     }
@@ -330,13 +432,44 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
         return true
     }
 
+    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        val saveItem = menu.findItem(R.id.action_save_location)
+        val currentFolder = folderStack.lastOrNull()
+        if (mode == Mode.BROWSE && currentFolder != null) {
+            saveItem.isVisible = true
+            val saved = savedLocationsManager.isSaved(currentFolder.first)
+            saveItem.setIcon(
+                if (saved) android.R.drawable.btn_star_big_on
+                else android.R.drawable.btn_star_big_off
+            )
+            saveItem.title = if (saved) "Remove Saved Folder" else "Save Folder"
+        } else {
+            saveItem.isVisible = false
+        }
+        return super.onPrepareOptionsMenu(menu)
+    }
+
+    private fun toggleSaveCurrentFolder() {
+        val currentFolder = folderStack.lastOrNull() ?: return
+        if (savedLocationsManager.isSaved(currentFolder.first)) {
+            savedLocationsManager.removeLocation(currentFolder.first)
+            Toast.makeText(this, "Removed from saved folders", Toast.LENGTH_SHORT).show()
+        } else {
+            savedLocationsManager.saveLocation(folderStack.toList())
+            Toast.makeText(this, "Folder saved", Toast.LENGTH_SHORT).show()
+        }
+        invalidateOptionsMenu()
+    }
+
     override fun onBackPressed() {
         if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
             drawerLayout.closeDrawer(GravityCompat.START)
         } else if (isSearchVisible) {
             hideSearchBar()
-        } else if (folderStack.isNotEmpty()) {
+        } else if (mode == Mode.BROWSE && folderStack.isNotEmpty()) {
             navigateBack()
+        } else if (mode == Mode.BROWSE || mode == Mode.SAVED) {
+            showTopMenu()
         } else {
             super.onBackPressed()
         }
