@@ -27,6 +27,22 @@ export function VisualizerPage() {
   );
   const [micActive, setMicActive] = useState(false);
   const [micAnalyser, setMicAnalyser] = useState<AnalyserNode | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const stageRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(document.fullscreenElement === stageRef.current);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  function toggleFullscreen() {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      stageRef.current?.requestFullscreen().catch((err) => console.error("Fullscreen failed:", err));
+    }
+  }
 
   function selectMode(m: VisMode) {
     setMode(m);
@@ -94,10 +110,27 @@ export function VisualizerPage() {
           </svg>
           Mic
         </button>
+        <button
+          onClick={toggleFullscreen}
+          title="Fullscreen"
+          className="px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700"
+        >
+          <FullscreenIcon exit={false} />
+          Fullscreen
+        </button>
       </div>
 
       {/* Canvas area */}
-      <div className="flex-1 rounded-lg border border-zinc-800 bg-black overflow-hidden relative min-h-[400px]">
+      <div ref={stageRef} className="flex-1 rounded-lg border border-zinc-800 bg-black overflow-hidden relative min-h-[400px] group">
+        {isFullscreen && (
+          <button
+            onClick={toggleFullscreen}
+            title="Exit fullscreen"
+            className="absolute top-3 right-3 z-10 p-2 rounded-md bg-zinc-900/70 text-zinc-400 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <FullscreenIcon exit />
+          </button>
+        )}
         {!hasSource ? (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center space-y-2">
@@ -110,6 +143,28 @@ export function VisualizerPage() {
         )}
       </div>
     </div>
+  );
+}
+
+function FullscreenIcon({ exit }: { exit: boolean }) {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {exit ? (
+        <>
+          <path d="M8 3v3a2 2 0 0 1-2 2H3" />
+          <path d="M21 8h-3a2 2 0 0 1-2-2V3" />
+          <path d="M3 16h3a2 2 0 0 1 2 2v3" />
+          <path d="M16 21v-3a2 2 0 0 1 2-2h3" />
+        </>
+      ) : (
+        <>
+          <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+          <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+          <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+          <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+        </>
+      )}
+    </svg>
   );
 }
 
