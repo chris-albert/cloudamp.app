@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useSyncExternalStore } from "react";
 import { getAnalyserNode, getPlayerState, subscribePlayerState, getCurrentTrack, startMicAnalyser, stopMicAnalyser } from "@/lib/player-store";
 
-type VisMode = "eq" | "oscilloscope" | "radial" | "tunnel" | "kaleidoscope" | "warpgrid" | "honeycomb" | "diamond" | "starburst" | "spiral" | "liquid" | "fractal";
+type VisMode = "eq" | "oscilloscope" | "radial" | "tunnel" | "kaleidoscope" | "warpgrid" | "honeycomb" | "diamond" | "starburst" | "spiral" | "liquid" | "fractal" | "blend";
 
 const MODES: { id: VisMode; label: string }[] = [
   { id: "eq", label: "EQ Bars" },
@@ -16,7 +16,13 @@ const MODES: { id: VisMode; label: string }[] = [
   { id: "spiral", label: "Spiral" },
   { id: "liquid", label: "Liquid" },
   { id: "fractal", label: "Fractal" },
+  { id: "blend", label: "Blend" },
 ];
+
+// Blend mode cycles through every other mode, crossfading between them
+const BLEND_CYCLE: VisMode[] = MODES.map((m) => m.id).filter((id) => id !== "blend");
+const BLEND_INTERVAL_MS = 30_000;
+const BLEND_FADE_MS = 2000;
 
 export function VisualizerPage() {
   useSyncExternalStore(subscribePlayerState, getPlayerState);
@@ -79,7 +85,7 @@ export function VisualizerPage() {
   return (
     <div className="space-y-4 flex flex-col" style={{ minHeight: "calc(100vh - 10rem)" }}>
       {/* Mode selector */}
-      <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-1">
         {MODES.map((m) => (
           <button
             key={m.id}
@@ -138,6 +144,8 @@ export function VisualizerPage() {
               <div className="text-sm text-zinc-500">Play something or enable mic to see visualizations</div>
             </div>
           </div>
+        ) : mode === "blend" ? (
+          <BlendVisualizer micAnalyser={micActive ? micAnalyser : null} />
         ) : (
           <VisualizerCanvas mode={mode} micAnalyser={micActive ? micAnalyser : null} />
         )}
@@ -168,6 +176,44 @@ function FullscreenIcon({ exit }: { exit: boolean }) {
   );
 }
 
+// ── Blend mode: cycle through all modes with a crossfade ─────────────────
+
+function BlendVisualizer({ micAnalyser }: { micAnalyser: AnalyserNode | null }) {
+  // Up to two stacked layers: the outgoing one underneath, the incoming one fading in on top
+  const [layers, setLayers] = useState<{ key: number; mode: VisMode }[]>(() => [{ key: 0, mode: BLEND_CYCLE[0]! }]);
+
+  useEffect(() => {
+    let idx = 0;
+    let key = 0;
+    let fadeTimer: ReturnType<typeof setTimeout> | undefined;
+    const interval = setInterval(() => {
+      idx = (idx + 1) % BLEND_CYCLE.length;
+      key++;
+      const next = { key, mode: BLEND_CYCLE[idx]! };
+      setLayers((prev) => [prev[prev.length - 1]!, next]);
+      fadeTimer = setTimeout(() => setLayers([next]), BLEND_FADE_MS);
+    }, BLEND_INTERVAL_MS);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(fadeTimer);
+    };
+  }, []);
+
+  return (
+    <>
+      {layers.map((layer, i) => (
+        <div
+          key={layer.key}
+          className="absolute inset-0 bg-black"
+          style={i > 0 ? { animation: `vis-fade-in ${BLEND_FADE_MS}ms ease-in-out both` } : undefined}
+        >
+          <VisualizerCanvas mode={layer.mode} micAnalyser={micAnalyser} />
+        </div>
+      ))}
+    </>
+  );
+}
+
 const WEB_GL_MODES: Set<VisMode> = new Set(["tunnel", "kaleidoscope", "warpgrid", "honeycomb", "diamond", "starburst", "spiral", "liquid", "fractal"]);
 
 // ── Canvas renderer ─────────────────────────────────────────────────────
@@ -178,6 +224,7 @@ function VisualizerCanvas({ mode, micAnalyser }: { mode: VisMode; micAnalyser: A
   const glCanvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
   const rendererRef = useRef<{ destroy?: () => void }>({});
+  const glCreatedRef = useRef(false);
 
   // Keep mode in a ref so the animation loop always sees the latest
   const modeRef = useRef(mode);
@@ -233,6 +280,7 @@ function VisualizerCanvas({ mode, micAnalyser }: { mode: VisMode; micAnalyser: A
     if (isWebGL && glCanvasRef.current) {
       glState = initWebGL(glCanvasRef.current, mode);
       if (glState) {
+        glCreatedRef.current = true;
         rendererRef.current.destroy = () => disposeWebGL(glState!);
       }
     }
@@ -284,6 +332,16 @@ function VisualizerCanvas({ mode, micAnalyser }: { mode: VisMode; micAnalyser: A
       rendererRef.current = {};
     };
   }, [isWebGL, mode, micAnalyser]);
+
+  // Release the WebGL context on unmount (blend mode creates a fresh canvas each cycle)
+  useEffect(() => {
+    const glCanvas = glCanvasRef.current;
+    return () => {
+      if (glCreatedRef.current) {
+        glCanvas?.getContext("webgl2")?.getExtension("WEBGL_lose_context")?.loseContext();
+      }
+    };
+  }, []);
 
   return (
     <div ref={containerRef} className="absolute inset-0">
