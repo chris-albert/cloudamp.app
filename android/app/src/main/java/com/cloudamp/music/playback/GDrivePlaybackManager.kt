@@ -25,6 +25,8 @@ import com.google.android.exoplayer2.audio.AudioAttributes
 import com.google.android.exoplayer2.ext.okhttp.OkHttpDataSource
 import com.google.android.exoplayer2.source.DefaultMediaSourceFactory
 import com.google.android.exoplayer2.upstream.DataSource
+import com.google.android.exoplayer2.upstream.DataSpec
+import com.google.android.exoplayer2.upstream.ResolvingDataSource
 
 /**
  * Manages Google Drive audio playback using ExoPlayer.
@@ -57,6 +59,9 @@ class GDrivePlaybackManager private constructor(
 
     private val queue = mutableListOf<DriveFile>()
     private var currentIndex = 0
+
+    // Drive file ID -> byte size, from Drive metadata (see buildUpstreamFactory)
+    private val fileSizes = mutableMapOf<String, Long>()
 
     override val providerName: String = "Google Drive"
 
@@ -103,13 +108,31 @@ class GDrivePlaybackManager private constructor(
             val driveClient = GoogleDriveApiClient.getInstance(context)
             val hasToken = driveClient.hasAccessToken()
             Log.d(TAG, "Creating DataSource.Factory, hasAccessToken=$hasToken")
-            val streamingClient = driveClient.getStreamingHttpClient()
-            val upstream = OkHttpDataSource.Factory(streamingClient)
             // Wrap in a CacheDataSource so streamed bytes persist to disk and
             // future plays of the same Drive file ID are served locally.
-            dataSourceFactory = MediaCache.getInstance(context).cacheDataSourceFactory(upstream)
+            dataSourceFactory = MediaCache.getInstance(context)
+                .cacheDataSourceFactory(buildUpstreamFactory(driveClient))
         }
         return dataSourceFactory!!
+    }
+
+    /**
+     * Drive serves `alt=media` with chunked transfer encoding and no
+     * Content-Length, so ExoPlayer can't tell how long the stream is. Files
+     * whose container doesn't carry its own duration (e.g. MP3s without a
+     * Xing/Info header) then end up unseekable with an unknown duration,
+     * which hides the seek bar and breaks seeking in Android Auto. We know
+     * the exact size from Drive metadata, so bound each request with it.
+     */
+    private fun buildUpstreamFactory(driveClient: GoogleDriveApiClient): DataSource.Factory {
+        val upstream = OkHttpDataSource.Factory(driveClient.getStreamingHttpClient())
+        return ResolvingDataSource.Factory(upstream, ResolvingDataSource.Resolver { dataSpec ->
+            if (dataSpec.length != C.LENGTH_UNSET.toLong()) return@Resolver dataSpec
+            val fileId = dataSpec.key ?: dataSpec.uri.lastPathSegment
+            val size = fileSizes[fileId] ?: return@Resolver dataSpec
+            val remaining = size - dataSpec.position
+            if (remaining > 0) dataSpec.buildUpon().setLength(remaining).build() else dataSpec
+        })
     }
 
     /**
@@ -131,7 +154,7 @@ class GDrivePlaybackManager private constructor(
         if (files.size <= 1) return
         val driveClient = GoogleDriveApiClient.getInstance(context)
         if (!driveClient.hasAccessToken()) return
-        val upstream: DataSource.Factory = OkHttpDataSource.Factory(driveClient.getStreamingHttpClient())
+        val upstream = buildUpstreamFactory(driveClient)
         val items = ArrayList<MediaCachePrefetcher.Item>(files.size - 1)
         for (i in (currentIdx + 1) until files.size) {
             items.add(MediaCachePrefetcher.Item(files[i].id, buildStreamUri(files[i].id)))
@@ -140,6 +163,10 @@ class GDrivePlaybackManager private constructor(
             items.add(MediaCachePrefetcher.Item(files[i].id, buildStreamUri(files[i].id)))
         }
         getPrefetcher().prefetch(items, upstream)
+    }
+
+    private fun rememberFileSize(file: DriveFile) {
+        file.size?.toLongOrNull()?.takeIf { it > 0 }?.let { fileSizes[file.id] = it }
     }
 
     /**
@@ -186,6 +213,7 @@ class GDrivePlaybackManager private constructor(
             val uri = buildStreamUri(file.id)
             Log.d(TAG, "Adding media item: ${file.name} -> $uri")
             player.addMediaItem(buildMediaItem(file, uri))
+            rememberFileSize(file)
             mediaCache.registerTrack(file.id, file.name, file.size?.toLongOrNull())
         }
 
@@ -227,6 +255,7 @@ class GDrivePlaybackManager private constructor(
         val mediaCache = MediaCache.getInstance(context)
         files.forEach { file ->
             player.addMediaItem(buildMediaItem(file, buildStreamUri(file.id)))
+            rememberFileSize(file)
             mediaCache.registerTrack(file.id, file.name, file.size?.toLongOrNull())
         }
 
@@ -415,6 +444,7 @@ class GDrivePlaybackManager private constructor(
         exoPlayer = null
         dataSourceFactory = null
         queue.clear()
+        fileSizes.clear()
         currentIndex = 0
     }
 
