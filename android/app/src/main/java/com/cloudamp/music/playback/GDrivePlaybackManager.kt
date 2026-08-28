@@ -277,6 +277,13 @@ class GDrivePlaybackManager private constructor(
             Log.d(TAG, "play(): player idle, re-preparing")
             player.prepare()
         }
+        // Once the queue has finished, play() alone is a no-op on an ENDED
+        // player — start the queue over from the first track instead.
+        if (player.playbackState == Player.STATE_ENDED && queue.isNotEmpty()) {
+            Log.d(TAG, "play(): queue ended, restarting from the first track")
+            currentIndex = 0
+            player.seekTo(0, 0)
+        }
         player.play()
         updateServiceMetadata()
         updateServiceQueue()
