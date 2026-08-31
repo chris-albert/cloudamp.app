@@ -11,12 +11,14 @@ object ThemeManager {
     private const val KEY_THEME = "selected_theme"
 
     const val THEME_CLASSIC = "classic"
+    const val THEME_WINAMP_CLASSIC = "winamp_classic"
     const val THEME_DARK_SIDE = "dark_side"
     const val THEME_VAPOR = "vapor"
     const val THEME_NUCLEAR = "nuclear"
 
     private val THEME_MAP = mapOf(
         THEME_CLASSIC to R.style.Theme_CloudAmp,
+        THEME_WINAMP_CLASSIC to R.style.Theme_CloudAmp_WinampClassic,
         THEME_DARK_SIDE to R.style.Theme_CloudAmp_DarkSide,
         THEME_VAPOR to R.style.Theme_CloudAmp_Vapor,
         THEME_NUCLEAR to R.style.Theme_CloudAmp_Nuclear,
@@ -24,6 +26,7 @@ object ThemeManager {
 
     val THEME_LABELS = listOf(
         THEME_CLASSIC to "Classic Green",
+        THEME_WINAMP_CLASSIC to "Winamp Classic",
         THEME_DARK_SIDE to "Dark Side",
         THEME_VAPOR to "Vaporwave",
         THEME_NUCLEAR to "Nuclear Orange",
