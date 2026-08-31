@@ -25,6 +25,29 @@
         <item name="caSeekbarBackground">@color/classic_seekbar_bg</item>
     </style>
 
+    <!-- ============ Winamp Classic (steel chrome + navy title bars) ============ -->
+    <style name="Theme.CloudAmp.WinampClassic" parent="Theme.AppCompat.DayNight.DarkActionBar">
+        <item name="colorPrimary">@color/winamp_header</item>
+        <item name="colorPrimaryDark">@color/black</item>
+        <item name="colorAccent">@color/winamp_text</item>
+        <item name="android:windowBackground">@color/winamp_background</item>
+        <item name="android:textColorPrimary">@color/winamp_text</item>
+        <item name="android:textColorSecondary">@color/winamp_display_text</item>
+        <item name="actionBarStyle">@style/CloudAmpActionBar.WinampClassic</item>
+        <item name="caBackground">@color/winamp_background</item>
+        <item name="caHeader">@color/winamp_header</item>
+        <item name="caSectionHeader">@color/winamp_section_header</item>
+        <item name="caListBackground">@color/winamp_list_background</item>
+        <item name="caDisplay">@color/winamp_display</item>
+        <item name="caButtonSection">@color/winamp_button_section</item>
+        <item name="caText">@color/winamp_text</item>
+        <item name="caDisplayText">@color/winamp_display_text</item>
+        <item name="caButton">@color/winamp_button</item>
+        <item name="caButtonPressed">@color/winamp_button_pressed</item>
+        <item name="caPlayerFrame">@color/winamp_player_frame</item>
+        <item name="caSeekbarBackground">@color/winamp_seekbar_bg</item>
+    </style>
+
     <!-- ============ Dark Side (icy blue) ============ -->
     <style name="Theme.CloudAmp.DarkSide" parent="Theme.AppCompat.DayNight.DarkActionBar">
         <item name="colorPrimary">@color/darkside_header</item>
@@ -99,6 +122,10 @@
         <item name="background">@color/classic_header</item>
         <item name="titleTextStyle">@style/CloudAmpActionBarTitle</item>
     </style>
+    <style name="CloudAmpActionBar.WinampClassic" parent="Widget.AppCompat.ActionBar">
+        <item name="background">@color/winamp_header</item>
+        <item name="titleTextStyle">@style/CloudAmpActionBarTitle.WinampClassic</item>
+    </style>
     <style name="CloudAmpActionBar.DarkSide" parent="Widget.AppCompat.ActionBar">
         <item name="background">@color/darkside_header</item>
         <item name="titleTextStyle">@style/CloudAmpActionBarTitle.DarkSide</item>
@@ -115,6 +142,10 @@
     <!-- ============ ActionBar title styles ============ -->
     <style name="CloudAmpActionBarTitle" parent="TextAppearance.AppCompat.Widget.ActionBar.Title">
         <item name="android:textColor">@color/classic_text</item>
+        <item name="android:fontFamily">monospace</item>
+    </style>
+    <style name="CloudAmpActionBarTitle.WinampClassic" parent="TextAppearance.AppCompat.Widget.ActionBar.Title">
+        <item name="android:textColor">@color/winamp_text</item>
         <item name="android:fontFamily">monospace</item>
     </style>
     <style name="CloudAmpActionBarTitle.DarkSide" parent="TextAppearance.AppCompat.Widget.ActionBar.Title">

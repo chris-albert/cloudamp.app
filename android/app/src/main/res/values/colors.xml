@@ -14,6 +14,20 @@
     <color name="classic_player_frame">#303030</color>
     <color name="classic_seekbar_bg">#003300</color>
 
+    <!-- ========== Winamp Classic (steel chrome + navy title bars, Winamp 2.x base skin) ========== -->
+    <color name="winamp_background">#2A2A3E</color>
+    <color name="winamp_header">#24246A</color>
+    <color name="winamp_section_header">#38385C</color>
+    <color name="winamp_list_background">#000000</color>
+    <color name="winamp_display">#000000</color>
+    <color name="winamp_button_section">#30304A</color>
+    <color name="winamp_text">#00ff00</color>
+    <color name="winamp_display_text">#00cc00</color>
+    <color name="winamp_button">#6E7890</color>
+    <color name="winamp_button_pressed">#8A94AC</color>
+    <color name="winamp_player_frame">#3C3C54</color>
+    <color name="winamp_seekbar_bg">#14142A</color>
+
     <!-- ========== Dark Side (icy blue, Winamp Modern dark skin) ========== -->
     <color name="darkside_background">#0a0a12</color>
     <color name="darkside_header">#12121e</color>
