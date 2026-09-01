@@ -2,15 +2,15 @@
 <resources>
     <!-- CloudAmp theme-switchable color attributes -->
     <attr name="caBackground" format="color"/>
-    <attr name="caHeader" format="color"/>
+    <attr name="caHeader" format="reference|color"/>
     <attr name="caSectionHeader" format="color"/>
     <attr name="caListBackground" format="color"/>
-    <attr name="caDisplay" format="color"/>
+    <attr name="caDisplay" format="reference|color"/>
     <attr name="caButtonSection" format="color"/>
     <attr name="caText" format="color"/>
     <attr name="caDisplayText" format="color"/>
-    <attr name="caButton" format="color"/>
+    <attr name="caButton" format="reference|color"/>
     <attr name="caButtonPressed" format="color"/>
-    <attr name="caPlayerFrame" format="color"/>
+    <attr name="caPlayerFrame" format="reference|color"/>
     <attr name="caSeekbarBackground" format="color"/>
 </resources>
