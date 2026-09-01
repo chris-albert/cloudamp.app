@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Winamp 2.x title bar: navy blue with a bright rounded-metal center band. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- thin highlight line along the top -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#6A6AC0"/>
+        </shape>
+    </item>
+    <item android:top="1dp">
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="90"
+                android:startColor="#12123E"
+                android:centerColor="#3C3C96"
+                android:endColor="#12123E"/>
+        </shape>
+    </item>
+</layer-list>
