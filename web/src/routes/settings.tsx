@@ -21,6 +21,7 @@ import {
 } from "@/lib/scan-store";
 import { resetHistory } from "@/lib/history-store";
 import { resetFavorites } from "@/lib/favorites-store";
+import { resetPlaylists } from "@/lib/playlists-store";
 import { syncLibrary, doFullScan, type SyncOutcome } from "@/lib/incremental-sync";
 
 const FOLDER_NAME_KEY = "cloudamp_root_folder_name";
@@ -214,6 +215,7 @@ function ScanDashboard() {
     resetScan();
     resetHistory();
     resetFavorites();
+    resetPlaylists();
     setSyncOutcome(null);
     didAutoSync.current = false;
   }, []);

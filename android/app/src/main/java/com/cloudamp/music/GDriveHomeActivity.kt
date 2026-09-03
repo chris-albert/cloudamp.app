@@ -310,6 +310,10 @@ class GDriveHomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemS
             R.id.nav_gdrive_home -> {
                 // Already here
             }
+            R.id.nav_playlists -> {
+                startActivity(Intent(this, PlaylistsActivity::class.java))
+                finish()
+            }
             R.id.nav_cached -> {
                 startActivity(Intent(this, CachedAlbumsActivity::class.java))
                 finish()

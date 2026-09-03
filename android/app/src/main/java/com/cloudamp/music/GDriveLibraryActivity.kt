@@ -31,6 +31,7 @@ import com.cloudamp.music.playback.CloudAmpService
 import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.ui.GDriveAdapter
 import com.cloudamp.music.ui.MiniPlayerBar
+import com.cloudamp.music.ui.PlaylistDialogs
 import com.cloudamp.music.util.MusicFilenameParser
 import com.google.android.material.navigation.NavigationView
 import kotlinx.coroutines.*
@@ -133,6 +134,10 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
             },
             onEntryLongClick = { key ->
                 onEntryLongClicked(key)
+            },
+            onAudioLongClick = { file ->
+                PlaylistDialogs.showAddToPlaylist(this, listOf(file))
+                true
             }
         )
 
@@ -392,6 +397,10 @@ class GDriveLibraryActivity : AppCompatActivity(), NavigationView.OnNavigationIt
             }
             R.id.nav_gdrive_home -> {
                 startActivity(Intent(this, GDriveHomeActivity::class.java))
+                finish()
+            }
+            R.id.nav_playlists -> {
+                startActivity(Intent(this, PlaylistsActivity::class.java))
                 finish()
             }
             R.id.nav_cached -> {

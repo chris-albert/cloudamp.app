@@ -12,6 +12,7 @@ import { DriveImage, ArtistImage } from "@/lib/drive-image";
 import { playAlbum } from "@/lib/player-store";
 import { getFavoritesState, subscribeFavoritesState, ensureFavoritesLoaded, toggleFavorite } from "@/lib/favorites-store";
 import { resolveFavoriteAlbums, resolveFavoriteArtistIds } from "@/lib/favorites-core";
+import { AddToPlaylistMenu } from "@/components/AddToPlaylistMenu";
 
 export function LibraryPage() {
   const scanState = useSyncExternalStore(subscribeScanState, getScanState);
@@ -637,13 +638,16 @@ function LibraryBrowser() {
                 {selectedAlbum.year && <div className="text-zinc-500">{selectedAlbum.year}</div>}
                 <div className="text-zinc-600 text-xs">{tracks.length} track{tracks.length !== 1 ? "s" : ""}</div>
                 {tracks.length > 0 && (
-                  <button
-                    onClick={() => playAlbum(selectedAlbum, tracks)}
-                    className="mt-2 px-4 py-1.5 rounded-full bg-white text-black text-xs font-semibold hover:bg-zinc-200 transition-colors inline-flex items-center gap-1.5"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5L4 2.5z" /></svg>
-                    Play Album
-                  </button>
+                  <div className="mt-2 flex items-center gap-2">
+                    <button
+                      onClick={() => playAlbum(selectedAlbum, tracks)}
+                      className="px-4 py-1.5 rounded-full bg-white text-black text-xs font-semibold hover:bg-zinc-200 transition-colors inline-flex items-center gap-1.5"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5L4 2.5z" /></svg>
+                      Play Album
+                    </button>
+                    <AddToPlaylistMenu files={tracks.map((t) => t.file)} label="Add album to playlist" />
+                  </div>
                 )}
               </div>
             </div>
@@ -659,6 +663,9 @@ function LibraryBrowser() {
                     <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5L4 2.5z" /></svg>
                     Play Album
                   </button>
+                )}
+                {tracks.length > 0 && (
+                  <AddToPlaylistMenu files={tracks.map((t) => t.file)} label="Add album to playlist" />
                 )}
                 <FavoriteHeartButton albumId={selectedAlbum.id} />
               </div>
@@ -1731,9 +1738,12 @@ function TrackRow({ track, artistName, albumName, onPlay }: { track: Track; arti
       </td>
       <td className="py-2 text-right text-zinc-500 text-xs">{formatFileSize(track.file.size)}</td>
       <td className="py-2 text-right text-zinc-500 text-xs">
-        {extDisplay}
-        <span className="ml-2 text-zinc-700 opacity-0 group-hover:opacity-100 transition-opacity text-[10px]">
-          Edit
+        <span className="inline-flex items-center justify-end gap-1">
+          <AddToPlaylistMenu files={[track.file]} className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity" />
+          {extDisplay}
+          <span className="ml-1 text-zinc-700 opacity-0 group-hover:opacity-100 transition-opacity text-[10px]">
+            Edit
+          </span>
         </span>
       </td>
     </tr>

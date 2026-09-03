@@ -175,6 +175,10 @@ class CachedAlbumsActivity : AppCompatActivity(), NavigationView.OnNavigationIte
                 startActivity(Intent(this, GDriveHomeActivity::class.java))
                 finish()
             }
+            R.id.nav_playlists -> {
+                startActivity(Intent(this, PlaylistsActivity::class.java))
+                finish()
+            }
             R.id.nav_cached -> {
                 // Already here
             }

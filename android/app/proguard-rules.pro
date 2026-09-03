@@ -22,6 +22,7 @@
 -keep class com.cloudamp.music.cache.PersistedFavorites { *; }
 -keep class com.cloudamp.music.cache.PendingToggle { *; }
 -keep class com.cloudamp.music.cache.FavoritesCore$FavoriteEntry { *; }
+-keep class com.cloudamp.music.cache.PersistedPlaylists { *; }
 
 # Gson TypeToken requires generic signature preservation
 -keep class com.google.gson.reflect.TypeToken { *; }
