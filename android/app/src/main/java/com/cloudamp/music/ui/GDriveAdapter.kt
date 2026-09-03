@@ -21,7 +21,8 @@ class GDriveAdapter(
     private val onAudioClick: (DriveFile, List<DriveFile>, Int) -> Unit,
     private val onBackClick: () -> Unit,
     private val onEntryClick: (String) -> Unit = {},
-    private val onEntryLongClick: (String) -> Boolean = { false }
+    private val onEntryLongClick: (String) -> Boolean = { false },
+    private val onAudioLongClick: (DriveFile) -> Boolean = { false }
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private val items = mutableListOf<GDriveItem>()
@@ -215,6 +216,9 @@ class GDriveAdapter(
                 val audioFiles = getAllAudioFiles()
                 val position = audioFiles.indexOf(item.file)
                 onAudioClick(item.file, audioFiles, position)
+            }
+            itemView.setOnLongClickListener {
+                onAudioLongClick(item.file)
             }
         }
     }

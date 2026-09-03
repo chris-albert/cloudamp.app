@@ -75,6 +75,18 @@
             android:exported="false"
             android:parentActivityName=".MainActivity" />
 
+        <!-- Playlists Activity -->
+        <activity
+            android:name=".PlaylistsActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity" />
+
+        <!-- Playlist Detail Activity -->
+        <activity
+            android:name=".PlaylistDetailActivity"
+            android:exported="false"
+            android:parentActivityName=".PlaylistsActivity" />
+
         <!-- Cached Albums Activity -->
         <activity
             android:name=".CachedAlbumsActivity"

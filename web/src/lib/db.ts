@@ -4,11 +4,12 @@
  */
 
 const DB_NAME = "cloudamp";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 export const SCAN_CACHE_STORE = "scan_cache";
 export const HISTORY_CACHE_STORE = "history_cache";
 export const FAVORITES_CACHE_STORE = "favorites_cache";
+export const PLAYLISTS_CACHE_STORE = "playlists_cache";
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -27,6 +28,9 @@ export function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(FAVORITES_CACHE_STORE)) {
         db.createObjectStore(FAVORITES_CACHE_STORE);
+      }
+      if (!db.objectStoreNames.contains(PLAYLISTS_CACHE_STORE)) {
+        db.createObjectStore(PLAYLISTS_CACHE_STORE);
       }
     };
     request.onsuccess = () => resolve(request.result);

@@ -10,6 +10,13 @@
         app:showAsAction="always"/>
 
     <item
+        android:id="@+id/action_new_playlist"
+        android:title="New Playlist"
+        android:icon="@android:drawable/ic_menu_add"
+        android:visible="false"
+        app:showAsAction="always"/>
+
+    <item
         android:id="@+id/action_now_playing"
         android:title="Now Playing"
         android:icon="@android:drawable/ic_media_play"

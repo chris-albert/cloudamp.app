@@ -36,6 +36,7 @@ import com.cloudamp.music.playback.GDrivePlaybackManager
 import com.cloudamp.music.ui.AlphabetSidebarView
 import com.cloudamp.music.ui.GDriveStructuredLibraryAdapter
 import com.cloudamp.music.ui.MiniPlayerBar
+import com.cloudamp.music.ui.PlaylistDialogs
 import com.google.android.material.navigation.NavigationView
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collect
@@ -133,6 +134,10 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
             },
             onFavoriteToggle = { album ->
                 toggleAlbumFavorite(album)
+            },
+            onTrackLongClick = { track ->
+                PlaylistDialogs.showAddToPlaylist(this, listOf(track.file))
+                true
             }
         )
 
@@ -460,6 +465,10 @@ class GDriveStructuredLibraryActivity : AppCompatActivity(), NavigationView.OnNa
             }
             R.id.nav_gdrive_home -> {
                 startActivity(Intent(this, GDriveHomeActivity::class.java))
+                finish()
+            }
+            R.id.nav_playlists -> {
+                startActivity(Intent(this, PlaylistsActivity::class.java))
                 finish()
             }
             R.id.nav_cached -> {

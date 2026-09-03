@@ -14,6 +14,10 @@
             android:icon="@drawable/ic_folder"
             android:title="Drive" />
         <item
+            android:id="@+id/nav_playlists"
+            android:icon="@drawable/ic_playlist"
+            android:title="Playlists" />
+        <item
             android:id="@+id/nav_cached"
             android:icon="@drawable/ic_save"
             android:title="Cached" />

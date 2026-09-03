@@ -40,7 +40,8 @@ class GDriveStructuredLibraryAdapter(
     private val onArtistExpand: (GDriveArtist, Int) -> Unit,
     private val onAlbumExpand: (GDriveAlbum, Int) -> Unit,
     private val onTrackClick: (GDriveTrack, List<GDriveTrack>, Int) -> Unit,
-    private val onFavoriteToggle: (GDriveAlbum) -> Unit = {}
+    private val onFavoriteToggle: (GDriveAlbum) -> Unit = {},
+    private val onTrackLongClick: (GDriveTrack) -> Boolean = { false }
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private val items = mutableListOf<GDriveLibraryItem>()
@@ -415,6 +416,9 @@ class GDriveStructuredLibraryAdapter(
                 }
 
                 onTrackClick(item.track, albumTracks, trackPosition)
+            }
+            itemView.setOnLongClickListener {
+                onTrackLongClick(item.track)
             }
         }
     }

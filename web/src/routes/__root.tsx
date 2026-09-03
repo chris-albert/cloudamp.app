@@ -15,6 +15,7 @@ import { SettingsPage } from "@/routes/settings";
 import { CallbackPage } from "@/routes/callback";
 import { LibraryPage } from "@/routes/library";
 import { HistoryPage } from "@/routes/history";
+import { PlaylistsPage } from "@/routes/playlists";
 import { VisualizerPage } from "@/routes/visualizer";
 import { LandingPage } from "@/routes/landing";
 
@@ -46,6 +47,7 @@ function AppLayout() {
           {(authed || scanState.status === "done" || scanState.status === "syncing") && (
             <nav className="flex items-center gap-0.5 ml-2">
               <NavLink to="/app/library">Library</NavLink>
+              <NavLink to="/app/playlists">Playlists</NavLink>
               <NavLink to="/app/visualizer">Visualizer</NavLink>
               <NavLink to="/app/history">History</NavLink>
               <NavLink to="/app/settings">Settings</NavLink>
@@ -148,6 +150,15 @@ const libraryRoute = createRoute({
   }),
 });
 
+const playlistsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/playlists",
+  component: PlaylistsPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    playlistId: (search.playlistId as string) || undefined,
+  }),
+});
+
 const visualizerRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/visualizer",
@@ -196,6 +207,7 @@ export const routeTree = rootRoute.addChildren([
     appIndexRoute,
     settingsRoute,
     libraryRoute,
+    playlistsRoute,
     historyRoute,
     visualizerRoute,
   ]),

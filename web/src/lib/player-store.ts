@@ -287,7 +287,14 @@ export function playAlbum(album: Album, tracks: Track[], startIndex = 0) {
     track,
     albumCoverFileId: album.coverFileId,
   }));
+  playQueue(queue, album, startIndex);
+}
 
+/**
+ * Play an arbitrary queue (e.g. a playlist) starting from a given index.
+ * `album` is shown in the player bar when the queue belongs to one album.
+ */
+export function playQueue(queue: PlayerTrack[], album: Album | null = null, startIndex = 0) {
   state = { ...state, queue, album, currentIndex: -1 };
   emit();
 
