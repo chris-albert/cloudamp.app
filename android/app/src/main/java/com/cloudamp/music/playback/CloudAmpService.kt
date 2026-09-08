@@ -35,6 +35,8 @@ import com.cloudamp.music.cache.GDriveLibraryCache
 import com.cloudamp.music.cache.GDrivePlaybackHistory
 import com.cloudamp.music.cache.MediaCache
 import com.cloudamp.music.cache.PlaybackStateStore
+import com.cloudamp.music.cache.PlaylistsCore.Playlist
+import com.cloudamp.music.cache.PlaylistsRepository
 import com.cloudamp.music.cache.SavedLocationsManager
 import com.cloudamp.music.cache.SavedQueuesManager
 import com.cloudamp.music.models.Track
@@ -57,6 +59,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
 
     private lateinit var gdriveLibraryCache: GDriveLibraryCache
     private lateinit var favoritesRepository: FavoritesRepository
+    private lateinit var playlistsRepository: PlaylistsRepository
 
     // Cache of audio files per GDrive folder for building playback queues
     private val gdriveAudioFilesByFolder = mutableMapOf<String, List<DriveFile>>()
@@ -115,6 +118,8 @@ class CloudAmpService : MediaBrowserServiceCompat() {
         gdriveLibraryCache = GDriveLibraryCache.getInstance(this)
         favoritesRepository = FavoritesRepository.getInstance(this)
         favoritesRepository.hydrateFromCache()
+        playlistsRepository = PlaylistsRepository.getInstance(this)
+        playlistsRepository.hydrateFromCache()
 
         // Create MediaSession
         mediaSession = MediaSessionCompat(this, "CloudAmpService").apply {
@@ -524,12 +529,7 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                 }
 
                 GDRIVE_PLAYLISTS_ID -> {
-                    // Placeholder — playlists not yet implemented for GDrive
-                    mediaItems.add(createBrowsableItem(
-                        "gdrive_playlists_empty",
-                        "Coming Soon",
-                        "Playlists are not yet available"
-                    ))
+                    loadPlaylists(mediaItems)
                 }
 
                 GDRIVE_ID -> {
@@ -566,6 +566,10 @@ class CloudAmpService : MediaBrowserServiceCompat() {
                         parentId.startsWith("gdrive_folder_") -> {
                             val folderId = parentId.removePrefix("gdrive_folder_")
                             loadGDriveFolder(folderId, mediaItems)
+                        }
+                        parentId.startsWith("gdrive_playlist_") -> {
+                            val playlistId = parentId.removePrefix("gdrive_playlist_")
+                            loadPlaylistTracks(playlistId, mediaItems)
                         }
                     }
                 }
@@ -896,6 +900,96 @@ class CloudAmpService : MediaBrowserServiceCompat() {
             .build()
 
         return MediaBrowserCompat.MediaItem(description, MediaBrowserCompat.MediaItem.FLAG_PLAYABLE)
+    }
+
+    // ── Playlists browsing ────────────────────────────────────────────
+
+    /**
+     * Lists playlists from the local cache immediately, then refreshes from
+     * Drive in the background and re-notifies Auto if anything changed.
+     */
+    private fun loadPlaylists(items: MutableList<MediaBrowserCompat.MediaItem>) {
+        val playlists = playlistsRepository.listPlaylists()
+        refreshPlaylistsInBackground(playlists)
+
+        if (playlists.isEmpty()) {
+            items.add(createBrowsableItem(
+                "gdrive_playlists_empty",
+                "No Playlists",
+                "Create a playlist in the CloudAmp app"
+            ))
+            return
+        }
+
+        for (playlist in playlists) {
+            val count = playlist.tracks.size
+            items.add(createBrowsableItem(
+                "gdrive_playlist_${playlist.id}",
+                playlist.name,
+                "$count track${if (count != 1) "s" else ""}"
+            ))
+        }
+    }
+
+    private fun refreshPlaylistsInBackground(shown: List<Playlist>) {
+        serviceScope.launch {
+            try {
+                val fresh = withContext(Dispatchers.IO) { playlistsRepository.sync() }
+                if (fresh != shown) notifyChildrenChanged(GDRIVE_PLAYLISTS_ID)
+            } catch (e: Exception) {
+                // Offline or root not configured: the cached list stays
+            }
+        }
+    }
+
+    private fun loadPlaylistTracks(playlistId: String, items: MutableList<MediaBrowserCompat.MediaItem>) {
+        val playlist = playlistsRepository.getPlaylist(playlistId) ?: return
+        if (playlist.tracks.isEmpty()) {
+            items.add(createBrowsableItem(
+                "gdrive_playlists_empty",
+                "Empty Playlist",
+                "Add tracks in the CloudAmp app"
+            ))
+            return
+        }
+
+        items.add(createPlayableItem("gdrive_playlist_play_$playlistId", "Play all", playlist.name))
+        items.add(createPlayableItem("gdrive_playlist_shuffle_$playlistId", "Shuffle", playlist.name))
+
+        for (playlistTrack in playlist.tracks) {
+            val track = gdrivePlaybackManager.driveFileToTrack(playlistTrack.toDriveFile())
+            val artist = track.artists.firstOrNull()?.name ?: ""
+            val imageUrl = track.album?.images?.firstOrNull()?.url
+            val extras = Bundle().apply {
+                putString("gdrive_playlist_id", playlistId)
+            }
+
+            val description = MediaDescriptionCompat.Builder()
+                .setMediaId("gdrive_playlist_track_${playlistTrack.fileId}")
+                .setTitle(track.name)
+                .setSubtitle(artist)
+                .setExtras(extras)
+                .apply {
+                    imageUrl?.let { setIconUri(android.net.Uri.parse(it)) }
+                }
+                .build()
+
+            items.add(MediaBrowserCompat.MediaItem(description, MediaBrowserCompat.MediaItem.FLAG_PLAYABLE))
+        }
+    }
+
+    /**
+     * Called by PlaybackManager when a playlist entry is selected from Android Auto.
+     * Queues the whole playlist, starting at [fileId] (or the first track), optionally shuffled.
+     */
+    fun playPlaylistFromMediaId(playlistId: String, fileId: String?, shuffle: Boolean) {
+        val playlist = playlistsRepository.getPlaylist(playlistId) ?: return
+        val files = playlist.tracks.map { it.toDriveFile() }
+        if (files.isEmpty()) return
+
+        val queue = if (shuffle) files.shuffled() else files
+        val index = if (shuffle) 0 else files.indexOfFirst { it.id == fileId }.takeIf { it >= 0 } ?: 0
+        gdrivePlaybackManager.playFiles(queue, index)
     }
 
     // ── Playback state persistence ────────────────────────────────────
