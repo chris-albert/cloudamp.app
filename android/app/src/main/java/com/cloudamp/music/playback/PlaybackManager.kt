@@ -105,6 +105,16 @@ class PlaybackManager private constructor(
                         val fileId = mediaId.removePrefix("gdrive_file_")
                         val parentId = extras?.getString("gdrive_parent_id")
                         service?.playGDriveFromMediaId(fileId, parentId)
+                    } else if (mediaId.startsWith("gdrive_playlist_track_")) {
+                        val fileId = mediaId.removePrefix("gdrive_playlist_track_")
+                        val playlistId = extras?.getString("gdrive_playlist_id") ?: return@launch
+                        service?.playPlaylistFromMediaId(playlistId, fileId, shuffle = false)
+                    } else if (mediaId.startsWith("gdrive_playlist_play_")) {
+                        val playlistId = mediaId.removePrefix("gdrive_playlist_play_")
+                        service?.playPlaylistFromMediaId(playlistId, null, shuffle = false)
+                    } else if (mediaId.startsWith("gdrive_playlist_shuffle_")) {
+                        val playlistId = mediaId.removePrefix("gdrive_playlist_shuffle_")
+                        service?.playPlaylistFromMediaId(playlistId, null, shuffle = true)
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
