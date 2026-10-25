@@ -5,4 +5,5 @@ package com.cloudamp.music.ui
  */
 interface AudioVisualizerView {
     fun updateFft(data: ByteArray)
+    fun updateWaveform(data: ByteArray) {}
 }
